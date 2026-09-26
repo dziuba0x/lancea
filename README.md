@@ -26,12 +26,7 @@ Once the principal's tripwire is reached (`setTripwire`, one strike if they like
 
 It stays that way until the principal looks and re-arms. It works in reverse too: an attempt recorded on Flare (`MandateFacilitator.recordAttempt`) trips the guard here without a line of Lancea code, because both ask the same meter.
 
-**Status:** run live on 2026-09-26 (XRPL testnet + Coston2) against a `SummaMeter` v1.2 that the run deploys itself:
-- a steered mint was refused and struck, and the umbrella tripped;
-- a legitimate redeem was refused while tripped;
-- the principal re-armed.
-
-That run then stopped on gas, not on the design (see *Failing closed* below). Against a meter from before v1.2, the guard refuses exactly as before and strikes nothing.
+**Status:** live end to end on 2026-09-26 (XRPL testnet + Coston2), against a `SummaMeter` v1.2 that the run deploys itself. See *Live: the autopilot on a leash* below. Against a meter from before v1.2, the guard refuses exactly as before and strikes nothing.
 
 ## The principal's rules
 
@@ -115,7 +110,7 @@ The guard also caps the transaction fee (`maxFeeDrops`, default 0.01 XRP), becau
 
 ### Failing closed
 
-The first live run of `leash-live.ts` got as far as the re-arm, then stopped. The guard's Flare key held 0.5 C2FLR. On Coston2, a write must hold its gas at 2 × base fee + tip up front, about 0.3 C2FLR. So the fourth write could not be paid for (*gas required exceeds allowance*), the guard threw, and the run died.
+The first live run of `leash-live.ts` got as far as the re-arm, then stopped (the rerun with this fix went through all seven steps: see below). The guard's Flare key held 0.5 C2FLR. On Coston2, a write must hold its gas at 2 × base fee + tip up front, about 0.3 C2FLR. So the fourth write could not be paid for (*gas required exceeds allowance*), the guard threw, and the run died.
 
 Every Flare read and write in the guard now fails closed:
 - **No reservation, no signature.** A `note` that fails is a refusal.
@@ -136,6 +131,31 @@ Every Flare read and write in the guard now fails closed:
 - With 0.5 C2FLR, the rehearsal fails at the same step as the live run, now as a refusal.
 - With today's funding, all seven steps behave as designed, including through a 3× fee spike.
 
+
+## Live: the autopilot on a leash, 2026-09-26 (XRPL testnet + Flare Coston2)
+
+`scripts/leash-live.ts`, one run.
+- **The meter:** a `SummaMeter` v1.2 ([`0x158c200b…9537`](https://coston2-explorer.flare.network/address/0x158c200bc3ffae51610c7b8f7d3a729fa2099537)) and umbrella #26: **$40** across both chains, tripwire 1.
+- **The account:** guarded account `rJrP4DJ432xkHuhSw4URJKZApdfPWwBJA7`, personal account `0xFCe88875…5a69f`.
+- **Before each co-signature,** the guard reserved the spend on Flare.
+
+| step | the agent asks | the guard | XRPL | Coston2 |
+|---|---|---|---|---|
+| 2 | mint 20 XRP to its own personal account | co-signed, tally $30.45 of $40 | [`C5594974…37FE1`](https://testnet.xrpl.org/transactions/C55949744C4AAEF4938CFC981E50E876D0DC1743701351C80E85AEE5F2B37FE1) | [`0xd15742ff…6502e08`](https://coston2-explorer.flare.network/tx/0xd15742ffdf0a2c0ea655a3b75b040d91cf742ca1f90456c4c34c5ef2a6502e08): **19.8 FXRP**, ~2 min |
+| 3 | deposit 19 FXRP into Firelight | co-signed | [`EF81E538…2FC9B`](https://testnet.xrpl.org/transactions/EF81E5387D3D076539CC36720AC8726E767AC16DC25589C809BD59F02152FC9B) | [`0xe4c9a409…9c44f4`](https://coston2-explorer.flare.network/tx/0xe4c9a409f81e3c054312e55fd64afc03df18e73fe59fb29b29b92b5b059c44f4): **18.985959 stXRP**, ~3 min |
+| 4 | mint 5 XRP to `0x…bEEF` (steered) | **refused and struck**: the umbrella trips | nothing signed | strike [`0x0c2370cf…26dfed`](https://coston2-explorer.flare.network/tx/0x0c2370cf42a756ac2bf352928cc6647ff58f6a1b2bd6eebd960857bc9a26dfed) |
+| 5 | redeem 1 share | **refused**: tripped, on every rail | nothing signed | — |
+| 6 | the principal re-arms; the same redeem | co-signed | [`5AAC8411…4C356`](https://testnet.xrpl.org/transactions/5AAC8411BCC7A7A939E8325B8ED2092855B29E5833A34688D220A3DB4854C356) | [`0x4e745f20…2718af`](https://coston2-explorer.flare.network/tx/0x4e745f20614b1acb0117764493a92a131cbd3ad3ab2d586ad0ade551232718af): 1 stXRP redeem request, ~3 min |
+| 7 | mint 20 XRP more | **refused**: past $40 | nothing signed | — |
+
+**Verdict: 6 of 6 decisions as designed.**
+- **One co-signer** governed the account on both ledgers.
+- **One dollar budget** held across them.
+- **One steered request stopped every rail** until the principal looked.
+
+Step 7 was refused but not struck. The first spend was eight minutes old, inside the ten-minute lookback, so the conservative rule did not call it an attempt.
+
+The guard's Flare writes cost 0.42 C2FLR. What was left on the run's keys went back to the principal.
 
 ## Live, 2026-09-25 (XRPL testnet + Flare Coston2)
 
@@ -163,7 +183,7 @@ It talks to the XRP Ledger over plain JSON-RPC (`src/xrpl-http.ts`), because web
 ## Status: MVP
 
 - XRP `Payment`s only. Issued currencies (RLUSD) are outside DELICTI's evidence today: the FDC's `Payment` type attests native payments only.
-- Smart Accounts: the full loop is proven live on testnets: mint, then deposit into Firelight, through the guard. With the budget and the tripwire it ran live up to the re-arm (see *Failing closed*).
+- Smart Accounts: the full loop is proven live on testnets, through the guard: mint, deposit into Firelight, redeem. The dollar budget and the tripwire govern it (see *Live: the autopilot on a leash*).
 - One guard. The design allows *k of n* independent guards, each with a bond. XRPL SignerLists hold up to 32 signers, so no single guard can block or collude.
 - The guard's key is a local key. It is meant to move into a Flare Confidential Compute machine: TEE identities are secp256k1, which the XRP Ledger accepts as a signer.
 - Accountability behind the brake: link the account's XRP-outflow mandate to the umbrella (DELICTI §6.10 + SUMMA). Then even a compromised guard is convicted from FDC proofs.
