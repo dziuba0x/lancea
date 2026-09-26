@@ -28,6 +28,22 @@ It stays that way until the principal looks and re-arms. It works in reverse too
 
 **Status:** typechecked, and the attempt rule is checked against DELICTI's own test numbers. It is **not run live**, because the meter with the tripwire ships with DELICTI v0.16, which is not deployed yet. Against an older meter the guard refuses exactly as before and strikes nothing.
 
+## The principal's rules
+
+Two rules on top of the budget (`src/policy.ts`). They only ever refuse more, and both work against the DELICTI contracts live today.
+
+- **An hourly cap across every rail** (`policy.hourlyCapUsd6`). It is read from `SummaMeter`'s own history (`spentAt`), so an x402 payment on Flare counts against an XRPL payment here.
+- **New-payee cooling** (`policy.newPayeeCapUsd6`, `coolingS` with a 24 h default, `knownPayees`).
+  - A destination this account has not paid for at least the cooling period gets at most the cap in total until it cools. Splitting does not reset it.
+  - An agent steered into paying someone it never paid before meets this rule first.
+  - With `strikeOnPolicy: true`, such a refusal is also a strike. With a tripwire of 1, it freezes the agent on every rail.
+- **Where the payee history comes from:** the node's `account_tx`, plus every payment this guard co-signed itself.
+  - Measured 2026-09-26: `testnet.xrpl-labs.com` keeps about 1,600 ledgers, roughly an hour and a half. On a node like that, the guard's own memory carries the rule.
+  - After a restart, a payee paid before the node's range looks new again. That refuses more, never less.
+  - Use a full-history node in production.
+
+`npm test` runs the rules offline: 5 tests, with no network needed.
+
 ## Live, 2026-09-25 (XRPL testnet + Flare Coston2)
 
 `npx tsx scripts/live.ts`, one run:

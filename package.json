@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "live": "tsx scripts/live.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
   },
   "keywords": [],
   "author": "",

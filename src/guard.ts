@@ -26,6 +26,7 @@ import { Wallet, multisign, decode, type Payment } from "xrpl";
 import { XrplHttp } from "./xrpl-http.js";
 import { createPublicClient, createWalletClient, http, keccak256, type Address, type Hex, type Chain, stringToHex, pad } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { type Policy, HOUR_S, DEFAULT_COOLING_S, RIPPLE_EPOCH, overHourlyCap, payeeHistory, isNewPayee, overNewPayeeCap } from "./policy.js";
 
 export const summaMeterAbi = [
   { type: "function", name: "wouldExceed", stateMutability: "nonpayable",
@@ -87,6 +88,10 @@ export interface GuardConfig {
   slackBps?: number;
   /** Strike the umbrella's tripwire when a refusal is an attempt (default true; needs a v1.2 meter). */
   strike?: boolean;
+  /** Lancea's own rules on top of the budget: an hourly cap across rails, and new-payee cooling (src/policy.ts). */
+  policy?: Policy;
+  /** Also strike when a payment breaks `policy` (default false: the principal opts in). */
+  strikeOnPolicy?: boolean;
 }
 
 export type Decision =
@@ -95,6 +100,8 @@ export type Decision =
 
 export class Guard {
   readonly wallet: Wallet;
+  /** Every payment this guard co-signed, as account_tx rows: the payee rule does not depend on a node's history depth. */
+  private readonly cosigned: any[] = [];
   private readonly pc;
   private readonly fw;
 
@@ -130,6 +137,12 @@ export class Guard {
     const [stop, usd6] = result as readonly [boolean, bigint];
     if (stop) return { signed: false, usd6, ...(await this.refuse(agentBlob, usd6)) };
 
+    const broken = await this.checkPolicy(tx, drops, usd6);
+    if (broken) {
+      const struck = this.cfg.strikeOnPolicy && (await this.tripped()) === false ? await this.strike(agentBlob) : undefined;
+      return { signed: false, usd6, reason: broken, struck };
+    }
+
     // the reservation: written on Flare BEFORE the signature exists
     const reservation = await this.fw.writeContract({ address: this.cfg.meter, abi: summaMeterAbi, functionName: "note", args: [...args] });
     const rc = await this.pc.waitForTransactionReceipt({ hash: reservation });
@@ -141,6 +154,12 @@ export class Guard {
     const combined = multisign([agentBlob, mine]);
     const sub = await this.xrpl.submitAndWait(combined);
     if (sub.result !== "tesSUCCESS") return { signed: false, reason: `XRPL: ${sub.result}`, usd6 };
+    this.cosigned.push({
+      hash: sub.hash,
+      tx: { TransactionType: "Payment", Account: tx.Account, Destination: tx.Destination, Amount: tx.Amount,
+        date: Number(BigInt(Math.floor(Date.now() / 1000)) - RIPPLE_EPOCH) },
+      meta: { TransactionResult: "tesSUCCESS", delivered_amount: tx.Amount },
+    });
     const tallyUsd6 = (await this.pc.readContract({ address: this.cfg.meter, abi: summaMeterAbi, functionName: "spentUsd6", args: [this.cfg.umbrellaId] })) as bigint;
     return { signed: true, hash: sub.hash, usd6, reservation, tallyUsd6 };
   }
@@ -153,12 +172,8 @@ export class Guard {
   private async refuse(agentBlob: string, usd6: bigint): Promise<{ reason: string; struck?: Hex }> {
     const budgetSays = "SummaMeter: the umbrella's dollar budget would be crossed";
     const { meter, umbrellaId } = this.cfg;
-    let tripped: boolean;
-    try {
-      tripped = (await this.pc.readContract({ address: meter, abi: summaMeterAbi, functionName: "tripped", args: [umbrellaId] })) as boolean;
-    } catch {
-      return { reason: budgetSays }; // a meter from before amendment v1.2
-    }
+    const tripped = await this.tripped();
+    if (tripped === undefined) return { reason: budgetSays }; // a meter from before amendment v1.2
     if (tripped) return { reason: "SummaMeter: the umbrella is tripped; its principal must re-arm it" };
     if (this.cfg.strike === false) return { reason: budgetSays };
 
@@ -170,10 +185,57 @@ export class Guard {
     })) as bigint;
     if (!isAttempt(before, usd6, m.budget)) return { reason: `${budgetSays} (a lost race, not an attempt)` };
 
-    const struck = await this.fw.writeContract({
-      address: meter, abi: summaMeterAbi, functionName: "strike", args: [umbrellaId, keccak256(`0x${agentBlob}`)],
+    return { reason: `${budgetSays}; struck as an attempt`, struck: await this.strike(agentBlob) };
+  }
+
+  /** undefined when the meter predates amendment v1.2 and has no tripwire. */
+  private async tripped(): Promise<boolean | undefined> {
+    try {
+      return (await this.pc.readContract({ address: this.cfg.meter, abi: summaMeterAbi, functionName: "tripped", args: [this.cfg.umbrellaId] })) as boolean;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Report a refused payment to the tripwire; the evidence is the hash of the agent's own signed blob. */
+  private async strike(agentBlob: string): Promise<Hex> {
+    const hash = await this.fw.writeContract({
+      address: this.cfg.meter, abi: summaMeterAbi, functionName: "strike", args: [this.cfg.umbrellaId, keccak256(`0x${agentBlob}`)],
     });
-    await this.pc.waitForTransactionReceipt({ hash: struck });
-    return { reason: `${budgetSays}; struck as an attempt`, struck };
+    await this.pc.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
+  /** The principal's own rules (src/policy.ts). Both work against the meter deployed today. */
+  private async checkPolicy(tx: Payment, drops: bigint, usd6: bigint): Promise<string | undefined> {
+    const p = this.cfg.policy;
+    if (!p) return undefined;
+    const { meter, umbrellaId, account } = this.cfg;
+    const now = (await this.pc.getBlock()).timestamp;
+
+    if (p.hourlyCapUsd6 !== undefined) {
+      const [spent, hourAgo] = await Promise.all([
+        this.pc.readContract({ address: meter, abi: summaMeterAbi, functionName: "spentUsd6", args: [umbrellaId] }) as Promise<bigint>,
+        this.pc.readContract({ address: meter, abi: summaMeterAbi, functionName: "spentAt", args: [umbrellaId, now - HOUR_S] }) as Promise<bigint>,
+      ]);
+      if (overHourlyCap(spent, hourAgo, usd6, p.hourlyCapUsd6)) {
+        return `policy: more than ${p.hourlyCapUsd6} µUSD in one hour across every rail (${spent - hourAgo} already)`;
+      }
+    }
+
+    if (p.newPayeeCapUsd6 !== undefined && !(p.knownPayees ?? []).includes(tx.Destination)) {
+      const cooling = p.coolingS === undefined ? DEFAULT_COOLING_S : BigInt(p.coolingS);
+      // The node's history (the latest 400 transactions it holds) plus what this guard co-signed itself.
+      // A payee first paid before both counts as new: the safe direction.
+      const r = await this.xrpl.rpc("account_tx", { account, ledger_index_min: -1, ledger_index_max: -1, limit: 400, forward: false });
+      const seen: any[] = r.transactions ?? [];
+      const hashes = new Set(seen.map((w) => w.hash ?? (w.tx ?? w.tx_json)?.hash));
+      const rows = seen.concat(this.cosigned.filter((w) => !hashes.has(w.hash)));
+      const h = payeeHistory(rows, account, tx.Destination, now, cooling);
+      if (isNewPayee(h, now, cooling) && overNewPayeeCap(h.recentDrops, drops, usd6, p.newPayeeCapUsd6)) {
+        return `policy: ${tx.Destination} is a new payee, capped at ${p.newPayeeCapUsd6} µUSD until it cools`;
+      }
+    }
+    return undefined;
   }
 }
