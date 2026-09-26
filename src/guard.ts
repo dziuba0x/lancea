@@ -25,6 +25,11 @@
  * Flare Smart Accounts: an XRPL Payment to the operator or the FAssets Core Vault acts on Flare,
  * authorised by the XRPL signature alone. The guard reads what it would do there and applies the
  * principal's ActionPolicy (src/smart-accounts.ts), so one co-signer covers both ledgers.
+ *
+ * Failing closed. Every read and write on Flare can fail: a node is down, the guard's key has run
+ * out of gas. A failure is a refusal, never a signature and never a crash. No reservation, no
+ * signature. A strike that does not land is kept, and the guard signs nothing until it lands (or
+ * the umbrella trips anyway). The failure mode stays liveness.
  */
 import { Wallet, multisign, decode, type Payment } from "xrpl";
 import { XrplHttp } from "./xrpl-http.js";
@@ -85,6 +90,14 @@ export function isAttempt(spentBeforeUsd6: bigint, usd6: bigint, budgetUsd6: big
 
 const b32 = (s: string) => pad(stringToHex(s), { dir: "right", size: 32 });
 
+/** A node's error in one line: viem's short message and the node's own words when they differ. */
+export function short(e: unknown): string {
+  const x = e as { shortMessage?: string; details?: string; message?: string } | undefined;
+  const head = x?.shortMessage ?? x?.message ?? String(e);
+  const tail = x?.details && !head.includes(x.details) ? ` (${x.details})` : "";
+  return `${head}${tail}`.split("\n")[0].slice(0, 240);
+}
+
 export interface GuardConfig {
   /** The agent's XRPL account: holds the funds, master key disabled, this guard in its SignerList. */
   account: string;
@@ -115,13 +128,15 @@ export interface GuardConfig {
 }
 
 export type Decision =
-  | { signed: true; hash: string; usd6: bigint; reservation: Hex; tallyUsd6: bigint }
+  | { signed: true; hash: string; usd6: bigint; reservation: Hex; tallyUsd6?: bigint }
   | { signed: false; reason: string; usd6?: bigint; struck?: Hex };
 
 export class Guard {
   readonly wallet: Wallet;
   /** Every payment this guard co-signed, as account_tx rows: the payee rule does not depend on a node's history depth. */
   private readonly cosigned: any[] = [];
+  /** A strike that did not land: the agent's blob, and the transaction if one was sent. It blocks every signature. */
+  private pending?: { blob: string; hash?: Hex };
   private readonly pc;
   private readonly fw;
 
@@ -143,6 +158,11 @@ export class Guard {
    * then fails on XRPL over-counts, which is the safe direction for a brake.
    */
   async cosign(agentBlob: string, userOp?: Hex): Promise<Decision> {
+    // A strike that did not land goes first: nothing is signed past an attempt the meter has not heard of.
+    if (this.pending) {
+      const still = await this.landPending();
+      if (still) return { signed: false, reason: still };
+    }
     const tx = decode(agentBlob) as unknown as Payment;
     if (tx.TransactionType !== "Payment") return { signed: false, reason: `MVP co-signs Payments only, not ${tx.TransactionType}` };
     if (tx.Account !== this.cfg.account) return { signed: false, reason: `not the guarded account: ${tx.Account}` };
@@ -151,38 +171,43 @@ export class Guard {
     const sa = this.cfg.smartAccounts;
     if (sa && Guard.isSmartAccountPayment(tx, sa)) {
       const why = Guard.smartAccountVerdict(tx, sa, userOp);
-      if (why) {
-        const struck = this.cfg.strikeOnPolicy && (await this.tripped()) === false ? await this.strike(agentBlob) : undefined;
-        return { signed: false, reason: `smart account: ${why}`, struck };
-      }
+      if (why) return this.policyRefusal(agentBlob, `smart account: ${why}`);
     }
     let drops: bigint;
     try { drops = Guard.outflow(tx); } catch (e) { return { signed: false, reason: (e as Error).message }; }
 
     const args = [this.cfg.umbrellaId, b32(this.cfg.xrplSource), b32("XRP/outflow"), drops] as const;
-    const { result } = await this.pc.simulateContract({
-      account: this.fw.account, address: this.cfg.meter, abi: summaMeterAbi, functionName: "wouldExceed",
-      args: [...args, this.cfg.slackBps ?? 0],
-    });
-    const [stop, usd6] = result as readonly [boolean, bigint];
-    if (stop) return { signed: false, usd6, ...(await this.refuse(agentBlob, usd6)) };
-
-    const broken = await this.checkPolicy(tx, drops, usd6);
-    if (broken) {
-      const struck = this.cfg.strikeOnPolicy && (await this.tripped()) === false ? await this.strike(agentBlob) : undefined;
-      return { signed: false, usd6, reason: broken, struck };
+    let stop: boolean, usd6: bigint;
+    try {
+      const { result } = await this.pc.simulateContract({
+        account: this.fw.account, address: this.cfg.meter, abi: summaMeterAbi, functionName: "wouldExceed",
+        args: [...args, this.cfg.slackBps ?? 0],
+      });
+      [stop, usd6] = result as readonly [boolean, bigint];
+    } catch (e) {
+      return { signed: false, reason: `SummaMeter unreadable, nothing signed: ${short(e)}` };
     }
+    if (stop) return this.refuse(agentBlob, usd6);
 
-    // the reservation: written on Flare BEFORE the signature exists
-    const reservation = await this.fw.writeContract({ address: this.cfg.meter, abi: summaMeterAbi, functionName: "note", args: [...args] });
-    const rc = await this.pc.waitForTransactionReceipt({ hash: reservation });
-    if (rc.status !== "success") return { signed: false, reason: `reservation reverted ${reservation}` };
+    let broken: string | undefined;
+    try { broken = await this.checkPolicy(tx, drops, usd6); } catch (e) {
+      return { signed: false, usd6, reason: `policy unreadable, nothing signed: ${short(e)}` };
+    }
+    if (broken) return this.policyRefusal(agentBlob, broken, usd6);
+
+    // the reservation: written on Flare BEFORE the signature exists. No reservation, no signature.
+    const r = await this.write("note", () => this.fw.writeContract({ address: this.cfg.meter, abi: summaMeterAbi, functionName: "note", args: [...args] }));
+    if (!r.ok) return { signed: false, usd6, reason: `reservation failed, nothing signed: ${r.error}` };
+    const reservation = r.hash;
 
     // sign the transaction itself, not the agent's signature over it
     const { Signers: _theirs, TxnSignature: _none, ...unsigned } = tx as Payment & { Signers?: unknown; TxnSignature?: unknown };
     const mine = this.wallet.sign(unsigned as Payment, true).tx_blob;
     const combined = multisign([agentBlob, mine]);
-    const sub = await this.xrpl.submitAndWait(combined);
+    let sub: { hash: string; result: string };
+    try { sub = await this.xrpl.submitAndWait(combined); } catch (e) {
+      return { signed: false, usd6, reason: `XRPL: ${short(e)} (the reservation stands: an over-count, the safe side)` };
+    }
     if (sub.result !== "tesSUCCESS") return { signed: false, reason: `XRPL: ${sub.result}`, usd6 };
     this.cosigned.push({
       hash: sub.hash,
@@ -190,32 +215,55 @@ export class Guard {
         date: Number(BigInt(Math.floor(Date.now() / 1000)) - RIPPLE_EPOCH) },
       meta: { TransactionResult: "tesSUCCESS", delivered_amount: tx.Amount },
     });
-    const tallyUsd6 = (await this.pc.readContract({ address: this.cfg.meter, abi: summaMeterAbi, functionName: "spentUsd6", args: [this.cfg.umbrellaId] })) as bigint;
+    const tallyUsd6 = await this.pc.readContract({ address: this.cfg.meter, abi: summaMeterAbi, functionName: "spentUsd6", args: [this.cfg.umbrellaId] })
+      .then((t) => t as bigint, () => undefined); // informative only: the payment is done either way
     return { signed: true, hash: sub.hash, usd6, reservation, tallyUsd6 };
   }
 
   /**
    * Why the meter said no, and whether that no was an attempt worth a strike. Nothing is struck when
    * the umbrella is already tripped (the refusal is the trip itself), when the payment only lost a
-   * race, or when the meter predates the tripwire.
+   * race, when the earlier tally cannot be read (a strike accuses), or when the meter predates the tripwire.
    */
-  private async refuse(agentBlob: string, usd6: bigint): Promise<{ reason: string; struck?: Hex }> {
+  private async refuse(agentBlob: string, usd6: bigint): Promise<Decision> {
     const budgetSays = "SummaMeter: the umbrella's dollar budget would be crossed";
-    const { meter, umbrellaId } = this.cfg;
+    const no = (reason: string): Decision => ({ signed: false, usd6, reason });
     const tripped = await this.tripped();
-    if (tripped === undefined) return { reason: budgetSays }; // a meter from before amendment v1.2
-    if (tripped) return { reason: "SummaMeter: the umbrella is tripped; its principal must re-arm it" };
-    if (this.cfg.strike === false) return { reason: budgetSays };
+    if (tripped === undefined) return no(budgetSays); // a meter from before amendment v1.2
+    if (tripped) return no("SummaMeter: the umbrella is tripped; its principal must re-arm it");
+    if (this.cfg.strike === false) return no(budgetSays);
+    let attempt: boolean;
+    try { attempt = await this.wasAttempt(usd6); } catch (e) {
+      return no(`${budgetSays} (the earlier tally is unreadable, so no strike: ${short(e)})`);
+    }
+    if (!attempt) return no(`${budgetSays} (not an attempt: against the tally of ten minutes ago it fits)`);
+    return this.struckRefusal(agentBlob, `${budgetSays}; struck as an attempt`, usd6);
+  }
 
+  /** Amendment v1.2, C.1: the payment breaks the budget against the tally of ten minutes ago. */
+  private async wasAttempt(usd6: bigint): Promise<boolean> {
+    const { meter, umbrellaId } = this.cfg;
     const registry = (await this.pc.readContract({ address: meter, abi: summaMeterAbi, functionName: "registry" })) as Address;
     const m = await this.pc.readContract({ address: registry, abi: registryAbi, functionName: "get", args: [umbrellaId] });
     const now = (await this.pc.getBlock()).timestamp;
     const before = (await this.pc.readContract({
       address: meter, abi: summaMeterAbi, functionName: "spentAt", args: [umbrellaId, now - LOOKBACK_S],
     })) as bigint;
-    if (!isAttempt(before, usd6, m.budget)) return { reason: `${budgetSays} (not an attempt: against the tally of ten minutes ago it fits)` };
+    return isAttempt(before, usd6, m.budget);
+  }
 
-    return { reason: `${budgetSays}; struck as an attempt`, struck: await this.strike(agentBlob) };
+  /** A refusal under the principal's rules. It strikes only when the principal opted in (strikeOnPolicy). */
+  private async policyRefusal(agentBlob: string, reason: string, usd6?: bigint): Promise<Decision> {
+    if (!this.cfg.strikeOnPolicy || (await this.tripped()) !== false) return { signed: false, reason, usd6 };
+    return this.struckRefusal(agentBlob, reason, usd6);
+  }
+
+  /** A refusal that strikes. A strike that does not land is kept, and blocks every signature until it lands. */
+  private async struckRefusal(agentBlob: string, reason: string, usd6?: bigint): Promise<Decision> {
+    const s = await this.strike(agentBlob);
+    return s.struck
+      ? { signed: false, reason, usd6, struck: s.struck }
+      : { signed: false, reason: `${reason}; the strike did not land (${s.error}), so nothing is signed until it does`, usd6 };
   }
 
   static isSmartAccountPayment(tx: Payment, sa: SmartAccountsConfig): boolean {
@@ -246,12 +294,41 @@ export class Guard {
   }
 
   /** Report a refused payment to the tripwire; the evidence is the hash of the agent's own signed blob. */
-  private async strike(agentBlob: string): Promise<Hex> {
-    const hash = await this.fw.writeContract({
+  private async strike(agentBlob: string): Promise<{ struck?: Hex; error?: string }> {
+    const r = await this.write("strike", () => this.fw.writeContract({
       address: this.cfg.meter, abi: summaMeterAbi, functionName: "strike", args: [this.cfg.umbrellaId, keccak256(`0x${agentBlob}`)],
-    });
-    await this.pc.waitForTransactionReceipt({ hash });
-    return hash;
+    }));
+    if (r.ok) { this.pending = undefined; return { struck: r.hash }; }
+    this.pending = { blob: agentBlob, hash: r.hash };
+    return { error: r.error };
+  }
+
+  /**
+   * Land a strike that did not land before. It may have landed late (its receipt is checked first),
+   * or be moot (the umbrella tripped anyway). Returns why the guard still refuses, if it does.
+   * A strike stuck in a mempool and then sent again can count twice: the conservative side.
+   */
+  private async landPending(): Promise<string | undefined> {
+    const p = this.pending!;
+    if (p.hash) {
+      const rc = await this.pc.getTransactionReceipt({ hash: p.hash }).catch(() => undefined);
+      if (rc?.status === "success") { this.pending = undefined; return undefined; }
+    }
+    if ((await this.tripped()) === true) { this.pending = undefined; return undefined; }
+    const s = await this.strike(p.blob);
+    return s.struck ? undefined : `an earlier strike has not landed (${s.error}); nothing is signed until it does`;
+  }
+
+  /** One write to the meter, waited for. A failure comes back as text: the caller refuses, it never throws. */
+  private async write(what: string, send: () => Promise<Hex>): Promise<{ ok: true; hash: Hex } | { ok: false; error: string; hash?: Hex }> {
+    let hash: Hex | undefined;
+    try {
+      hash = await send();
+      const rc = await this.pc.waitForTransactionReceipt({ hash, timeout: 120_000 });
+      return rc.status === "success" ? { ok: true, hash } : { ok: false, error: `${what} reverted in ${hash}`, hash };
+    } catch (e) {
+      return { ok: false, error: `${what}: ${short(e)}`, hash };
+    }
   }
 
   /** The principal's own rules (src/policy.ts). Both work against the meter deployed today. */

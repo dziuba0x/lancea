@@ -26,7 +26,12 @@ Once the principal's tripwire is reached (`setTripwire`, one strike if they like
 
 It stays that way until the principal looks and re-arms. It works in reverse too: an attempt recorded on Flare (`MandateFacilitator.recordAttempt`) trips the guard here without a line of Lancea code, because both ask the same meter.
 
-**Status:** typechecked, and the attempt rule is checked against DELICTI's own test numbers. It is **not run live**, because the meter with the tripwire ships with DELICTI v0.16, which is not deployed yet. Against an older meter the guard refuses exactly as before and strikes nothing.
+**Status:** run live on 2026-09-26 (XRPL testnet + Coston2) against a `SummaMeter` v1.2 that the run deploys itself:
+- a steered mint was refused and struck, and the umbrella tripped;
+- a legitimate redeem was refused while tripped;
+- the principal re-armed.
+
+That run then stopped on gas, not on the design (see *Failing closed* below). Against a meter from before v1.2, the guard refuses exactly as before and strikes nothing.
 
 ## The principal's rules
 
@@ -42,7 +47,7 @@ Two rules on top of the budget (`src/policy.ts`). They only ever refuse more, an
   - After a restart, a payee paid before the node's range looks new again. That refuses more, never less.
   - Use a full-history node in production.
 
-`npm test` runs the rules offline: 5 tests of these rules (14 in all), with no network needed.
+`npm test` runs the rules offline: 5 tests of these rules (18 in all), with no network needed.
 
 ## One guard for XRPL and Flare (Flare Smart Accounts)
 
@@ -106,9 +111,30 @@ The order of steps: first any withdrawal the principal asked for (redeem vault s
 4. A legitimate redeem is refused while tripped, and co-signed after the principal re-arms.
 5. A mint past $40 is refused.
 
-It was rehearsed end to end on a Coston2 fork.
-
 The guard also caps the transaction fee (`maxFeeDrops`, default 0.01 XRP), because a fee is outflow too.
+
+### Failing closed
+
+The first live run of `leash-live.ts` got as far as the re-arm, then stopped. The guard's Flare key held 0.5 C2FLR. On Coston2, a write must hold its gas at 2 × base fee + tip up front, about 0.3 C2FLR. So the fourth write could not be paid for (*gas required exceeds allowance*), the guard threw, and the run died.
+
+Every Flare read and write in the guard now fails closed:
+- **No reservation, no signature.** A `note` that fails is a refusal.
+- **An unreadable meter or policy** is a refusal.
+- **A strike that does not land is kept.** The guard signs nothing until it lands, or until the umbrella trips anyway.
+
+`test/guard.test.ts` replays the live failure against a mock Coston2 node. The old guard throws the same error; the new one refuses.
+
+**The live script:**
+- funds the guard's key from the day's fee and tops it up before every step;
+- writes the run's keys to `.run/` (git-ignored) before anything is funded;
+- sends what is left back to the principal at the end;
+- logs a failed step and goes on to its summary.
+
+`--sweep .run/<file>` recovers a run that was killed.
+
+**Rehearsing at Coston2's fees.** The earlier rehearsals ran on a bare fork, where gas is nearly free. `scripts/coston2-fork-proxy.mjs` puts Coston2's fee rules in front of an anvil fork: the base fee is held, and `eth_fillTransaction` is capped by the balance. On the fork the script also acts as Coston2's executor, so a rehearsal makes the same writes as the live run.
+- With 0.5 C2FLR, the rehearsal fails at the same step as the live run, now as a refusal.
+- With today's funding, all seven steps behave as designed, including through a 3× fee spike.
 
 
 ## Live, 2026-09-25 (XRPL testnet + Flare Coston2)
@@ -128,7 +154,8 @@ The guard also caps the transaction fee (`maxFeeDrops`, default 0.01 XRP), becau
 ```sh
 npm ci
 PRIVATE_KEY=0x…   # a Coston2 key with C2FLR (principal and gas)
-DELICTI_OUT=../delicti/out/ npx tsx scripts/live.ts   # needs `forge build` in the delicti repo
+DELICTI_OUT=../delicti/out/ npx tsx scripts/live.ts         # needs `forge build` in the delicti repo
+DELICTI_OUT=../delicti/out/ npx tsx scripts/leash-live.ts   # the autopilot on a leash: ≥6 C2FLR, about 2 spent
 ```
 
 It talks to the XRP Ledger over plain JSON-RPC (`src/xrpl-http.ts`), because websockets are not available everywhere. Signing and encoding are offline, done by xrpl.js.
@@ -136,7 +163,7 @@ It talks to the XRP Ledger over plain JSON-RPC (`src/xrpl-http.ts`), because web
 ## Status: MVP
 
 - XRP `Payment`s only. Issued currencies (RLUSD) are outside DELICTI's evidence today: the FDC's `Payment` type attests native payments only.
-- Smart Accounts: the full loop is proven live on testnets: mint, then deposit into Firelight, through the guard. The live runs skip the budget and the tripwire, which need a Flare key for `SummaMeter`.
+- Smart Accounts: the full loop is proven live on testnets: mint, then deposit into Firelight, through the guard. With the budget and the tripwire it ran live up to the re-arm (see *Failing closed*).
 - One guard. The design allows *k of n* independent guards, each with a bond. XRPL SignerLists hold up to 32 signers, so no single guard can block or collude.
 - The guard's key is a local key. It is meant to move into a Flare Confidential Compute machine: TEE identities are secp256k1, which the XRP Ledger accepts as a signer.
 - Accountability behind the brake: link the account's XRP-outflow mandate to the umbrella (DELICTI §6.10 + SUMMA). Then even a compromised guard is convicted from FDC proofs.
