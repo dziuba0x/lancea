@@ -42,7 +42,7 @@ Two rules on top of the budget (`src/policy.ts`). They only ever refuse more, an
   - After a restart, a payee paid before the node's range looks new again. That refuses more, never less.
   - Use a full-history node in production.
 
-`npm test` runs the rules offline: 5 tests of these rules (11 in all), with no network needed.
+`npm test` runs the rules offline: 5 tests of these rules (14 in all), with no network needed.
 
 ## One guard for XRPL and Flare (Flare Smart Accounts)
 
@@ -92,6 +92,23 @@ smartAccounts: {
 ```
 
 The decoder and policy have 6 offline tests, built from the vectors in Flare's docs and from the live run.
+
+### The autopilot (`src/autopilot.ts`)
+
+An agent that puts idle XRP to work, one step at a time, and never holds the keys alone. It only **proposes** XRPL payments. The guard reads each one, prices it against the umbrella's dollar budget, and co-signs or refuses. The guard needs no autopilot-specific code.
+
+The order of steps: first any withdrawal the principal asked for (redeem vault shares), then deposit whole FXRP into the target vault, then mint idle XRP above the reserve. Each mint is capped per step.
+
+`scripts/leash-live.ts` runs it live with the dollar budget and the tripwire:
+1. It deploys a `SummaMeter` v1.2 and opens a $40 umbrella with tripwire 1.
+2. The autopilot mints and deposits.
+3. A steered agent tries to mint to a stranger: refused and struck, so the umbrella trips.
+4. A legitimate redeem is refused while tripped, and co-signed after the principal re-arms.
+5. A mint past $40 is refused.
+
+It was rehearsed end to end on a Coston2 fork.
+
+The guard also caps the transaction fee (`maxFeeDrops`, default 0.01 XRP), because a fee is outflow too.
 
 
 ## Live, 2026-09-25 (XRPL testnet + Flare Coston2)

@@ -103,3 +103,15 @@ test("the guard's verdict on a whole payment: one memo, no tag, and a permitted 
   assert.match(Guard.smartAccountVerdict(pay(OPERATOR, [dep, dep]), sa)!, /exactly one memo/);
   assert.match(Guard.smartAccountVerdict(pay(CORE, ["4642505266410018" + "00000000" + ATTACKER]), sa)!, /would mint FXRP/);
 });
+
+test("a fee is outflow too: the guard refuses one above its cap before anything else", async () => {
+  const { encode, Wallet } = await import("xrpl");
+  const { flareTestnet } = await import("viem/chains");
+  const account = Wallet.generate().address;
+  const g = new Guard({ account, guardSeed: Wallet.generate().seed!, flareKey: `0x${"11".repeat(32)}`, chain: flareTestnet,
+    rpcUrl: "http://127.0.0.1:1", meter: `0x${"22".repeat(20)}`, umbrellaId: 1n, xrplSource: "testXRP" }, undefined as never);
+  const blob = encode({ TransactionType: "Payment", Account: account, Destination: OPERATOR, Amount: "1000", Fee: "50000", Sequence: 1, SigningPubKey: "" } as never);
+  const d = await g.cosign(blob);
+  assert.equal(d.signed, false);
+  assert.match(d.signed ? "" : d.reason, /fee 50000 drops is above the 10000-drop cap/);
+});

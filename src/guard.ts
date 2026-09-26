@@ -104,6 +104,9 @@ export interface GuardConfig {
   strike?: boolean;
   /** Lancea's own rules on top of the budget: an hourly cap across rails, and new-payee cooling (src/policy.ts). */
   policy?: Policy;
+  /** The most a transaction may burn in fees, in drops (default 10 000 = 0.01 XRP). A fee is outflow too:
+   *  an agent could otherwise spend its budget on nothing. */
+  maxFeeDrops?: bigint;
   /** Also strike when a payment breaks `policy` or `smartAccounts.policy` (default false: the principal opts in). */
   strikeOnPolicy?: boolean;
   /** What the account may do on Flare through its smart account. Without it, payments to the
@@ -143,6 +146,8 @@ export class Guard {
     const tx = decode(agentBlob) as unknown as Payment;
     if (tx.TransactionType !== "Payment") return { signed: false, reason: `MVP co-signs Payments only, not ${tx.TransactionType}` };
     if (tx.Account !== this.cfg.account) return { signed: false, reason: `not the guarded account: ${tx.Account}` };
+    const maxFee = this.cfg.maxFeeDrops ?? 10_000n;
+    if (BigInt(tx.Fee ?? "0") > maxFee) return { signed: false, reason: `fee ${tx.Fee} drops is above the ${maxFee}-drop cap` };
     const sa = this.cfg.smartAccounts;
     if (sa && Guard.isSmartAccountPayment(tx, sa)) {
       const why = Guard.smartAccountVerdict(tx, sa, userOp);
@@ -208,7 +213,7 @@ export class Guard {
     const before = (await this.pc.readContract({
       address: meter, abi: summaMeterAbi, functionName: "spentAt", args: [umbrellaId, now - LOOKBACK_S],
     })) as bigint;
-    if (!isAttempt(before, usd6, m.budget)) return { reason: `${budgetSays} (a lost race, not an attempt)` };
+    if (!isAttempt(before, usd6, m.budget)) return { reason: `${budgetSays} (not an attempt: against the tally of ten minutes ago it fits)` };
 
     return { reason: `${budgetSays}; struck as an attempt`, struck: await this.strike(agentBlob) };
   }
