@@ -42,7 +42,46 @@ Two rules on top of the budget (`src/policy.ts`). They only ever refuse more, an
   - After a restart, a payee paid before the node's range looks new again. That refuses more, never less.
   - Use a full-history node in production.
 
-`npm test` runs the rules offline: 5 tests, with no network needed.
+`npm test` runs the rules offline: 5 tests of these rules (11 in all), with no network needed.
+
+## One guard for XRPL and Flare (Flare Smart Accounts)
+
+[Flare Smart Accounts](https://dev.flare.network/smart-accounts/overview) give every XRPL address a personal account on Flare. An XRPL `Payment` drives it:
+- **deposits, redemptions and claims** in Firelight and Upshift vaults;
+- **FXRP transfers and redemptions**;
+- **arbitrary calls**, as a user operation.
+
+Flare's docs put it plainly: *"Authorization comes from the XRPL Payment signature itself."* On a guarded account that signature needs the guard, so **every action the agent takes on Flare passes through the guard too**. One co-signer covers the agent's whole footprint on both ledgers.
+
+**Measured on 2026-09-26** (XRPL testnet and Coston2, `npx tsx scripts/sa-multisig-e2e.ts`):
+1. A fresh account `raS5RMnwDhZ4bb4mGwNZgbwzb92bhcbPtH` was set up with SignerList 2/1/1 and the master key disabled.
+2. The agent alone sent an instruction to the operator (`rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq`): `tefBAD_QUORUM`.
+3. Agent and guard together sent it: `tesSUCCESS`.
+4. **86 seconds later** the operator had proven the payment with the FDC and called `executeInstruction` for this account on Coston2 ([`0xc93b9809…4706d`](https://coston2-explorer.flare.network/tx/0xc93b980935ab5c515a973597043ae0d37b9be01844b29894eb1f707ad234706d)).
+5. The controller reverted `ValueZero()`, because the test moved 0 FXRP: the only instruction that needs no balance. A multi-signed account is relayed and proven like any other. A full success needs FXRP minted first.
+
+**What the guard reads** (`src/smart-accounts.ts`, pure):
+- **To an operator:** the 32-byte instruction.
+  - Deposit, redeem and claim are allowed only in the principal's vaults.
+  - FXRP transfers are allowed only to listed addresses.
+  - FXRP redemption is allowed, because it returns XRP to this account.
+- **To the FAssets Core Vault:** the minting memo.
+  - For user operations (`0xFF` inline, or `0xFE` with the operation shown: `cosign(blob, userOp)`), every call is decoded and must be a listed target and selector, with no FLR attached.
+  - Recovery opcodes are allowed. Pinning an executor is the principal's call.
+- **The trap an allowlist of destinations would miss:** the Core Vault also mints FXRP to any Flare address named in an FAssets recipient memo (`0x4642505266410018…`), and to whoever holds a destination tag.
+  - "May pay the Core Vault" would mean "may pay anyone". The guard refuses both, except a memo that mints to the account's own personal account.
+  - One memo per payment, and no destination tag.
+
+```ts
+smartAccounts: {
+  operators: ["rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq"],       // MasterAccountController.getXrplProviderWallets()
+  coreVault: "r…",                                          // AssetManager.directMintingPaymentAddress()
+  policy: { vaults: [1], calls: [/* { target, selector } */], personalAccount: "0x…" },
+}
+```
+
+The decoder and policy have 6 offline tests, built from the vectors in Flare's docs and from the live run.
+
 
 ## Live, 2026-09-25 (XRPL testnet + Flare Coston2)
 
@@ -68,7 +107,8 @@ It talks to the XRP Ledger over plain JSON-RPC (`src/xrpl-http.ts`), because web
 
 ## Status: MVP
 
-- XRP `Payment`s only. Issued currencies (RLUSD) are outside DELICTI's evidence today.
+- XRP `Payment`s only. Issued currencies (RLUSD) are outside DELICTI's evidence today: the FDC's `Payment` type attests native payments only.
+- Smart Accounts: the relay is proven live. A full run (mint FXRP, then deposit into Firelight through the guard) is next.
 - One guard. The design allows *k of n* independent guards, each with a bond. XRPL SignerLists hold up to 32 signers, so no single guard can block or collude.
 - The guard's key is a local key. It is meant to move into a Flare Confidential Compute machine: TEE identities are secp256k1, which the XRP Ledger accepts as a signer.
 - Accountability behind the brake: link the account's XRP-outflow mandate to the umbrella (DELICTI §6.10 + SUMMA). Then even a compromised guard is convicted from FDC proofs.

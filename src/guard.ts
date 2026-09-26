@@ -21,12 +21,26 @@
  * budget even against the tally of ten minutes ago, at 99 % of its value, it was an attempt and not
  * a lost race, and the guard strikes the umbrella in SummaMeter. Once the principal's tripwire is
  * reached, `wouldExceed` answers yes on every rail: the x402 facilitator on Flare stops too.
+ *
+ * Flare Smart Accounts: an XRPL Payment to the operator or the FAssets Core Vault acts on Flare,
+ * authorised by the XRPL signature alone. The guard reads what it would do there and applies the
+ * principal's ActionPolicy (src/smart-accounts.ts), so one co-signer covers both ledgers.
  */
 import { Wallet, multisign, decode, type Payment } from "xrpl";
 import { XrplHttp } from "./xrpl-http.js";
 import { createPublicClient, createWalletClient, http, keccak256, type Address, type Hex, type Chain, stringToHex, pad } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { type Policy, HOUR_S, DEFAULT_COOLING_S, RIPPLE_EPOCH, overHourlyCap, payeeHistory, isNewPayee, overNewPayeeCap } from "./policy.js";
+import { type ActionPolicy, decodeReference, decodeMint, judge } from "./smart-accounts.js";
+
+/** Where a guarded account meets Flare Smart Accounts (src/smart-accounts.ts). */
+export interface SmartAccountsConfig {
+  /** Operator XRPL wallets: MasterAccountController.getXrplProviderWallets(). */
+  operators: string[];
+  /** The FAssets Core Vault's XRPL address: AssetManager.directMintingPaymentAddress(). */
+  coreVault: string;
+  policy: ActionPolicy;
+}
 
 export const summaMeterAbi = [
   { type: "function", name: "wouldExceed", stateMutability: "nonpayable",
@@ -90,8 +104,11 @@ export interface GuardConfig {
   strike?: boolean;
   /** Lancea's own rules on top of the budget: an hourly cap across rails, and new-payee cooling (src/policy.ts). */
   policy?: Policy;
-  /** Also strike when a payment breaks `policy` (default false: the principal opts in). */
+  /** Also strike when a payment breaks `policy` or `smartAccounts.policy` (default false: the principal opts in). */
   strikeOnPolicy?: boolean;
+  /** What the account may do on Flare through its smart account. Without it, payments to the
+   *  operator or the Core Vault are ordinary payments to strangers. */
+  smartAccounts?: SmartAccountsConfig;
 }
 
 export type Decision =
@@ -122,10 +139,18 @@ export class Guard {
    * Order: check → reserve on Flare → sign → combine → submit. A reservation for a payment that
    * then fails on XRPL over-counts, which is the safe direction for a brake.
    */
-  async cosign(agentBlob: string): Promise<Decision> {
+  async cosign(agentBlob: string, userOp?: Hex): Promise<Decision> {
     const tx = decode(agentBlob) as unknown as Payment;
     if (tx.TransactionType !== "Payment") return { signed: false, reason: `MVP co-signs Payments only, not ${tx.TransactionType}` };
     if (tx.Account !== this.cfg.account) return { signed: false, reason: `not the guarded account: ${tx.Account}` };
+    const sa = this.cfg.smartAccounts;
+    if (sa && Guard.isSmartAccountPayment(tx, sa)) {
+      const why = Guard.smartAccountVerdict(tx, sa, userOp);
+      if (why) {
+        const struck = this.cfg.strikeOnPolicy && (await this.tripped()) === false ? await this.strike(agentBlob) : undefined;
+        return { signed: false, reason: `smart account: ${why}`, struck };
+      }
+    }
     let drops: bigint;
     try { drops = Guard.outflow(tx); } catch (e) { return { signed: false, reason: (e as Error).message }; }
 
@@ -188,6 +213,24 @@ export class Guard {
     return { reason: `${budgetSays}; struck as an attempt`, struck: await this.strike(agentBlob) };
   }
 
+  static isSmartAccountPayment(tx: Payment, sa: SmartAccountsConfig): boolean {
+    return sa.operators.includes(tx.Destination) || tx.Destination === sa.coreVault;
+  }
+
+  /**
+   * A payment that acts on Flare, judged by what it does there. One memo, no destination tag
+   * (at the Core Vault a tag mints to whoever holds it). To an operator: the 32-byte instruction.
+   * To the Core Vault: the minting memo, and for 0xFE the user operation the agent shows.
+   */
+  static smartAccountVerdict(tx: Payment, sa: SmartAccountsConfig, userOp?: Hex): string | undefined {
+    if (tx.DestinationTag !== undefined) return "a destination tag here would credit whoever holds the tag";
+    const memos = tx.Memos ?? [];
+    if (memos.length !== 1 || !memos[0].Memo.MemoData) return `exactly one memo with data, not ${memos.length}`;
+    const data = memos[0].Memo.MemoData;
+    const d = sa.operators.includes(tx.Destination) ? decodeReference(data) : decodeMint(data);
+    return judge(d, sa.policy, userOp);
+  }
+
   /** undefined when the meter predates amendment v1.2 and has no tripwire. */
   private async tripped(): Promise<boolean | undefined> {
     try {
@@ -223,7 +266,8 @@ export class Guard {
       }
     }
 
-    if (p.newPayeeCapUsd6 !== undefined && !(p.knownPayees ?? []).includes(tx.Destination)) {
+    const vetted = this.cfg.smartAccounts !== undefined && Guard.isSmartAccountPayment(tx, this.cfg.smartAccounts); // judged by instruction
+    if (p.newPayeeCapUsd6 !== undefined && !vetted && !(p.knownPayees ?? []).includes(tx.Destination)) {
       const cooling = p.coolingS === undefined ? DEFAULT_COOLING_S : BigInt(p.coolingS);
       // The node's history (the latest 400 transactions it holds) plus what this guard co-signed itself.
       // A payee first paid before both counts as new: the safe direction.
