@@ -89,7 +89,7 @@ const meterState = async () => {
 
 // ------------------------------------------------------------------ 1. XRPL: the guarded account
 log("== 1. XRPL: the guarded account");
-const xrpl = new XrplHttp(process.env.XRPL_RPC ?? "https://testnet.xrpl-labs.com/");
+const xrpl = new XrplHttp(process.env.XRPL_RPC?.split(","));
 const acct = await xrpl.fund();
 const master = Wallet.fromSeed(acct.seed);
 const [P, K, G] = [Wallet.generate(), Wallet.generate(), Wallet.generate()]; // principal, agent, guard

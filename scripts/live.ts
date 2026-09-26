@@ -59,7 +59,7 @@ const now = BigInt(Math.floor(Date.now() / 1000));
 const usd = async (u: bigint) => `$${Number(await pc.readContract({ address: A.meter, abi: meterAbi, functionName: "spentUsd6", args: [u] })) / 1e6}`;
 
 // ------------------------------------------------------------------ XRPL: the guarded account
-const xrpl = new XrplHttp(process.env.XRPL_RPC ?? "https://testnet.xrpl-labs.com/");
+const xrpl = new XrplHttp(process.env.XRPL_RPC?.split(","));
 const single = async (w: Wallet, tx: Transaction) => xrpl.submitAndWait(w.sign(await xrpl.autofill(tx)).tx_blob);
 log("== 1. XRPL testnet: the agent's account, locked behind a SignerList");
 const acct = Wallet.fromSeed((await xrpl.fund()).seed);

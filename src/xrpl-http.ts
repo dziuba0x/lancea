@@ -1,23 +1,41 @@
 /**
  * The XRP Ledger over plain JSON-RPC (HTTPS), for places where a websocket is not available.
  * xrpl.js does the signing and encoding offline. This does the four things that need the network:
- * fill a transaction, submit it, wait for validation, and fund a testnet account.
+ * fill a transaction, submit it, wait for validation, and fund a testnet account. It fails over
+ * between public nodes (XrplHttp.TESTNET) when one refuses or rate-limits.
  */
 import { decode, type Transaction } from "xrpl";
 
 export class XrplHttp {
-  constructor(readonly endpoint = "https://testnet.xrpl-labs.com/", readonly faucet = "https://faucet.altnet.rippletest.net/accounts") {}
+  /** Public testnet JSON-RPC nodes, tried in turn. XRPL Labs' node answers bursts from one address
+   *  with "Contact XRPL Labs for a custom connectivity agreement", so it is not first. */
+  static readonly TESTNET = ["https://s.altnet.rippletest.net:51234/", "https://testnet.xrpl-labs.com/", "https://clio.altnet.rippletest.net:51234/"];
+  readonly endpoints: string[];
+  private at = 0;
 
+  constructor(endpoint?: string | string[], readonly faucet = "https://faucet.altnet.rippletest.net/accounts") {
+    this.endpoints = Array.isArray(endpoint) ? endpoint : endpoint ? [endpoint] : XrplHttp.TESTNET;
+  }
+
+  /** The node in use now. */
+  get endpoint(): string { return this.endpoints[this.at]; }
+
+  /**
+   * One JSON-RPC call. A node that is unreachable, or that answers with text instead of JSON (a
+   * rate-limit or connectivity notice), did not process the request, so the same request goes to
+   * the next node, with a short back-off. A JSON error (actNotFound, …) is an answer: it is thrown.
+   */
   async rpc(method: string, params: Record<string, unknown> = {}): Promise<any> {
-    let j: any;
+    let j: any, last = "";
     for (let attempt = 0; ; attempt++) {
-      const r = await fetch(this.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method, params: [params] }) });
-      const text = await r.text();
-      try { j = JSON.parse(text); break; } catch {
-        // public nodes answer a burst with a plain-text rate-limit notice: back off and retry
-        if (attempt >= 8) throw new Error(`${method}: ${text.slice(0, 80)}`);
-        await new Promise((s) => setTimeout(s, 2000 * (attempt + 1)));
-      }
+      try {
+        const r = await fetch(this.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method, params: [params] }) });
+        const text = await r.text();
+        try { j = JSON.parse(text); break; } catch { last = text; }
+      } catch (e) { last = (e as Error).message; }
+      if (attempt >= 3 * this.endpoints.length) throw new Error(`${method}: ${last.slice(0, 80)} (tried ${this.endpoints.join(", ")})`);
+      this.at = (this.at + 1) % this.endpoints.length;
+      await new Promise((s) => setTimeout(s, 1000 * Math.min(attempt + 1, 5)));
     }
     if (j.result?.status === "error") throw Object.assign(new Error(`${method}: ${j.result.error}`), { data: j.result });
     return j.result;
