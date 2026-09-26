@@ -16,6 +16,18 @@ The guard can refuse. It cannot move funds. Its failure mode is liveness, never 
 
 This is the XRP Ledger's missing piece. Permission delegation (XLS-75) is all-or-nothing per transaction type: it has no amount limits, and it is not enabled on mainnet. Multisig has existed since 2016. Lancea makes it a spending limit that holds across chains.
 
+## One attempt, every rail (DELICTI amendment v1.2)
+
+A refusal is not only a no. When the refused payment breaks the budget even against the tally of ten minutes ago, at 99 % of its value, it was an **attempt**, not a lost race. The guard then **strikes** the umbrella in `SummaMeter`, with the hash of the agent's own signed blob as evidence.
+
+Once the principal's tripwire is reached (`setTripwire`, one strike if they like), the meter answers *no* to everything, on every rail:
+- the guard refuses every XRPL payment;
+- DELICTI's x402 facilitator refuses every payment on Flare.
+
+It stays that way until the principal looks and re-arms. It works in reverse too: an attempt recorded on Flare (`MandateFacilitator.recordAttempt`) trips the guard here without a line of Lancea code, because both ask the same meter.
+
+**Status:** typechecked, and the attempt rule is checked against DELICTI's own test numbers. It is **not run live**, because the meter with the tripwire ships with DELICTI v0.16, which is not deployed yet. Against an older meter the guard refuses exactly as before and strikes nothing.
+
 ## Live, 2026-09-25 (XRPL testnet + Flare Coston2)
 
 `npx tsx scripts/live.ts`, one run:
