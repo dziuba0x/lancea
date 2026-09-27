@@ -182,6 +182,39 @@ DELICTI_OUT=../delicti/out/ npx tsx scripts/leash-live.ts   # the autopilot on a
 
 It talks to the XRP Ledger over plain JSON-RPC (`src/xrpl-http.ts`), because websockets are not available everywhere. Signing and encoding are offline, done by xrpl.js.
 
+## Run it 24/7: the guard and the autopilot as services
+
+Two processes, two sets of keys, one machine (`src/service/`):
+
+- **`lancea-guard`** holds the guard's XRPL key and its Flare key. It answers one question, on the machine's loopback and only to the holder of a token: *will you co-sign this?* It reads the agent's blob itself, and it serves one request at a time, so a reservation, a signature and a strike never interleave.
+- **`lancea-autopilot`** holds the agent's key, which is below the account's quorum. Each tick it looks at the account, asks its brain (`src/brain.ts`) for one step and why, and sends the step to the guard. The rules:
+  - A co-signed step is in flight until the chain shows it.
+  - A step its own budget would refuse is held, not proposed. An agent that keeps proposing what the budget refuses would, ten minutes on, be struck for an attempt and trip its own umbrella.
+  - A refusal backs off.
+  - A tripped umbrella pauses it until the principal re-arms it.
+- **Journals.** Both processes append to journals (`guard.jsonl`, `autopilot.jsonl`). The guard's entry puts what the agent *said* it was doing next to what the transaction *does*, and the verdict. The dashboard reads these journals.
+
+Setup, on a fresh Debian 12 machine (a Google Cloud e2-micro is enough) and on the principal's own machine:
+
+```sh
+# on the services' machine: Node 22, /opt/lancea, the keys made there, the systemd units
+curl -fsSL https://raw.githubusercontent.com/dziuba0x/lancea/main/deploy/bootstrap.sh | bash
+# on the principal's machine, with the public half it printed: the XRPL account and its SignerList,
+# the umbrella, the effector, the tripwire, the gas; it writes lancea.config.json (no keys in it)
+PRIVATE_KEY=0x… npx tsx scripts/provision.ts --keys keys-public.json
+# back on the services' machine
+sudo cp lancea.config.json /etc/lancea/config.json && sudo systemctl enable --now lancea-guard lancea-autopilot
+```
+
+**Rehearsed on 2026-09-27** (XRPL testnet, Coston2 fork, umbrella #30):
+1. The services acknowledged the umbrella.
+2. They co-signed the first mint (20 XRP).
+3. They held the next one, which the $40 budget would have crossed ($12.18 more).
+4. A request signed by the agent's key, as if a feed had steered it to mint to `0x…bEEF`, went straight to the guard's API. The guard refused it and struck the umbrella (the smart-account rule).
+5. The autopilot's next tick paused.
+
+**Testnet only, stated plainly.** On one machine, the guard's key and the agent's key together make a quorum. With real funds the guard runs apart: in a TEE (Flare Confidential Compute), or as an on-chain gate over a Protocol Managed Wallet.
+
 ## Status: MVP
 
 - XRP `Payment`s only. Issued currencies (RLUSD) are outside DELICTI's evidence today: the FDC's `Payment` type attests native payments only.

@@ -1,0 +1,23 @@
+[Unit]
+Description=Lancea guard: co-signs the agent's XRPL payments within the umbrella's budget, or refuses and strikes
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=lancea
+Group=lancea
+WorkingDirectory=/opt/lancea
+Environment=LANCEA_CONFIG=/etc/lancea/config.json
+Environment=LANCEA_KEYS=/etc/lancea/keys
+ExecStart=/usr/bin/node --import tsx src/service/guard-server.ts
+Restart=always
+RestartSec=10
+TimeoutStopSec=75
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/lancea
+
+[Install]
+WantedBy=multi-user.target

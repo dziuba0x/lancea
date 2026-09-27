@@ -1,0 +1,22 @@
+[Unit]
+Description=Lancea autopilot: proposes one step at a time to the guard, never holding a quorum
+After=network-online.target lancea-guard.service
+Wants=network-online.target lancea-guard.service
+
+[Service]
+User=lancea
+Group=lancea
+WorkingDirectory=/opt/lancea
+Environment=LANCEA_CONFIG=/etc/lancea/config.json
+Environment=LANCEA_KEYS=/etc/lancea/keys
+ExecStart=/usr/bin/node --import tsx src/service/autopilot-daemon.ts
+Restart=always
+RestartSec=30
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/lancea
+
+[Install]
+WantedBy=multi-user.target

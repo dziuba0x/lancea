@@ -2,3 +2,9 @@ node_modules/
 .run/
 .env
 *.tar.gz
+
+# the services (src/service): keys never leave their machine; config and journals are per deployment
+keys/
+data/
+lancea.config.json
+keys-public.json
