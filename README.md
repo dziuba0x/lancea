@@ -26,7 +26,7 @@ Once the principal's tripwire is reached (`setTripwire`, one strike if they like
 
 It stays that way until the principal looks and re-arms. It works in reverse too: an attempt recorded on Flare (`MandateFacilitator.recordAttempt`) trips the guard here without a line of Lancea code, because both ask the same meter.
 
-**Status:** live end to end on 2026-09-26 (XRPL testnet + Coston2), against a `SummaMeter` v1.2 that the run deploys itself. See *Live: the autopilot on a leash* below. Against a meter from before v1.2, the guard refuses exactly as before and strikes nothing.
+**Status:** live end to end on 2026-09-26 (XRPL testnet + Coston2), against a `SummaMeter` v1.2 that the run deployed itself. Since DELICTI v0.16 (2026-09-27) the guard runs on the deployed meter, [`0x39aa9b12…1FaB1D`](https://coston2-explorer.flare.network/address/0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D), with its source verified: the same meter every rail of an umbrella asks. See *Live: the autopilot on a leash* below. Against a meter from before v1.2, the guard refuses exactly as before and strikes nothing.
 
 ## The principal's rules
 
@@ -100,7 +100,7 @@ An agent that puts idle XRP to work, one step at a time, and never holds the key
 The order of steps: first any withdrawal the principal asked for (redeem vault shares), then deposit whole FXRP into the target vault, then mint idle XRP above the reserve. Each mint is capped per step.
 
 `scripts/leash-live.ts` runs it live with the dollar budget and the tripwire:
-1. It deploys a `SummaMeter` v1.2 and opens a $40 umbrella with tripwire 1.
+1. It opens a $40 umbrella in DELICTI's VaultSumma v0.16, on the deployed `SummaMeter` v1.2 (override with `SUMMA_METER`), with tripwire 1.
 2. The autopilot mints and deposits.
 3. A steered agent tries to mint to a stranger: refused and struck, so the umbrella trips.
 4. A legitimate redeem is refused while tripped, and co-signed after the principal re-arms.
@@ -175,7 +175,7 @@ The guard's Flare writes cost 0.42 C2FLR. What was left on the run's keys went b
 npm ci
 PRIVATE_KEY=0x…   # a Coston2 key with C2FLR (principal and gas)
 DELICTI_OUT=../delicti/out/ npx tsx scripts/live.ts         # needs `forge build` in the delicti repo
-DELICTI_OUT=../delicti/out/ npx tsx scripts/leash-live.ts   # the autopilot on a leash: ≥6 C2FLR, about 2 spent
+DELICTI_OUT=../delicti/out/ npx tsx scripts/leash-live.ts   # the autopilot on a leash: ≥6 C2FLR, about 1 spent
 ```
 
 It talks to the XRP Ledger over plain JSON-RPC (`src/xrpl-http.ts`), because websockets are not available everywhere. Signing and encoding are offline, done by xrpl.js.

@@ -1,8 +1,8 @@
 /**
  * The leash, live with dollars and a tripwire (XRPL testnet + Flare Coston2).
  *
- *   0. Flare   deploy SummaMeter v1.2 (the tripwire) over the live MandateRegistry and JudgeSumma
- *              price map; a $40 umbrella; the guard's Flare key is its effector; tripwire 1
+ *   0. Flare   a $40 umbrella in DELICTI's VaultSumma v0.16, on the deployed SummaMeter v1.2 (the
+ *              tripwire; override with SUMMA_METER); the guard's Flare key is its effector; tripwire 1
  *   1. XRPL    a guarded account: SignerList principal 2 / agent 1 / guard 1, master key off
  *   2. autopilot  mint 20 XRP to its own personal account     guard: policy ✓, ≈$30 of $40 ✓ → co-signed
  *   3. autopilot  deposit the FXRP into Firelight              → co-signed
@@ -28,7 +28,7 @@
  */
 import { Wallet, type Payment, type SignerListSet, type AccountSet } from "xrpl";
 import { createPublicClient, createWalletClient, createTestClient, defineChain, http, parseEther, formatEther, formatGwei, keccak256,
-  toHex, stringToHex, pad, parseAbi, zeroAddress, type Hex, type Address } from "viem";
+  toHex, stringToHex, pad, parseAbi, type Hex, type Address } from "viem";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { XrplHttp } from "../src/xrpl-http.js";
@@ -37,8 +37,10 @@ import { plan, toPayment, type State, type Strategy, type Venue } from "../src/a
 
 const RPC = process.env.COSTON2_RPC ?? "https://coston2-api.flare.network/ext/C/rpc";
 const REG = "0x2c58fb0504377fef325DceB66219bC6302263AA3" as Address; // MandateRegistry (core, shared by every version)
-const SUMMA = "0x211EB7d798F528B4E66201496bE4Cf7f6A62f644" as Address; // JudgeSumma v0.15: the immutable price map
-const SUMMA_VAULT = "0x8Dd62BE6Ee0689e3Eb5960F08a5356a57bD2F354" as Address;
+// DELICTI v0.16 + amendment v1.2 on Coston2 (delicti/deployments/coston2-v0.16.json): the umbrella is bonded in
+// VaultSumma, and the guard reads and writes the deployed SummaMeter, the same meter every rail of the umbrella asks.
+const SUMMA_VAULT = (process.env.SUMMA_VAULT ?? "0x274e8aa149C0904E10b99c79017EB7EE74184E54") as Address;
+const SUMMA_METER = (process.env.SUMMA_METER ?? "0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D") as Address;
 const MAC = "0x434936d47503353f06750Db1A444DBDC5F0AD37c" as Address; // MasterAccountController
 const AM = "0xc1Ca88b937d0b528842F95d5731ffB586f4fbDFA" as Address; // AssetManagerFXRP
 const Z = `0x${"0".repeat(64)}` as Hex;
@@ -91,7 +93,7 @@ if (process.argv[2] === "--sweep") {
 const OUT = process.env.DELICTI_OUT ?? new URL("../../delicti/out/", import.meta.url).pathname;
 const art = (f: string, c: string) => JSON.parse(readFileSync(`${OUT}${f}/${c}.json`, "utf8"));
 const meterArt = art("SummaMeter.sol", "SummaMeter");
-if (!meterArt.abi.some((x: { name?: string }) => x.name === "setTripwire")) throw new Error("SummaMeter in out/ has no tripwire: forge build the v0.16 delicti source");
+if (!meterArt.abi.some((x: { name?: string }) => x.name === "setTripwire")) throw new Error("SummaMeter in out/ has no tripwire: forge build the v0.16 delicti source (its ABI)");
 const regAbi = art("MandateRegistry.sol", "MandateRegistry").abi;
 const meterAbi = meterArt.abi;
 const read = parseAbi([
@@ -198,18 +200,20 @@ const meterState = async () => {
     pc.readContract({ address: meter, abi: meterAbi, functionName: f, args: [umbrella] })));
   return `tally $${Number(spent) / 1e6} | strikes ${strikes} | tripped ${tripped}`;
 };
-await stage("0. Flare: SummaMeter v1.2, a $40 umbrella, tripwire 1", async () => {
+await stage("0. Flare: a $40 umbrella on the deployed SummaMeter v1.2, tripwire 1", async () => {
   const { wei, base, tip } = await upFront();
   const guardFund = FIXED_GUARD ?? max(parseEther("3"), 8n * wei);
   const agentFund = max(parseEther("0.5"), 2n * wei);
-  const need = guardFund + agentFund + parseEther("2"); // + the principal's own gas: a deploy and five calls, about 1 C2FLR today
+  const need = guardFund + agentFund + parseEther("1"); // + the principal's own gas: four calls and the re-arm
   const have = await pc.getBalance({ address: principal.account.address });
   log(`   fees: base ${formatGwei(base)} gwei, tip ${formatGwei(tip)} gwei → a write may need ${C2(wei)} up front | principal ${C2(have)}`);
   if (have < need) throw new Error(`the principal ${principal.account.address} has ${C2(have)}; this run needs ${C2(need)} at today's fees`);
   log(`   keys: ${runPath.slice(runPath.indexOf(".run/"))} (git-ignored; for --sweep if the run is killed)`);
 
-  const dep = await principal.deployContract({ abi: meterAbi, bytecode: meterArt.bytecode.object as Hex, args: [REG, SUMMA, zeroAddress] });
-  meter = (await pc.waitForTransactionReceipt({ hash: dep })).contractAddress as Address;
+  meter = SUMMA_METER;
+  await pc.readContract({ address: meter, abi: meterAbi, functionName: "tripwire", args: [0n] }).catch(() => {
+    throw new Error(`${meter} is not a SummaMeter v1.2 (no tripwire): set SUMMA_METER`);
+  });
   run.meter = meter; save();
   for (const [to, value] of [[agentEvm.account.address, agentFund], [guardEvm, guardFund]] as const) {
     await pc.waitForTransactionReceipt({ hash: await principal.sendTransaction({ to, value }) });

@@ -36,18 +36,25 @@ async function up(method, params = []) {
 
 /** go-flare's eth_fillTransaction, as far as fees and the gas allowance go. */
 async function fill(tx) {
-  const maxFee = 2n * base + TIP;
+  // like geth: fees and gas the sender set are kept, and a set gas limit is not estimated (so a
+  // transaction built to revert on-chain is still filled and sent)
+  const tip = tx.maxPriorityFeePerGas ? BigInt(tx.maxPriorityFeePerGas) : TIP;
+  const maxFee = tx.maxFeePerGas ? BigInt(tx.maxFeePerGas) : 2n * base + tip;
   const balance = BigInt((await up("eth_getBalance", [tx.from, "latest"])).result);
   const value = BigInt(tx.value ?? "0x0");
   const allowance = balance > value ? (balance - value) / maxFee : 0n;
-  const est = await up("eth_estimateGas", [{ from: tx.from, to: tx.to, data: tx.data ?? tx.input, value: tx.value }, "latest"]);
-  if (est.error) return { error: est.error };
-  const gas = BigInt(est.result);
+  let gas;
+  if (tx.gas) gas = BigInt(tx.gas);
+  else {
+    const est = await up("eth_estimateGas", [{ from: tx.from, to: tx.to, data: tx.data ?? tx.input, value: tx.value }, "latest"]);
+    if (est.error) return { error: est.error };
+    gas = BigInt(est.result);
+  }
   if (gas > allowance) return { error: { code: -32000, message: `gas required exceeds allowance (${allowance})` } };
   const nonce = tx.nonce ?? (await up("eth_getTransactionCount", [tx.from, "pending"])).result;
   return { result: { raw: "0x", tx: {
     type: "0x2", chainId: "0x72", nonce, from: tx.from, to: tx.to ?? null, gas: hex(gas), value: tx.value ?? "0x0",
-    input: tx.data ?? tx.input ?? "0x", maxFeePerGas: hex(maxFee), maxPriorityFeePerGas: hex(TIP), accessList: [],
+    input: tx.data ?? tx.input ?? "0x", maxFeePerGas: hex(maxFee), maxPriorityFeePerGas: hex(tip), accessList: [],
     hash: `0x${"0".repeat(64)}`,
   } } };
 }
