@@ -1,0 +1,23 @@
+# The demo's watchman: every half hour it reads the public feed, and fails (so GitHub emails the
+# repo's owner) when the server stopped publishing, the guard runs low on gas, the umbrella tripped,
+# or the budget or its window is nearly used up. See scripts/watch.mjs.
+name: watch
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/watch.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/watch.mjs
