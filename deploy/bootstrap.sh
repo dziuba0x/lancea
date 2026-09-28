@@ -28,7 +28,15 @@ else
   echo "The public half is in ~/keys-public.json (addresses only, nothing secret)."
 fi
 
-sudo cp /opt/lancea/deploy/lancea-guard.service /opt/lancea/deploy/lancea-autopilot.service /etc/systemd/system/
+# The dashboard's feed: a deploy key that can write to one GitHub repo (lancea-feed) and nothing else.
+if ! sudo test -f /etc/lancea/keys/feed_deploy_key; then
+  sudo -u lancea ssh-keygen -q -t ed25519 -N "" -C "lancea-feed@$(hostname)" -f /etc/lancea/keys/feed_deploy_key
+fi
+echo
+echo "The feed's deploy key (public half): add it to github.com/dziuba0x/lancea-feed → Settings → Deploy keys, with 'Allow write access':"
+sudo cat /etc/lancea/keys/feed_deploy_key.pub
+
+sudo cp /opt/lancea/deploy/lancea-guard.service /opt/lancea/deploy/lancea-autopilot.service /opt/lancea/deploy/lancea-feed.service /etc/systemd/system/
 sudo systemctl daemon-reload
 cat <<'NEXT'
 
@@ -36,6 +44,6 @@ Next:
   1. On the principal's machine: npx tsx scripts/provision.ts --keys keys-public.json   (it writes lancea.config.json)
   2. Here: put that file at /etc/lancea/config.json (it holds no key), then
        sudo chown lancea:lancea /etc/lancea/config.json
-       sudo systemctl enable --now lancea-guard lancea-autopilot
+       sudo systemctl enable --now lancea-guard lancea-autopilot lancea-feed
        journalctl -u lancea-autopilot -f
 NEXT

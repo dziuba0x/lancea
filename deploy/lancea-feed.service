@@ -1,0 +1,22 @@
+[Unit]
+Description=Lancea feed: publishes the dashboard's feed.json to GitHub, no inbound port and no signing key
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=lancea
+Group=lancea
+WorkingDirectory=/opt/lancea
+Environment=LANCEA_CONFIG=/etc/lancea/config.json
+Environment=LANCEA_KEYS=/etc/lancea/keys
+ExecStart=/usr/bin/node --import tsx src/service/feed-publisher.ts
+Restart=always
+RestartSec=30
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/lancea
+
+[Install]
+WantedBy=multi-user.target

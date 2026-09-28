@@ -192,7 +192,8 @@ Two processes, two sets of keys, one machine (`src/service/`):
   - A step its own budget would refuse is held, not proposed. An agent that keeps proposing what the budget refuses would, ten minutes on, be struck for an attempt and trip its own umbrella.
   - A refusal backs off.
   - A tripped umbrella pauses it until the principal re-arms it.
-- **Journals.** Both processes append to journals (`guard.jsonl`, `autopilot.jsonl`). The guard's entry puts what the agent *said* it was doing next to what the transaction *does*, and the verdict. The dashboard reads these journals.
+- **Journals.** Both processes append to journals (`guard.jsonl`, `autopilot.jsonl`). The guard's entry puts what the agent *said* it was doing next to what the transaction *does*, and the verdict.
+- **`lancea-feed`** holds no signing key. Every minute it builds `feed.json` from the journals and the chains' state, and pushes it to a GitHub repo ([`dziuba0x/lancea-feed`](https://github.com/dziuba0x/lancea-feed)). Its deploy key can write to that one repo only. The machine opens no port.
 
 Setup, on a fresh Debian 12 machine (a Google Cloud e2-micro is enough) and on the principal's own machine:
 
@@ -214,6 +215,15 @@ sudo cp lancea.config.json /etc/lancea/config.json && sudo systemctl enable --no
 5. The autopilot's next tick paused.
 
 **Testnet only, stated plainly.** On one machine, the guard's key and the agent's key together make a quorum. With real funds the guard runs apart: in a TEE (Flare Confidential Compute), or as an on-chain gate over a Protocol Managed Wallet.
+
+## The dashboard
+
+`docs/index.html`, served by GitHub Pages, is built from `dashboard/page.html` by `scripts/dashboard-build.ts`. It reads the live `feed.json` and shows:
+- the umbrella's budget and tripwire;
+- the account's XRP, FXRP and vault shares;
+- every decision, each with two witnesses. **Agent said** (cyan) is the agent's own words. **The transaction does** (amber) is read by the guard from the signed transaction. A white star marks a co-signature, and coral marks a refusal or a strike.
+
+Every hash links to the public explorer. Where the feed cannot be reached, the page shows the sample from the rehearsal of 2026-09-27 (`dashboard/sample-feed.json`) and says so.
 
 ## Status: MVP
 

@@ -27,7 +27,12 @@ export interface LanceaConfig {
     fxrp: Address;
     vault: Address;
     vaultId: number;
+    vaultName?: string;
   };
+  /** The services' public addresses, for the dashboard (scripts/keys-init.ts printed them). */
+  keys?: { agentXrpl: string; guardXrpl: string; guardFlare: Address };
+  /** Where src/service/feed-publisher.ts pushes the dashboard's feed. */
+  feed?: { repo: string; branch?: string; publishSeconds?: number; heartbeatSeconds?: number };
   strategy: { keepDrops: string; maxMintDrops: string; minMintDrops: string };
   autopilot: { tickSeconds: number; executionTimeoutS: number; backoffS: number };
   guard: { host: string; port: number; strikeOnPolicy: boolean; hourlyCapUsd6?: string; newPayeeCapUsd6?: string };
