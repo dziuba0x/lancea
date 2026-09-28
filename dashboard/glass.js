@@ -6,22 +6,86 @@
  * Pass 2 draws clear Liquid Glass wherever the page marks a pane, a bar or the budget ring: a squircle
  * bevel, refraction per colour channel (IOR 1.44 / 1.50 / 1.57), weak Fresnel, a rim lit by a light
  * that moves and by the pointer, a hairline, and a soft shadow seen through the glass as well.
- * Glass appears by gaining its lensing, never by fading. Drops merge with Apple's neck (smooth-min).
+ *
+ * Two layers of glass, never glass on glass: the page's glass (panes, bars, the ring) and, above it,
+ * the overlay (the decision sheet, menus, toasts), which casts its shadow on the page and is never
+ * merged with it. Glass appears by gaining its lensing, never by fading (Apple's materialize), and
+ * moves like a liquid: every shape in flight is a rectangle on four springs (the edge that leads is
+ * stiffer than the one that trails, so it stretches as it travels and settles with a little bounce),
+ * and shapes in flight blend with each other the way a GlassEffectContainer blends glass within its
+ * spacing (a smooth minimum, Apple's neck). Springs are SwiftUI's: Spring(duration:bounce:).
  * The recipe is the one proven on the DELICTI hero (claude/45); here it runs live.
  */
 const Glass = (() => {
-  const MAX = 24, MAX_DROPS = 5;
+  const MAXB = 28, MAXL = 6, MAXO = 6, MAXD = 8;
   const mq = (q) => { try { return matchMedia(q); } catch { return { matches: false, addEventListener() {} }; } };
   const motionQ = mq("(prefers-reduced-motion: reduce)"), transQ = mq("(prefers-reduced-transparency: reduce)");
   const fineQ = mq("(hover: hover) and (pointer: fine)");
+
+  // SwiftUI's Spring(duration:bounce:) as the stiffness and damping of a unit mass:
+  // k = (2π / duration)², c = 4π (1 − bounce) / duration
+  const spr = (duration, bounce = 0) => ({ k: (2 * Math.PI / duration) ** 2, c: (4 * Math.PI * (1 - bounce)) / duration });
+  const SP = {
+    lens: spr(0.52, 0.14), fast: spr(0.2, 0), press: spr(0.28, 0.12), release: spr(0.5, 0.42),
+    fill: spr(0.8, 0.16), focus: spr(0.66, 0), layout: spr(0.42, 0.1), radius: spr(0.5, 0),
+    flowLead: spr(0.52, 0.12), flowTrail: spr(0.7, 0.12),
+    sheetLead: spr(0.46, 0.2), sheetTrail: spr(0.62, 0.2), shrink: spr(0.42, 0), grow: spr(0.46, 0),
+    lensLead: spr(0.34, 0.14), lensTrail: spr(0.54, 0.14), lift: spr(0.32, 0.24),
+    hoverLead: spr(0.24, 0.1), hoverTrail: spr(0.36, 0.1), hoverIn: spr(0.3, 0),
+    drop: spr(0.39, 0.25), sat1: spr(0.3, 0.3), sat2: spr(0.38, 0.28),
+    jelly: spr(0.34, 0.52), pop: spr(0.4, 0.34), evaporate: spr(1.1, 0),
+  };
+  const spring = (o, key, vkey, target, s, dt) => {
+    for (let t = dt; t > 1e-6; t -= 0.016) { const h = Math.min(0.016, t), f = -s.k * (o[key] - target) - s.c * o[vkey]; o[vkey] += f * h; o[key] += o[vkey] * h; }
+  };
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const box = (l, t, r, b) => ({ left: l, top: t, right: r, bottom: b, width: r - l, height: b - t });
+  const plain = (r) => box(r.left, r.top, r.right, r.bottom);
+  const around = (x, y, w, h = w) => box(x - w / 2, y - h / 2, x + w / 2, y + h / 2);
+  const mid = (r) => [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
+  const scaled = (r, k) => { const [x, y] = mid(r); return around(x, y, (r.right - r.left) * k, (r.bottom - r.top) * k); };
+  const rdist = (a, b) => Math.max(Math.abs(a.left - b.left), Math.abs(a.right - b.right), Math.abs(a.top - b.top), Math.abs(a.bottom - b.bottom));
+  const radiusOf = (el) => { try { return parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0; } catch { return 0; } };
+
+  /** A rectangle of liquid: four edges on springs. The edge that leads the motion is stiffer than the
+   *  one that trails, so the shape stretches along its path and bunches up, with a bounce, on arrival. */
+  class Liquid {
+    constructor(r, q = 0) { this.set(r, q); }
+    set(r, q = this.q ?? 0) { this.l = r.left; this.r = r.right; this.t = r.top; this.b = r.bottom; this.q = q; this.vl = this.vr = this.vt = this.vb = this.vq = 0; return this; }
+    step(g, gq, dt, lead, trail) {
+      const dx = (g.left + g.right - this.l - this.r) / 2, dy = (g.top + g.bottom - this.t - this.b) / 2;
+      const kx = Math.abs(dx) < 1 ? [lead, lead] : dx > 0 ? [trail, lead] : [lead, trail];
+      const ky = Math.abs(dy) < 1 ? [lead, lead] : dy > 0 ? [trail, lead] : [lead, trail];
+      spring(this, "l", "vl", g.left, kx[0], dt); spring(this, "r", "vr", g.right, kx[1], dt);
+      spring(this, "t", "vt", g.top, ky[0], dt); spring(this, "b", "vb", g.bottom, ky[1], dt);
+      if (gq != null) spring(this, "q", "vq", gq, SP.radius, dt);
+      if (this.r < this.l + 1) { const m = (this.l + this.r) / 2; this.l = m - 0.5; this.r = m + 0.5; }
+      if (this.b < this.t + 1) { const m = (this.t + this.b) / 2; this.t = m - 0.5; this.b = m + 0.5; }
+    }
+    get rect() { return box(this.l, this.t, this.r, this.b); }
+    speed() { return Math.max(Math.abs(this.vl), Math.abs(this.vr), Math.abs(this.vt), Math.abs(this.vb)); }
+    dist(g) { return rdist(this, { left: g.left, right: g.right, top: g.top, bottom: g.bottom }); }
+  }
+  // (Liquid keeps l/r/t/b; rdist reads left/right/top/bottom)
+  Object.defineProperties(Liquid.prototype, {
+    left: { get() { return this.l; } }, right: { get() { return this.r; } },
+    top: { get() { return this.t; } }, bottom: { get() { return this.b; } },
+  });
+
   const S = {
     ok: false, gl: null, cv: null, W: 0, H: 0, PX: 1, scale: 1,
     reduced: motionQ.matches, solid: transQ.matches,
-    t0: performance.now(), now: 0, last: 0, frame: 0, fade: 0,
-    shapes: [], drops: [], ripples: [], bursts: [], labels: [],
-    marks: [], path: [], hover: -1,
+    t0: performance.now(), now: 0, dt: 0.016, last: 0, frame: 0, fade: 0,
+    shapes: [], blobs: [], overs: [], lenses: [], drops: [], bursts: [], labels: [],
+    marks: [], path: [], hover: -1, gk: 0, okk: 0, touch: null, flowId: 0, scroller: null,
+    hoverEl: null, hoverOpt: null,
     focus: { x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, init: false },
-    cursor: { x: -1e4, y: -1e4, px: -1e4, py: -1e4, vx: 0, vy: 0, on: 0, onT: 0, glass: 0, glassT: 0, moved: 0, down: 0, fine: fineQ.matches },
+    cursor: {
+      x: -1e4, y: -1e4, px: -1e4, py: -1e4, vx: 0, vy: 0, on: 0, von: 0, onT: 0, glass: 0, moved: -99, down: 0,
+      press: 0, vpress: 0, st: 0, vst: 0, ax: 1, ay: 0, fine: fineQ.matches,
+      sat: [{ x: -1e4, y: -1e4, vx: 0, vy: 0 }, { x: -1e4, y: -1e4, vx: 0, vy: 0 }],
+    },
     scroll: { y: 0, py: 0, top: 0, bottom: 0, fade: 26 },
     light: 0, stats: { frames: 0, ms: 0 }, slowFrames: 0,
     meteors: [{ t0: -99, dur: 1, a: [0, 0], b: [0, 0] }, { t0: -99, dur: 1, a: [0, 0], b: [0, 0] }], nextMeteor: 4,
@@ -243,15 +307,18 @@ uniform float uA;
 out vec4 o;
 void main() { o = vec4(vec3(uA), 1.); }`;
 
-  // The glass.
+  // The glass. Two layers: the page's glass, and the overlay above it (a sheet, a menu, a toast).
   const FS_GLASS = `#version 300 es
 precision highp float;
 uniform sampler2D uSky;
 uniform vec2 uRes; uniform float uPx, uTime, uSolid;
-uniform int uN; uniform vec4 uA[${MAX}]; uniform vec4 uB[${MAX}]; uniform vec4 uC[${MAX}];
-uniform int uND; uniform vec4 uD[${MAX_DROPS}];
-uniform vec4 uRip[4];
+uniform int uN; uniform vec4 uA[${MAXB}]; uniform vec4 uB[${MAXB}]; uniform vec4 uC[${MAXB}];
+uniform float uGK;
+uniform int uNL; uniform vec4 uLA[${MAXL}]; uniform vec4 uLB[${MAXL}]; uniform float uLL[${MAXL}];
+uniform int uNO; uniform vec4 uOA[${MAXO}]; uniform vec4 uOB[${MAXO}]; uniform float uOK;
+uniform int uND; uniform vec4 uD[${MAXD}]; uniform vec4 uDE[${MAXD}];
 uniform vec4 uCur;
+uniform vec4 uTouch;
 uniform vec2 uLight;
 uniform vec4 uEdge;
 out vec4 o;
@@ -264,27 +331,42 @@ vec3 sdRR(vec2 p, vec4 a, float r) {
   return vec3(d, g * s);
 }
 vec3 sdRing(vec2 p, vec2 c, float R, float w) { vec2 q = p - c; float l = max(length(q), 1e-3); float s = l < R ? -1. : 1.; return vec3(abs(l - R) - w, q / l * s); }
-vec3 sdCirc(vec2 p, vec2 c, float r) { vec2 q = p - c; float l = max(length(q), 1e-3); return vec3(l - r, q / l); }
-vec3 smin3(vec3 a, vec3 b, float k) { float h = clamp(.5 + .5 * (b.x - a.x) / k, 0., 1.); return vec3(mix(b.x, a.x, h) - k * h * (1. - h), mix(b.yz, a.yz, h)); }
-
+// a drop stretched along its motion: an ellipse (axis e.zw, stretch e.x along it, e.y across)
+vec3 sdDrop(vec2 p, vec4 d, vec4 e) {
+  vec2 q = p - d.xy, ax = e.zw, ay = vec2(-e.w, e.z);
+  vec2 l = vec2(dot(q, ax) / e.x, dot(q, ay) / e.y);
+  float len = max(length(l), 1e-3); vec2 nl = l / len;
+  vec2 g = ax * (nl.x / e.x) + ay * (nl.y / e.y);
+  return vec3((len - d.z) * min(e.x, e.y), g / max(length(g), 1e-4));
+}
+vec3 smin3(vec3 a, vec3 b, float k) {
+  if (k < .01) return a.x < b.x ? a : b;
+  float h = clamp(.5 + .5 * (b.x - a.x) / k, 0., 1.);
+  return vec3(mix(b.x, a.x, h) - k * h * (1. - h), mix(b.yz, a.yz, h));
+}
+float edgeVis(vec2 p) { return smoothstep(uEdge.x, uEdge.x + uEdge.z, p.y) * (1. - smoothstep(uEdge.y - uEdge.z, uEdge.y, p.y)); }
+bool scrolls(int i) { return (int(uC[i].w + .5) & 1) != 0; }
+bool grouped(int i) { return (int(uC[i].w + .5) & 2) != 0; }
 vec3 shapeD(int i, vec2 p) {
-  float k = uB[i].y;
-  if (k > 1.5 && k < 2.5) return sdRing(p, uA[i].xy, uA[i].z, uC[i].y);
+  if (abs(uB[i].y - 2.) < .5) return sdRing(p, uA[i].xy, uA[i].z, uC[i].y);
   return sdRR(p, uA[i], uB[i].x);
 }
-vec3 scene(vec2 p, out int idx, out float dm) {
-  vec3 best = vec3(1e5, 0., 1.); idx = -1; dm = 0.;
-  for (int i = 0; i < ${MAX}; i++) {
+// the page's glass: panes in flight blend with each other (a GlassEffectContainer and its spacing),
+// the rest stay separate, and drops merge with whatever glass they meet
+vec3 sceneBase(vec2 p, out int idx, out float dm) {
+  vec3 best = vec3(1e5, 0., 1.), grp = vec3(1e5, 0., 1.); idx = -1; dm = 0.;
+  int gi = -1; float gd = 1e5;
+  for (int i = 0; i < ${MAXB}; i++) {
     if (i >= uN) break;
-    float k = uB[i].y; if (k > 2.5 && k < 3.5) continue;
-    if (uB[i].z < .003) continue;
     vec3 d = shapeD(i, p);
-    if (d.x < best.x) { best = d; idx = i; }
+    if (grouped(i)) { if (d.x < gd) { gd = d.x; gi = i; } grp = grp.x > 9e4 ? d : smin3(grp, d, uGK); }
+    else if (d.x < best.x) { best = d; idx = i; }
   }
-  for (int j = 0; j < ${MAX_DROPS}; j++) {
+  if (gi >= 0 && grp.x < best.x) { best = grp; idx = gi; }
+  for (int j = 0; j < ${MAXD}; j++) {
     if (j >= uND) break;
     if (uD[j].z < .5) continue;
-    vec3 dd = sdCirc(p, uD[j].xy, uD[j].z);
+    vec3 dd = sdDrop(p, uD[j], uDE[j]);
     float k = (idx >= 0 ? 16. : 24.) * uPx;
     float h = clamp(.5 + .5 * (dd.x - best.x) / k, 0., 1.);
     best = smin3(best, dd, k);
@@ -292,88 +374,82 @@ vec3 scene(vec2 p, out int idx, out float dm) {
   }
   return best;
 }
-float edgeVis(vec2 p) { return smoothstep(uEdge.x, uEdge.x + uEdge.z, p.y) * (1. - smoothstep(uEdge.y - uEdge.z, uEdge.y, p.y)); }
-float sceneShadow(vec2 p) {
+float shadowBase(vec2 p) {
   float best = 1e5;
-  for (int i = 0; i < ${MAX}; i++) {
+  for (int i = 0; i < ${MAXB}; i++) {
     if (i >= uN) break;
-    float k = uB[i].y; if (k > 2.5 && k < 3.5) continue;
-    float l = uB[i].z * (uC[i].w > .5 ? edgeVis(p) : 1.);
+    float l = uB[i].z * (scrolls(i) ? edgeVis(p) : 1.);
     if (l < .003) continue;
     best = min(best, shapeD(i, p).x + (1. - l) * 40. * uPx);
   }
-  for (int j = 0; j < ${MAX_DROPS}; j++) { if (j >= uND) break; best = min(best, sdCirc(p, uD[j].xy, uD[j].z).x); }
+  for (int j = 0; j < ${MAXD}; j++) { if (j >= uND) break; best = min(best, sdDrop(p, uD[j], uDE[j]).x); }
+  return best;
+}
+// the overlay: its shapes blend only with each other (a sheet and the drop it was pulled from)
+vec3 sceneOver(vec2 p, out int idx) {
+  vec3 best = vec3(1e5, 0., 1.); idx = -1; float bd = 1e5;
+  for (int i = 0; i < ${MAXO}; i++) {
+    if (i >= uNO) break;
+    vec3 d = sdRR(p, uOA[i], uOB[i].x);
+    if (d.x < bd) { bd = d.x; idx = i; }
+    best = best.x > 9e4 ? d : smin3(best, d, uOK);
+  }
+  return best;
+}
+float shadowOver(vec2 p) {
+  float best = 1e5;
+  for (int i = 0; i < ${MAXO}; i++) { if (i >= uNO) break; best = min(best, sdRR(p, uOA[i], uOB[i].x).x + (1. - uOB[i].z) * 60. * uPx); }
   return best;
 }
 vec2 toUV(vec2 p) { return vec2(p.x / uRes.x, 1. - p.y / uRes.y); }
 vec2 bend(vec3 t, float h, float depth, float lim) { vec2 v = t.xy / max(-t.z, .06) * (h + depth); return v / (1. + length(v) / lim); }
 
-void main() {
-  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
-  vec2 uv = gl_FragCoord.xy / uRes;
-  vec3 sky = texture(uSky, uv).rgb;
-  int idx; float dm;
-  vec3 s = scene(p, idx, dm);
-  float d = s.x;
-  float kind = idx >= 0 ? uB[idx].y : 5.;
-  float lens = idx >= 0 ? uB[idx].z : 1.;
-  float vis = 1.;
-  if (idx >= 0 && uC[idx].w > .5) vis = smoothstep(uEdge.x, uEdge.x + uEdge.z, p.y) * (1. - smoothstep(uEdge.y - uEdge.z, uEdge.y, p.y));
-  lens = mix(lens * vis, 1., dm);
-  // the plane under the glass carries a soft, wide shadow, seen through the glass too
-  float sh = sceneShadow(p - vec2(0., 12. * uPx));
-  float shadow = .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, sh)) * lens + .08 * (1. - smoothstep(0., 5. * uPx, d)) * step(0., d) * lens;
-  vec3 plane = sky * (1. - shadow);
-  if (d > 1.5 * uPx || lens < .003) {
-    float hair = exp(-d * d / (.5 * uPx * uPx)) * .25 * lens;
-    o = vec4(plane + hair, 1.); return;
-  }
-  // material: pane, bar, ring, (indicator), sheet, chip; drops are true lenses
+// Liquid Glass, for either layer. kind: 0 pane, 1 bar, 2 ring, 4 sheet, 5 chip; dm: how much of a drop
+vec3 glassAt(vec2 p, vec2 uv, vec3 s, float kind, float hh, float tube, float lens, float lift, float dm, float layer, out float x) {
   float B, Hh, lod, mixb, dim, rimk, hairk;
-  float hh = idx >= 0 ? uA[idx].w : 12. * uPx;
-  if (kind < .5)      { B = 22. * uPx; Hh = 13. * uPx; lod = 3.3; mixb = .86; dim = .26; rimk = .62; hairk = .26; }
-  else if (kind < 1.5){ B = min(hh, 17. * uPx); Hh = B * .95; lod = 2.4; mixb = .74; dim = .26; rimk = 1.;  hairk = .34; }
-  else if (kind < 2.5){ B = uC[idx].y; Hh = uC[idx].y * 1.1; lod = 1.1; mixb = .4; dim = .06; rimk = 1.;  hairk = .36; }
-  else if (kind < 4.5){ B = 26. * uPx; Hh = 15. * uPx; lod = 4.2; mixb = .93; dim = .5;  rimk = .72; hairk = .26; }
-  else                { B = min(hh, 15. * uPx); Hh = B * .9; lod = 2.2; mixb = .66; dim = .22; rimk = .9;  hairk = .32; }
+  if (kind < .5)       { B = min(22. * uPx, hh * .92); Hh = 13. * uPx; lod = 3.3; mixb = .86; dim = .26; rimk = .62; hairk = .26; }
+  else if (kind < 1.5) { B = min(hh, 17. * uPx); Hh = B * .95; lod = 2.4; mixb = .74; dim = .26; rimk = 1.; hairk = .34; }
+  else if (kind < 2.5) { B = tube; Hh = tube * 1.1; lod = 1.1; mixb = .4; dim = .06; rimk = 1.; hairk = .36; }
+  else if (kind < 4.5) { B = min(26. * uPx, hh * .92); Hh = 15. * uPx; lod = 4.2; mixb = .93; dim = .5; rimk = .72; hairk = .26; }
+  else                 { B = min(hh, 15. * uPx); Hh = B * .9; lod = 2.2; mixb = .66; dim = .22; rimk = .9; hairk = .32; }
   float dr = 13. * uPx;
   B = mix(B, dr, dm); Hh = mix(Hh, dr * .9, dm); lod = mix(lod, .6, dm); mixb = mix(mixb, .2, dm); dim = mix(dim, 0., dm); rimk = mix(rimk, 1., dm); hairk = mix(hairk, .36, dm);
-  Hh *= lens * (1. + (idx >= 0 ? uB[idx].w : 0.) * .35);
+  Hh *= lens * (1. + lift * .45);
+  float d = s.x;
   // squircle bevel h = H (1 - (1 - x)^4)^(1/4)
-  float x = clamp(-d / B, 0., 1.);
+  x = clamp(-d / B, 0., 1.);
   float xm = max(x, .0015), om = 1. - xm, base = max(1. - om * om * om * om, 1e-5);
   float h = Hh * pow(base, .25);
   float dh = -(Hh / B) * om * om * om * pow(base, -.75);
   vec2 grad = normalize(s.yz + 1e-6);
   vec2 gh = dh * grad * step(d, 0.);
-  float indFill = 0.;
-  // the tab selection: a lens swelling inside its bar
-  for (int i = 0; i < ${MAX}; i++) {
-    if (i >= uN) break;
-    if (uB[i].y < 2.5 || uB[i].y > 3.5) continue;
-    vec3 di = sdRR(p, uA[i], uB[i].x);
-    indFill = max(indFill, (1. - smoothstep(-1.5 * uPx, .5 * uPx, di.x)) * uB[i].z);
+  // lenses inside the glass: a selection, and the highlight the pointer's drop turns into
+  float fillL = 0.;
+  for (int i = 0; i < ${MAXL}; i++) {
+    if (i >= uNL) break;
+    if (abs(uLL[i] - layer) > .5) continue;
+    vec3 di = sdRR(p, uLA[i], uLB[i].x);
+    fillL = max(fillL, (1. - smoothstep(-1.5 * uPx, .5 * uPx, di.x)) * uLB[i].y * uLB[i].w);
     if (di.x < 0.) {
-      float Bi = min(uA[i].w * .9, 14. * uPx), xi = clamp(-di.x / Bi, 0., 1.), omi = 1. - max(xi, .0015), bi = max(1. - omi * omi * omi * omi, 1e-5);
-      float Hi = uA[i].w * .28 * uB[i].z;
+      float Bi = min(uLA[i].w * .9, 14. * uPx), xi = clamp(-di.x / Bi, 0., 1.), omi = 1. - max(xi, .0015), bi = max(1. - omi * omi * omi * omi, 1e-5);
+      float Hi = uLA[i].w * uLB[i].z * uLB[i].y;
       h += Hi * pow(bi, .25);
       gh += -(Hi / Bi) * omi * omi * omi * pow(bi, -.75) * normalize(di.yz + 1e-6);
     }
   }
   // the pointer presses a shallow dome into the glass beneath it
-  if (uCur.z > .001 && kind != 2.) {
+  if (uCur.z > .001 && abs(kind - 2.) > .5) {
     vec2 cq = p - uCur.xy; float sg = 80. * uPx; float e = exp(-dot(cq, cq) / (2. * sg * sg));
     float Hc = 7. * uPx * uCur.z * smoothstep(0., .25, x);
     h += Hc * e; gh += Hc * e * (-cq / (sg * sg));
   }
-  // ripples from a touch, spreading like a liquid
-  float flash = 0.;
-  for (int i = 0; i < 4; i++) {
-    float dt = uTime - uRip[i].z; if (dt < 0. || dt > 1.6) continue;
-    vec2 rq = p - uRip[i].xy; float r = length(rq) + 1e-3; float front = dt * 520. * uPx;
-    float w = exp(-pow(r - front, 2.) / (2. * pow(34. * uPx, 2.))) * sin((r - front) / (13. * uPx)) * exp(-dt * 2.4) * uRip[i].w;
-    gh += rq / r * w * .55 * smoothstep(0., .2, x);
-    flash += exp(-r * r / (2. * pow(46. * uPx, 2.))) * exp(-dt * 6.5) * uRip[i].w;
+  // a finger (or a held click) swells the glass beneath it and lights it from within
+  float glow = 0.;
+  if (uTouch.z > .001 && abs(uTouch.w - layer) < .5) {
+    vec2 tq = p - uTouch.xy; float r2 = dot(tq, tq), sg = 64. * uPx, e = exp(-r2 / (2. * sg * sg));
+    float Ht = 11. * uPx * uTouch.z * smoothstep(0., .25, x);
+    h += Ht * e; gh += Ht * e * (-tq / (sg * sg));
+    glow = exp(-r2 / (2. * pow(120. * uPx, 2.))) * uTouch.z;
   }
   vec3 n = normalize(vec3(-gh, 1.));
   // refraction per channel: dispersion at the rims
@@ -386,8 +462,8 @@ void main() {
   vec3 sharp = vec3(texture(uSky, uR).r, texture(uSky, uG).g, texture(uSky, uBl).b);
   vec3 soft = vec3(textureLod(uSky, uR, lod).r, textureLod(uSky, uG, lod).g, textureLod(uSky, uBl, lod).b);
   vec3 col = mix(sharp, soft, mixb * lens);
-  // the shadow on the plane, seen through the glass
-  col *= 1. - .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, sceneShadow(p + oG - vec2(0., 12. * uPx)))) * lens * .8;
+  // the shadow on the plane, seen through the page's glass
+  if (layer < .5) col *= 1. - .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, shadowBase(p + oG - vec2(0., 12. * uPx)))) * lens * .8;
   // the dimming layer for clear glass under text (HIG: about 35 %)
   col *= 1. - dim * lens * smoothstep(0., .4, x);
   col += (kind < 1.5 || kind > 3.5 ? .016 : .0) * lens * smoothstep(0., .3, x);
@@ -395,15 +471,15 @@ void main() {
   float F = .02 + .5 * pow(1. - n.z, 5.);
   vec3 env = mix(vec3(.03, .10, .14), vec3(.14, .09, .03), smoothstep(.15, .85, uv.x));
   col = mix(col, env, F * lens);
-  // light: a rim on the side facing the key light, a weaker one opposite, a hairline, a glint
+  // light: a rim on the side facing the key light (brighter near a finger), a weaker one opposite, a hairline, a glint
   float rimMask = pow(1. - x, 7.);
   vec2 nxy = length(n.xy) > 1e-4 ? normalize(n.xy) : vec2(0.);
   float face = max(dot(nxy, uLight), 0.), back = max(-dot(nxy, uLight), 0.);
-  col += rimMask * (face * .95 + back * .4 * (col * 1.8 + .06)) * rimk * lens;
+  col += rimMask * (face * .95 + back * .4 * (col * 1.8 + .06)) * rimk * lens * (1. + 1.6 * glow);
   col += exp(-d * d / (.45 * uPx * uPx)) * hairk * lens;
   vec3 L3 = normalize(vec3(uLight * .78, .62)), Hv = normalize(L3 + vec3(0., 0., 1.));
   float ndh = max(dot(n, Hv), 0.);
-  col += (pow(ndh, 120.) * .9 + pow(ndh, 18.) * .09) * lens * rimk * (1. - .85 * indFill);
+  col += (pow(ndh, 120.) * .9 + pow(ndh, 18.) * .09) * lens * rimk * (1. - .85 * fillL);
   // the pointer is a second light: glints on the nearest rims, a faint sheen beneath it
   if (uCur.w > .001) {
     vec2 cq = uCur.xy - p; float cd = length(cq);
@@ -412,7 +488,33 @@ void main() {
     col += pow(max(dot(n, Hc), 0.), 60.) * .9 * fall * uCur.w * lens * (1. - smoothstep(.25, .6, x));
     col += exp(-cd * cd / (2. * pow(130. * uPx, 2.))) * .04 * uCur.z * lens * smoothstep(0., .5, x);
   }
-  // the budget ring: amber light fills the spent part of the tube
+  // the light a finger lets into the glass
+  col += glow * vec3(.86, .94, 1.) * .1 * smoothstep(0., .35, x) * lens;
+  col = mix(col, min(col * 1.06 + vec3(.05), vec3(.32)), fillL * ((kind > .5 && kind < 1.5) || kind > 4.5 ? 1. : .55));
+  return col;
+}
+
+vec3 shadeBase(vec2 p, vec2 uv, vec3 sky) {
+  int idx; float dm;
+  vec3 s = sceneBase(p, idx, dm);
+  float d = s.x;
+  float kind = idx >= 0 ? uB[idx].y : 5.;
+  float lens = idx >= 0 ? uB[idx].z : 1.;
+  if (idx >= 0 && scrolls(idx)) lens *= edgeVis(p);
+  lens = mix(lens, 1., dm);
+  // the plane under the glass carries a soft, wide shadow, seen through the glass too
+  float sh = shadowBase(p - vec2(0., 12. * uPx));
+  float shadow = .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, sh)) * lens + .08 * (1. - smoothstep(0., 5. * uPx, d)) * step(0., d) * lens;
+  vec3 plane = sky * (1. - shadow);
+  // the pointer's drop focuses a little of the key light onto the sky beneath it: a caustic
+  if (uND > 0 && uD[0].w > 1.5) {
+    vec2 cq = p - uD[0].xy - vec2(4., 11.) * uPx; float cr = max(uD[0].z * .42, uPx);
+    plane += vec3(1., .97, .9) * exp(-dot(cq, cq) / (2. * cr * cr)) * .13 * smoothstep(3. * uPx, 10. * uPx, uD[0].z);
+  }
+  if (d > 1.5 * uPx || lens < .003) return plane + exp(-d * d / (.5 * uPx * uPx)) * .25 * lens;
+  float x;
+  vec3 col = glassAt(p, uv, s, kind, idx >= 0 ? uA[idx].w : 12. * uPx, idx >= 0 ? uC[idx].y : 0., lens, idx >= 0 ? uB[idx].w : 0., dm, 0., x);
+  // the budget ring: amber light fills the spent part of the tube, and bubbles drift through it
   if (kind > 1.5 && kind < 2.5) {
     vec2 rq = p - uA[idx].xy; float a = fract(atan(rq.x, -rq.y) / 6.2831853 + 1.);
     float Rr = uA[idx].z, wt = uC[idx].y * .78, fr = uC[idx].x, across = length(rq) - Rr;
@@ -420,15 +522,31 @@ void main() {
     float body = step(0., sBeg) * step(sEnd, 0.) * smoothstep(wt + uPx, wt - uPx, abs(across));
     vec2 endP = uA[idx].xy + Rr * vec2(sin(fr * 6.2831853), -cos(fr * 6.2831853)), begP = uA[idx].xy + vec2(0., -Rr);
     float caps = max(smoothstep(wt + uPx, wt - uPx, length(p - endP)), smoothstep(wt + uPx, wt - uPx, length(p - begP)));
-    float fill = max(body * smoothstep(-.5 * uPx, .5 * uPx, -sEnd + wt * 0.), caps) * step(.0005, fr);
+    float fill = max(body * smoothstep(-.5 * uPx, .5 * uPx, -sEnd), caps) * step(.0005, fr);
     float core = 1. - abs(across) / max(wt, 1.);
-    vec3 amber = uC[idx].z < -.5 ? vec3(1., .42, .42) * (.8 + .2 * sin(uTime * 1.8)) : vec3(1., .68, .27);
+    bool coral = uC[idx].z < -.5;
+    vec3 amber = coral ? vec3(1., .42, .42) * (.8 + .2 * sin(uTime * 1.8)) : vec3(1., .68, .27);
     float shimmer = .92 + .08 * sin(a * 110. - uTime * 1.4) * sin(a * 37. + uTime * .6);
     col = mix(col, col * .35 + amber * (.28 + .62 * core * core) * shimmer, fill * .86 * lens);
     col += vec3(1., .9, .72) * fill * pow(max(core, 0.), 6.) * .22 * lens;
+    // bubbles (a CAEmitterLayer in a tube): rise along the liquid toward its end and vanish there
+    if (fr > .02 && !coral) {
+      float bub = 0.;
+      for (int k = 0; k < 7; k++) {
+        float fk = float(k);
+        float ph = fract(fk * .371 + uTime * (.035 + .02 * fract(fk * .618)) / max(fr, .2));
+        float ang = ph * fr * 6.2831853;
+        float acr = sin(uTime * (.9 + fk * .23) + fk * 2.1) * wt * .42;
+        vec2 bp = uA[idx].xy + (Rr + acr) * vec2(sin(ang), -cos(ang));
+        float br = (1.1 + 1.4 * fract(fk * .73)) * uPx, dd = length(p - bp);
+        float life = smoothstep(0., .12, ph) * smoothstep(1., .8, ph);
+        bub += (smoothstep(br + uPx, br, dd) - .65 * smoothstep(br - .3 * uPx, br - 1.3 * uPx, dd)) * life;
+        bub += smoothstep(.9 * uPx, 0., length(p - bp + vec2(.35, .35) * br)) * .8 * life;
+      }
+      col += vec3(1., .94, .82) * bub * .3 * fill * lens;
+    }
   }
-  col += flash * vec3(.82, .93, 1.) * .13 * smoothstep(0., .3, x);
-  col = mix(col, min(col * 1.06 + vec3(.05), vec3(.32)), indFill * (kind > .5 && kind < 1.5 ? 1. : 0.));
+  // a sweep of light across a bar when it has news
   if (idx >= 0 && uC[idx].z > 0.) {
     float st = (uTime - uC[idx].z) / .9;
     if (st > 0. && st < 1.) {
@@ -439,7 +557,31 @@ void main() {
   if (uSolid > .5) col = mix(col, vec3(.045, .05, .08), .82 * smoothstep(0., .15, x) * lens);
   // antialiased silhouette
   float aa = smoothstep(-1.2 * uPx, 1.2 * uPx, d);
-  col = mix(col, plane + exp(-d * d / (.5 * uPx * uPx)) * .25 * lens, aa);
+  return mix(col, plane + exp(-d * d / (.5 * uPx * uPx)) * .25 * lens, aa);
+}
+
+void main() {
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec3 sky = texture(uSky, uv).rgb;
+  int oi = -1; vec3 so = vec3(1e5, 0., 1.);
+  if (uNO > 0) so = sceneOver(p, oi);
+  float ol = oi >= 0 ? uOB[oi].z : 0.;
+  // deep inside the overlay the page's glass is never seen, so it is not drawn
+  vec3 col = (so.x < -2. * uPx && ol > .995) ? vec3(0.) : shadeBase(p, uv, sky);
+  if (oi >= 0) {
+    // the overlay floats higher: its shadow on the page is wider and further down
+    float osh = shadowOver(p - vec2(0., 20. * uPx));
+    col *= 1. - .36 * (1. - smoothstep(-24. * uPx, 80. * uPx, osh)) * ol;
+    if (so.x < 1.5 * uPx) {
+      float x;
+      vec3 oc = glassAt(p, uv, so, uOB[oi].y, uOA[oi].w, 0., ol, uOB[oi].w, 0., 1., x);
+      if (uSolid > .5) oc = mix(oc, vec3(.045, .05, .08), .86 * smoothstep(0., .15, x));
+      float aa = smoothstep(-1.2 * uPx, 1.2 * uPx, so.x);
+      vec3 under = col + exp(-so.x * so.x / (.5 * uPx * uPx)) * .25 * ol;
+      col = mix(mix(col, oc, smoothstep(0., .35, ol)), under, aa);
+    }
+  }
   o = vec4(col, 1.);
 }`;
 
@@ -494,6 +636,8 @@ void main() {
     V.path = gl.createVertexArray(); B.path = gl.createBuffer();
     T.lab = gl.createTexture();
     canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); S.ok = false; document.documentElement.classList.add("no-gl"); });
+    // the highlight the pointer's drop turns into over a control (iPadOS's pointer, in glass)
+    S.lenses.push({ key: "hover", hover: true, lr: null, str: 0, vs: 0, lift: 0, vlift: 0, height: 0.2, tint: 0.62, layer: 0 });
     S.ok = true;
     resize(); drawLabels();
     if (document.fonts?.ready) document.fonts.ready.then(drawLabels);
@@ -568,58 +712,275 @@ void main() {
   }
 
   // ─── Shapes from the page ─────────────────────────────────────────────────
-  const KIND = { pane: 0, bar: 1, ring: 2, indicator: 3, sheet: 4, chip: 5 };
+  const KIND = { pane: 0, bar: 1, ring: 2, sheet: 4, chip: 5 };
+  const find = (el) => S.shapes.find((s) => s.el === el);
   function add(el, opts = {}) {
     if (!el) return null;
-    let sh = S.shapes.find((s) => s.el === el);
+    let sh = find(el);
     if (sh) return sh;
-    sh = { el, kind: KIND[opts.kind ?? "pane"], scroll: opts.scroll !== false, lens: 0, v: 0, target: opts.shown === false ? 0 : 1, press: 0, pv: 0, pressT: 0, delay: opts.delay ?? 0, since: S.now, fill: 0, fv: 0, fillT: 0, tube: opts.tube ?? 13, rect: null, radius: opts.radius, manual: opts.manual };
+    sh = {
+      el, kind: KIND[opts.kind ?? "pane"], scroll: opts.scroll !== false, lens: 0, v: 0, target: opts.shown === false ? 0 : 1,
+      press: 0, pv: 0, pressT: 0, delay: opts.delay ?? 0, since: S.now, fill: 0, fv: 0, fillT: 0, tube: opts.tube ?? 13,
+      rect: null, radius: opts.radius, manual: opts.manual, held: false, lr: null, last: null, fast: false, sweep: 0,
+    };
     S.shapes.push(sh);
     return sh;
   }
   function remove(el) { S.shapes = S.shapes.filter((s) => s.el !== el); }
-  function show(el, on, delay = 0) { const s = S.shapes.find((x) => x.el === el); if (s) { s.target = on ? 1 : 0; s.delay = delay; s.since = S.now; } }
-  function setFill(el, f) { const s = S.shapes.find((x) => x.el === el); if (s) s.fillT = Math.max(0, Math.min(1, f)); }
-  function press(el, on) { const s = S.shapes.find((x) => x.el === el); if (s) s.pressT = on ? 1 : 0; }
+  /** Materialize (on) or dematerialize (off) a shape's glass. {instant} skips the spring, {fast} leaves quickly. */
+  function show(el, on, delay = 0, o = {}) {
+    const s = find(el); if (!s) return;
+    s.held = false; s.target = on ? 1 : 0; s.delay = delay; s.since = S.now; s.fast = !!o.fast;
+    if (o.instant || S.reduced) { s.lens = s.target; s.v = 0; if (!on) s.last = null; }
+  }
+  function setFill(el, f) { const s = find(el); if (s) { if (Math.abs(s.fillT - f) > 0.001) S.lastInput = S.now; s.fillT = clamp(f, 0, 1); } }
+  function press(el, on) { const s = find(el); if (s) s.pressT = on ? 1 : 0; }
 
-  // ─── Pointer, touch, ripples ──────────────────────────────────────────────
+  // The glass follows the page each frame. Panes that scroll glide to a new layout (a pane that grows, a
+  // column that reflows) instead of jumping; the spring runs in the scroller's coordinates, so scrolling
+  // itself is never lagged.
+  function settle(s, r) {
+    const sy = S.scroller ? S.scroller.scrollTop : 0;
+    const g = box(r.left, r.top + sy, r.right, r.bottom + sy);
+    if (!s.lr || s.held || s.lens < 0.05 || S.reduced || rdist(s.lr, g) > 480) s.lr = s.lr ? s.lr.set(g, 0) : new Liquid(g, 0);
+    else s.lr.step(g, null, S.dt, SP.layout, SP.layout);
+    return box(s.lr.l, s.lr.t - sy, s.lr.r, s.lr.b - sy);
+  }
+  function rectOf(s) {
+    if (!s.held && s.lens < 0.003 && s.target === 0) { s.rect = null; return null; }
+    let r = s.manual ? s.manual() : s.el.getBoundingClientRect();
+    if (!r || r.width < 1 || r.height < 1) {
+      // hidden by the page while its glass is still dematerialising: it stays where it was until it is gone
+      if (s.last && s.lens > 0.003 && !s.held) r = s.last;
+      else { s.rect = null; return null; }
+    } else {
+      if (s.scroll && s.kind === 0 && !s.manual) r = settle(s, r);
+      s.last = plain(r);
+    }
+    s.rect = r;
+    if (s.radius == null) s.radius = radiusOf(s.el);
+    if (s.held || r.bottom < -80 || r.top > innerHeight + 80) return null;
+    return r;
+  }
+
+  // ─── Flow: the glass of one view becomes the glass of the next ────────────
+  // Each pane of the new layout is born from a pane of the old one (in reading order), so where there are
+  // more new panes than old ones a pane divides, and where there are fewer, panes merge. In flight they
+  // are one body of liquid; they part as they slow down. The new view's words arrive as their glass lands.
+  const onScreen = (r) => box(r.left, Math.max(r.top, -60), r.right, Math.max(Math.max(r.top, -60) + 8, Math.min(r.bottom, innerHeight + 60)));
+  const reading = (a, b) => { const ra = a.rect ?? a, rb = b.rect ?? b; return Math.abs(ra.top - rb.top) > 12 ? ra.top - rb.top : ra.left - rb.left; };
+  function snapshot(root) {
+    const out = [];
+    for (const s of S.shapes) {
+      if (s.held || s.kind === 2 || !s.rect || s.lens < 0.2) continue;
+      if (root && !root.contains(s.el)) continue;
+      const r = s.rect; if (r.bottom < 0 || r.top > innerHeight || r.width < 2) continue;
+      out.push({ rect: onScreen(r), radius: Math.min(s.radius ?? 0, r.width / 2, r.height / 2), kind: s.kind });
+    }
+    for (const b of S.blobs) if (b.lens > 0.2) out.push({ rect: b.lr.rect, radius: b.lr.q, kind: b.kind });
+    return out.sort(reading);
+  }
+  function flow(from, targets, o = {}) {
+    S.blobs.length = 0;
+    const tos = targets.map(find).filter(Boolean);
+    for (const s of tos) { s.held = true; s.lens = 0; s.v = 0; s.target = 0; s.lr = null; if (s.radius == null) s.radius = radiusOf(s.el); }
+    S.flowOn = { onLand: o.onLand };
+    if (!S.ok || S.reduced || !from.length || !tos.length) {
+      tos.forEach((s, j) => { s.held = false; s.target = 1; s.since = S.now; s.delay = S.reduced ? 0 : 0.05 + j * 0.045; if (S.reduced) s.lens = 1; o.onLand?.(s.el); });
+      // nothing to flow into: the old glass dissolves where it is
+      if (!tos.length) for (const f of from) S.blobs.push({ lr: new Liquid(f.rect, f.radius), from: f.rect, kind: f.kind, to: null, delay: 0, t0: S.now, lens: 1, vlens: 0 });
+      return;
+    }
+    const n = tos.length, m = from.length, used = new Set(), stagger = o.stagger ?? 0.032;
+    const mk = (f, s, j, merge) => S.blobs.push({
+      lr: new Liquid(f.rect, f.radius), kind: s.kind, to: s, delay: Math.min(0.28, j * stagger), t0: S.now, merge,
+      landed: false, revealed: merge, d0: Math.max(1, rdist(f.rect, onScreen(s.el.getBoundingClientRect()))), lens: 1, vlens: 0, liq: 0,
+    });
+    tos.forEach((s, j) => { const i = n === 1 ? 0 : Math.min(m - 1, Math.floor((j * m) / n)); used.add(i); mk(from[i], s, j, false); });
+    from.forEach((f, i) => { if (!used.has(i)) mk(f, tos[Math.min(n - 1, Math.round((i * n) / m))], i, true); });
+  }
+  function updateFlow(dt) {
+    if (!S.blobs.length) { S.gk += (0 - S.gk) * Math.min(1, dt * 8); return; }
+    let fastest = 0, done = true;
+    for (const b of S.blobs) {
+      if (!b.to) {
+        b.lr.step(scaled(b.from, 0.9), null, dt, SP.lensLead, SP.lensLead); spring(b, "lens", "vlens", 0, SP.lens, dt);
+        if (b.lens > 0.01) done = false;
+        continue;
+      }
+      if (S.now - b.t0 < b.delay) { done = false; continue; }
+      const r0 = b.to.el.getBoundingClientRect();
+      if (r0.width < 1) { b.landed = true; continue; }
+      const g = onScreen(r0);
+      b.lr.step(g, Math.min(b.to.radius ?? 0, g.width / 2, g.height / 2), dt, SP.flowLead, SP.flowTrail);
+      const sp = b.lr.speed();
+      fastest = Math.max(fastest, sp);
+      // in flight a pane is a drop: its corners round off with speed, and it lifts a little
+      b.liq += (smooth(60, 1100, sp) - b.liq) * Math.min(1, dt * 12);
+      const d = rdist(b.lr, g);
+      if (!b.revealed && 1 - d / b.d0 > 0.7) { b.revealed = true; S.flowOn?.onLand?.(b.to.el); }
+      if (!b.landed && ((d < 0.75 && b.lr.speed() < 16) || S.now - b.t0 > 2.6)) b.landed = true;
+      if (!b.landed) done = false;
+    }
+    S.gk += (24 * smooth(40, 700, fastest) - S.gk) * Math.min(1, dt * 10);
+    if (done) {
+      for (const b of S.blobs) {
+        if (!b.to || b.merge) continue;
+        const s = b.to; s.held = false; s.lens = 1; s.v = 0; s.target = 1; s.lr = null;
+        if (!b.revealed) S.flowOn?.onLand?.(s.el);
+      }
+      S.blobs.length = 0; S.flowOn = null;
+    }
+  }
+
+  // ─── Overlay: a sheet, a menu or a toast, pulled out of the glass it came from ───
+  // matchedGeometry: the overlay's glass starts as its source (a row, a star, a button) and flows to where
+  // the page puts it; a drop left at the source keeps a liquid neck to it until it snaps, then shrinks
+  // away. Closing reverses it: the glass flows back and sinks into the source. With no source it
+  // materializes where it stands.
+  function overlay(el, o = {}) {
+    if (!S.ok || !el) return;
+    const goal = el.getBoundingClientRect();
+    let ov = S.overs.find((x) => x.el === el);
+    const src = o.from ? plain(o.from) : scaled(goal, 0.94);
+    const q0 = o.fromRadius ?? radiusOf(el);
+    if (!ov) {
+      ov = { el, kind: KIND[o.kind ?? "sheet"], lr: new Liquid(src, q0), lens: o.from ? 0.45 : 0, vl: 0, press: 0, pv: 0, pressT: 0, p: 0, tether: null };
+      ov.tether = o.from && !S.reduced ? { lr: new Liquid(src, q0) } : null;
+      S.overs.push(ov);
+    } else ov.tether = null; // opened again while it was closing: it simply turns around
+    ov.state = "in"; ov.onFrame = o.onFrame; ov.onDone = null; ov.radius = radiusOf(el); ov.sink = false; ov.p = 0;
+    ov.d0 = Math.max(1, rdist(ov.lr, goal));
+    if (S.reduced) { ov.lr.set(goal, ov.radius); ov.lens = 1; ov.p = 1; ov.tether = null; }
+  }
+  function overlayOut(el, o = {}) {
+    const ov = S.overs.find((x) => x.el === el);
+    if (!ov) { o.onDone?.(); return; }
+    ov.state = "out"; ov.onDone = o.onDone; ov.onFrame = null; ov.sink = false;
+    ov.to = o.to ? plain(o.to) : null; ov.toRadius = o.toRadius ?? 14; ov.from = ov.lr.rect;
+    const [x, y] = ov.to ? mid(ov.to) : [0, 0];
+    ov.tether = ov.to && !S.reduced ? { lr: new Liquid(around(x, y, 0, 0), 0) } : null;
+    if (S.reduced || !S.ok) { S.overs = S.overs.filter((x2) => x2 !== ov); o.onDone?.(); }
+  }
+  function updateOverlays(dt) {
+    let moving = 0;
+    for (const ov of [...S.overs]) {
+      const t = ov.tether;
+      if (ov.state === "in") {
+        const g = ov.el.getBoundingClientRect();
+        if (g.width < 1) { overlayOut(ov.el); continue; }
+        ov.lr.step(g, ov.radius, dt, SP.sheetLead, SP.sheetTrail);
+        spring(ov, "lens", "vl", 1, SP.lens, dt);
+        ov.liq = (ov.liq ?? 0) + (smooth(80, 1400, ov.lr.speed()) - (ov.liq ?? 0)) * Math.min(1, dt * 12);
+        ov.p = Math.max(ov.p, 1 - Math.min(1, rdist(ov.lr, g) / ov.d0));
+        if (t) {
+          const [x, y] = mid(t.lr); t.lr.step(around(x, y, 0, 0), 0, dt, SP.shrink, SP.shrink);
+          if (t.lr.r - t.lr.l < 1.5 && t.lr.b - t.lr.t < 1.5) ov.tether = null;
+        }
+        ov.onFrame?.(ov.p);
+      } else {
+        ov.liq = (ov.liq ?? 0) + (smooth(80, 1400, ov.lr.speed()) - (ov.liq ?? 0)) * Math.min(1, dt * 12);
+        if (ov.to) {
+          ov.lr.step(ov.to, ov.toRadius, dt, SP.sheetLead, SP.sheetTrail);
+          if (t) t.lr.step(ov.to, ov.toRadius, dt, SP.grow, SP.grow);
+          if (!ov.sink && rdist(ov.lr, ov.to) < 5) ov.sink = true;
+          if (ov.sink) spring(ov, "lens", "vl", 0, SP.fast, dt);
+        } else {
+          ov.lr.step(scaled(ov.from, 0.9), null, dt, SP.lensLead, SP.lensLead);
+          spring(ov, "lens", "vl", 0, SP.lens, dt);
+        }
+        if (ov.lens < 0.01) { S.overs = S.overs.filter((x) => x !== ov); ov.onDone?.(); continue; }
+      }
+      moving = Math.max(moving, ov.lr.speed());
+    }
+    const want = S.overs.some((x) => x.tether) ? 44 * smooth(20, 380, moving) : 0;
+    S.okk += (want - S.okk) * Math.min(1, dt * 10);
+  }
+
+  // ─── Lenses inside the glass: selections, and the pointer's highlight ─────
+  /** A lens that swells inside a bar: get() returns {rect, radius, lift, layer} or null. */
+  function lens(key, get, o = {}) {
+    S.lenses = S.lenses.filter((x) => x.key !== key);
+    const L = { key, get, hover: false, lr: null, str: 0, vs: 0, lift: 0, vlift: 0, height: o.height ?? 0.28, tint: o.tint ?? 1, layer: o.layer ?? 0 };
+    S.lenses.push(L);
+    return L;
+  }
+  /** The control under the pointer: the pointer's drop sinks into the glass and becomes its highlight. */
+  function hover(el, o) { S.hoverEl = el || null; S.hoverOpt = o || null; }
+  const pointerBox = (r) => around(S.cursor.x, S.cursor.y, 2 * r);
+  function hoverGoal() {
+    const el = S.hoverEl, o = S.hoverOpt ?? {}, c = S.cursor;
+    if (!el || !el.isConnected || !c.fine || S.reduced || !c.onT) return null;
+    const r = el.getBoundingClientRect(); if (r.width < 1) return null;
+    const ix = o.inset?.[0] ?? 0, iy = o.inset?.[1] ?? 0;
+    const rect = box(r.left - ix, r.top - iy, r.right + ix, r.bottom + iy);
+    const radius = o.radius === "capsule" ? Math.min(rect.width, rect.height) / 2 : Math.min(o.radius ?? 14, rect.width / 2, rect.height / 2);
+    return { rect, radius, layer: o.layer ?? 0, lift: 0 };
+  }
+  function updateLenses(dt) {
+    for (const L of S.lenses) {
+      const g = L.hover ? hoverGoal() : L.get?.();
+      if (g) {
+        if (!L.lr || L.str < 0.02) L.lr = L.hover ? new Liquid(pointerBox(9), 9) : new Liquid(g.rect, g.radius);
+        if (S.reduced) { L.lr.set(g.rect, g.radius); L.str = 1; L.lift = 0; }
+        else {
+          L.lr.step(g.rect, g.radius, dt, L.hover ? SP.hoverLead : SP.lensLead, L.hover ? SP.hoverTrail : SP.lensTrail);
+          spring(L, "str", "vs", 1, L.hover ? SP.hoverIn : SP.lens, dt);
+          spring(L, "lift", "vlift", g.lift ?? 0, SP.lift, dt);
+        }
+        L.layer = g.layer ?? 0;
+      } else if (L.lr) {
+        if (L.hover) L.lr.step(pointerBox(7), 7, dt, SP.hoverLead, SP.hoverTrail);
+        spring(L, "str", "vs", 0, SP.fast, dt);
+        if (L.str < 0.004) { L.str = 0; L.vs = 0; }
+      }
+    }
+  }
+
+  // ─── Pointer and touch ────────────────────────────────────────────────────
   function listen() {
     addEventListener("pointermove", (e) => {
       const c = S.cursor; c.fine = e.pointerType === "mouse";
       c.x = e.clientX; c.y = e.clientY; c.moved = S.now; c.onT = c.fine ? 1 : 0;
+      if (S.touch && e.buttons) { S.touch.x = e.clientX; S.touch.y = e.clientY; }
     }, { passive: true });
     addEventListener("pointerleave", () => { S.cursor.onT = 0; });
-    for (const ev of ["scroll", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => { S.lastInput = S.now; }, { passive: true, capture: true });
     document.addEventListener("mouseleave", () => { S.cursor.onT = 0; });
+    for (const ev of ["scroll", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => { S.lastInput = S.now; }, { passive: true, capture: true });
+    // Apple's interactive glass: under a finger the glass swells a little, lights up from where it is
+    // touched, and springs back with a bounce when let go. A tap on the sky squashes the pointer's drop.
     addEventListener("pointerdown", (e) => {
-      const s = shapeAt(e.clientX, e.clientY);
-      if (s) { ripple(e.clientX, e.clientY, 1); s.pressT = 1; S.cursor.down = 1; }
+      const c = S.cursor; c.down = 1; S.lastInput = S.now;
+      if (e.pointerType !== "mouse") { c.fine = false; c.onT = 0; }
+      const hit = hitTest(e.clientX, e.clientY);
+      if (hit && hit.rec.kind !== 2) { hit.rec.pressT = 1; S.touch = { x: e.clientX, y: e.clientY, rec: hit.rec, layer: hit.layer }; }
+      else if (c.fine && !S.reduced) c.vst -= 4.5;
     }, { passive: true });
-    addEventListener("pointerup", () => { for (const s of S.shapes) s.pressT = 0; S.cursor.down = 0; }, { passive: true });
-    addEventListener("pointercancel", () => { for (const s of S.shapes) s.pressT = 0; }, { passive: true });
+    const up = () => { for (const s of S.shapes) s.pressT = 0; for (const o of S.overs) o.pressT = 0; S.cursor.down = 0; };
+    addEventListener("pointerup", up, { passive: true });
+    addEventListener("pointercancel", up, { passive: true });
   }
-  function shapeAt(x, y) {
-    for (let i = S.shapes.length - 1; i >= 0; i--) {
-      const s = S.shapes[i]; const r = s.rect;
-      if (!r || s.lens < 0.2 || s.kind === 3) continue;
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return s;
-    }
+  function hitTest(x, y) {
+    const inside = (r) => r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    for (let i = S.overs.length - 1; i >= 0; i--) { const o = S.overs[i]; if (o.lens > 0.2 && o.state === "in" && inside(o.lr)) return { rec: o, layer: 1 }; }
+    for (let i = S.shapes.length - 1; i >= 0; i--) { const s = S.shapes[i]; if (!s.held && s.lens > 0.2 && inside(s.rect)) return { rec: s, layer: 0 }; }
     return null;
-  }
-  function ripple(x, y, k = 1) {
-    if (S.reduced) return;
-    S.ripples.push({ x, y, t0: S.now, k }); if (S.ripples.length > 4) S.ripples.shift();
   }
   function burst(x, y, coral) { S.bursts.push({ x, y, t0: S.now, coral }); if (S.bursts.length > 6) S.bursts.shift(); }
 
   // ─── Decisions in the sky ─────────────────────────────────────────────────
   // An Archimedean spiral around the white star: the oldest decision closest, the newest outermost.
   let decisions = [];
+  /** animateNew: true for what arrives live (the two lights meet, a star is born with a burst);
+   *  "soft" for scrubbing through time (new stars simply swell into place). */
   function setDecisions(list, animateNew) {
-    const known = new Set(decisions.map((d) => d.key));
-    decisions = list.map((d, i) => ({ ...d, born: known.has(d.key) || !animateNew ? -99 : S.now + 0.25 + i * 0.02 }));
+    const was = new Map(decisions.map((d) => [d.key, d.born]));
+    const soft = animateNew === "soft";
+    if (animateNew) S.lastInput = S.now;
+    decisions = list.map((d, i) => ({ ...d, born: was.has(d.key) ? (soft ? was.get(d.key) : -99) : soft && !S.reduced ? S.now : !animateNew ? -99 : S.now + 0.25 + i * 0.02 }));
     layoutMarks();
-    if (animateNew) {
+    const known = new Set(was.keys());
+    if (animateNew && !soft) {
       const fresh = decisions.filter((d) => !known.has(d.key));
       if (fresh.some((d) => d.kind === 0) && !S.reduced) S.meetT = S.now + 0.2;
       fresh.forEach((d) => { d.born = S.now + (d.kind === 0 ? 1.45 : 0.3); setTimeout(() => { const m = S.marks.find((x) => x.key === d.key); if (m) burst(m.x, m.y, d.kind > 0); }, d.kind === 0 ? 1450 : 300); });
@@ -641,29 +1002,57 @@ void main() {
     S.hover = best; return best >= 0 ? S.marks[best] : null;
   }
 
+  function markHover(key) { S.hoverKey = key || null; }
+  function hoverIndex() { if (S.hoverKey) { const i = S.marks.findIndex((m) => m.key === S.hoverKey); if (i >= 0) return i; } return S.hover; }
+  function markPos(key) { const m = S.marks.find((x) => x.key === key); return m && S.focus.marks > 0.5 ? { x: m.x, y: m.y } : null; }
+
   // ─── The loop ─────────────────────────────────────────────────────────────
-  const spring = (o, key, vkey, target, k, c, dt) => { for (let t = dt; t > 1e-6; t -= 0.016) { const h = Math.min(0.016, t), f = -k * (o[key] - target) - c * o[vkey]; o[vkey] += f * h; o[key] += o[vkey] * h; } };
+  // The pointer's drop: a droplet of glass that follows the pointer, stretches as it moves and wobbles
+  // when it stops, sheds two small droplets when flung (they catch up and merge again), pops back when the
+  // pointer wakes, evaporates when it rests, focuses a caustic on the sky, and sinks into any glass it
+  // meets, where it turns into the highlight of the control beneath.
+  function updateCursor(dt) {
+    const c = S.cursor, now = S.now;
+    const idle = now - c.moved > 2.6;
+    const want = c.fine && !S.reduced && !idle && c.onT ? 1 : 0;
+    spring(c, "on", "von", want, want ? SP.pop : SP.evaporate, dt);
+    if (!want && c.on < 0.003) { c.on = 0; c.von = 0; }
+    if (c.px < -1e3) { c.px = c.x; c.py = c.y; for (const t of c.sat) { t.x = c.x; t.y = c.y; } }
+    spring(c, "px", "vx", c.x, SP.drop, dt); spring(c, "py", "vy", c.y, SP.drop, dt);
+    let lead = { x: c.px, y: c.py };
+    c.sat.forEach((t, i) => {
+      spring(t, "x", "vx", lead.x, i ? SP.sat2 : SP.sat1, dt); spring(t, "y", "vy", lead.y, i ? SP.sat2 : SP.sat1, dt);
+      // surface tension: a droplet never strays far
+      const dx = t.x - lead.x, dy = t.y - lead.y, d = Math.hypot(dx, dy), max = i ? 46 : 64;
+      if (d > max) { t.x = lead.x + (dx / d) * max; t.y = lead.y + (dy / d) * max; }
+      lead = t;
+    });
+    const v = Math.hypot(c.vx, c.vy);
+    if (v > 60) { const k = Math.min(1, dt * 16); c.ax += (c.vx / v - c.ax) * k; c.ay += (c.vy / v - c.ay) * k; const l = Math.hypot(c.ax, c.ay) || 1; c.ax /= l; c.ay /= l; }
+    spring(c, "st", "vst", Math.min(0.34, v / 3600), SP.jelly, dt);
+    c.st = clamp(c.st, -0.3, 0.45);
+    spring(c, "press", "vpress", c.down && !S.touch ? 1 : 0, c.down ? SP.press : SP.release, dt);
+    const over = c.fine ? hitTest(c.x, c.y) : null;
+    c.glass += ((over && over.rec.kind !== 2 ? 1 : 0) - c.glass) * Math.min(1, dt * 6);
+  }
   function update(dt) {
     const c = S.cursor, now = S.now;
     // shapes: lens (materialize), press, ring fill
     for (const s of S.shapes) {
-      const tgt = now - s.since >= s.delay ? s.target : s.lens < 0.01 ? 0 : s.target === 0 ? 0 : s.lens;
-      if (S.reduced) { s.lens = tgt; s.v = 0; } else spring(s, "lens", "v", tgt, 150, 21, dt);
-      if (s.lens < 0) { s.lens = 0; s.v = 0; }
-      spring(s, "press", "pv", s.pressT, 420, 28, dt);
-      if (S.reduced) s.fill = s.fillT; else spring(s, "fill", "fv", s.fillT, 60, 13, dt);
+      if (s.held) { s.lens = 0; s.v = 0; }
+      else {
+        const tgt = now - s.since >= s.delay ? s.target : s.lens < 0.01 ? 0 : s.target === 0 ? 0 : s.lens;
+        if (S.reduced) { s.lens = tgt; s.v = 0; } else spring(s, "lens", "v", tgt, tgt === 0 && s.fast ? SP.fast : SP.lens, dt);
+        if (s.lens < 0) { s.lens = 0; s.v = 0; }
+      }
+      spring(s, "press", "pv", s.pressT, s.pressT ? SP.press : SP.release, dt);
+      if (S.reduced) s.fill = s.fillT; else spring(s, "fill", "fv", s.fillT, SP.fill, dt);
     }
-    // cursor drop follows the pointer with a little lag, then settles into the sky when still
-    const idle = now - c.moved > 2.6;
-    const tgtOn = c.fine && !S.reduced && !idle ? c.onT : 0;
-    c.on += (tgtOn - c.on) * Math.min(1, dt * 7);
-    if (c.px < -1e3) { c.px = c.x; c.py = c.y; }
-    spring(c, "px", "vx", c.x, 260, 24, dt); spring(c, "py", "vy", c.y, 260, 24, dt);
-    const over = c.fine ? shapeAt(c.x, c.y) : null;
-    c.glassT = over && over.kind !== 2 ? 1 : 0;
-    c.glass += (c.glassT * (c.fine ? 1 : 0) - c.glass) * Math.min(1, dt * 6);
+    for (const o of S.overs) spring(o, "press", "pv", o.pressT, o.pressT ? SP.press : SP.release, dt);
+    if (S.touch && !S.touch.rec.pressT && Math.abs(S.touch.rec.press) < 0.004 && Math.abs(S.touch.rec.pv) < 0.05) S.touch = null;
+    updateFlow(dt); updateOverlays(dt); updateLenses(dt); updateCursor(dt);
     // focus (the white star and its spiral) glides to where the page puts it
-    if (S.reduced) { S.focus.x = S.focus.tx; S.focus.y = S.focus.ty; } else { spring(S.focus, "x", "vx", S.focus.tx, 90, 19, dt); spring(S.focus, "y", "vy", S.focus.ty, 90, 19, dt); }
+    if (S.reduced) { S.focus.x = S.focus.tx; S.focus.y = S.focus.ty; } else { spring(S.focus, "x", "vx", S.focus.tx, SP.focus, dt); spring(S.focus, "y", "vy", S.focus.ty, SP.focus, dt); }
     S.focus.marks = (S.focus.marks ?? 1) + ((S.focus.marksT ?? 1) - (S.focus.marks ?? 1)) * Math.min(1, (S.realDt ?? dt) * (S.reduced ? 60 : 5));
     for (const m of S.marks) { m.x = S.focus.x + m.dx; m.y = S.focus.y + m.dy; }
     // key light swings slowly (±20°) so highlights travel around every silhouette
@@ -684,9 +1073,27 @@ void main() {
         S.nextSat = now + S.sat.dur + 30 + Math.random() * 60;
       }
     }
+    // drops: the pointer's first (it casts the caustic), its two droplets, then the margins' drops
+    S.drops.length = 0;
+    const r0 = 12.5 * Math.max(0, c.on) * (1 - c.glass) * (1 + 0.26 * c.press);
+    if (r0 > 0.6) {
+      const k = 1 + c.st;
+      S.drops.push({ x: c.px, y: c.py, r: r0, sx: k, sy: 1 / k, ax: c.ax, ay: c.ay, cursor: true });
+      let lead = { x: c.px, y: c.py };
+      c.sat.forEach((t, i) => {
+        const rr = r0 * (i ? 0.3 : 0.42) * smooth(6, 22, Math.hypot(t.x - lead.x, t.y - lead.y));
+        if (rr > 0.6) S.drops.push({ x: t.x, y: t.y, r: rr });
+        lead = t;
+      });
+    }
+    // a lens lifted by a finger rises out of its bar as a clear drop, larger than the bar, and merges back
+    for (const L of S.lenses) {
+      if (L.hover || !L.lr || L.lift < 0.02 || L.str < 0.2) continue;
+      const q = L.lr, hw = (q.r - q.l) / 2, hh = (q.b - q.t) / 2, r = (hh + 7) * L.lift;
+      if (r > 0.6) S.drops.push({ x: (q.l + q.r) / 2, y: (q.t + q.b) / 2, r, sx: Math.max(1, (hw + 7) / (hh + 7)), sy: 1, ax: 1, ay: 0 });
+    }
     // decorative drops in the margins (wide screens only); they meet, merge and part
     const content = Math.min(1200, innerWidth - 64), margin = (innerWidth - content) / 2;
-    S.drops.length = 0;
     if (!S.reduced && margin > 70 && S.fade > 0.6) {
       const t = now * 0.16;
       const mk = (side, ph, r, yb) => {
@@ -698,28 +1105,10 @@ void main() {
       };
       mk(-1, 0.3, 12, 0.46); mk(-1, 2.6, 7, 0.52); mk(1, 1.4, 10, 0.62);
     }
-    const dr = 12.5 * c.on * (1 - c.glass) * (1 + c.down * 0.25);
-    if (dr > 0.6) S.drops.push({ x: c.px, y: c.py, r: dr });
     const sv = (S.scroll.y - (S.scroll.py ?? S.scroll.y)) / Math.max(dt, 0.001); S.scroll.py = S.scroll.y;
     S.sloshV = (S.sloshV ?? 0); S.slosh = (S.slosh ?? 0);
-    if (!S.reduced) { spring(S, "slosh", "sloshV", Math.max(-0.018, Math.min(0.018, sv * 0.000012)), 60, 7, dt); } else S.slosh = 0;
-    S.ripples = S.ripples.filter((r) => now - r.t0 < 1.6);
+    if (!S.reduced) spring(S, "slosh", "sloshV", clamp(sv * 0.000012, -0.018, 0.018), { k: 60, c: 7 }, dt); else S.slosh = 0;
     S.bursts = S.bursts.filter((b) => now - b.t0 < 3);
-  }
-
-  function readRects() {
-    const out = [];
-    for (const s of S.shapes) {
-      if (s.lens < 0.003 && s.target === 0) { s.rect = null; continue; }
-      const r = s.manual ? s.manual() : s.el.getBoundingClientRect();
-      if (!r || r.width < 1 || r.height < 1) { s.rect = null; continue; }
-      if (r.bottom < -80 || r.top > innerHeight + 80) { s.rect = r; continue; }
-      s.rect = r;
-      let rad = s.radius;
-      if (rad == null) { const cs = getComputedStyle(s.el); rad = parseFloat(cs.borderTopLeftRadius) || 0; s.radius = rad; }
-      out.push(s);
-    }
-    return out;
   }
 
   function loop(ms) {
@@ -727,9 +1116,10 @@ void main() {
     if (!S.ok || document.hidden || window.__lanceaFreeze) return;
     const now = (ms - S.t0) / 1000, real = Math.max(0.001, now - S.now), dt = Math.min(0.12, real);
     // when nobody has touched the page for a while, 30 frames a second is plenty for a sky
-    const idle = now - Math.max(S.cursor.moved, S.lastInput ?? 0) > 8 && !S.ripples.length;
+    const busy = S.blobs.length || S.overs.length || S.touch || S.cursor.down;
+    const idle = now - Math.max(S.cursor.moved, S.lastInput ?? 0) > 8 && !busy;
     if (idle && !S.reduced && real < 1 / 45 && (S.skip = !S.skip)) return;
-    S.now = now; S.frame++; S.realDt = Math.min(0.5, real);
+    S.now = now; S.dt = dt; S.frame++; S.realDt = Math.min(0.5, real);
     S.fade = S.reduced ? 1 : Math.min(1, S.fade + dt / 1.8);
     const t1 = performance.now();
     try { update(dt); render(); } catch (e) { if (!S.err) { S.err = e; console.error("glass:", e); } window.__lanceaErr = String(e && e.stack || e); }
@@ -738,8 +1128,21 @@ void main() {
     // keep it smooth on slower machines: step the resolution down if frames run long
     if (real > 0.024 && !idle && S.frame > 90) { if (++S.slowFrames > 40 && S.scale > 0.6) { S.scale = Math.max(0.6, S.scale - 0.15); S.slowFrames = 0; S.W = 0; resize(); drawLabels(); } }
     else S.slowFrames = Math.max(0, S.slowFrames - 1);
-    window.__lanceaStats = { fps: +(1 / S.stats.real).toFixed(1), cpuMs: +S.stats.ms.toFixed(2), scale: S.scale, shapes: S.shapes.length, marks: S.marks.length };
+    window.__lanceaStats = { fps: +(1 / S.stats.real).toFixed(1), cpuMs: +S.stats.ms.toFixed(2), scale: S.scale, shapes: S.shapes.length, marks: S.marks.length, blobs: S.blobs.length, overs: S.overs.length };
   }
+  // for tests: what the glass holds right now
+  window.__lanceaDump = () => ({
+    drops: S.drops.map((d) => [Math.round(d.x), Math.round(d.y), +d.r.toFixed(1)]),
+    lenses: S.lenses.filter((L) => L.lr && L.str > 0.004).map((L) => [L.key, Math.round(L.lr.l), Math.round(L.lr.t), Math.round(L.lr.r), Math.round(L.lr.b), +L.str.toFixed(2)]),
+    blobs: S.blobs.length, overs: S.overs.length, touch: !!S.touch,
+    shapes: S.shapes.filter((x) => x.rect && x.lens > 0.01).map((x) => [x.el.id || x.el.className.split(" ")[0], Math.round(x.rect.left), Math.round(x.rect.top), Math.round(x.rect.width), +x.lens.toFixed(2)]),
+  });
+  // for tests: advance the clock by hand while the page is frozen (window.__lanceaFreeze)
+  window.__lanceaStep = (sec = 0.1, n = 6) => {
+    if (!S.ok) return false;
+    for (let i = 0; i < n; i++) { S.now += sec / n; S.dt = sec / n; S.realDt = sec / n; S.frame++; S.fade = Math.min(1, S.fade + sec / n / 1.8); update(sec / n); if (i < n - 1) for (const s of S.shapes) rectOf(s); }
+    render(); return true;
+  };
 
   function render() {
     const gl = S.gl, W = S.W, H = S.H, PX = S.PX, now = S.now;
@@ -829,11 +1232,12 @@ void main() {
       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 24, 0);
       gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 24, 8);
       gl.uniform2f(P.marks.u.uRes, W, H); gl.uniform1f(P.marks.u.uPx, PX); gl.uniform1f(P.marks.u.uTime, now);
-      gl.uniform1f(P.marks.u.uFade, S.fade * S.focus.marks); gl.uniform1f(P.marks.u.uHover, S.hover);
+      gl.uniform1f(P.marks.u.uFade, S.fade * S.focus.marks); gl.uniform1f(P.marks.u.uHover, hoverIndex());
       gl.drawArrays(gl.POINTS, 0, S.marks.length);
     }
     gl.disable(gl.BLEND);
     gl.bindTexture(gl.TEXTURE_2D, T.sky.tex); gl.generateMipmap(gl.TEXTURE_2D);
+
 
     // 2. glass, to the screen
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H);
@@ -841,31 +1245,68 @@ void main() {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.sky.tex);
     const g = P.glass.u;
     gl.uniform1i(g.uSky, 0); gl.uniform2f(g.uRes, W, H); gl.uniform1f(g.uPx, PX); gl.uniform1f(g.uTime, now); gl.uniform1f(g.uSolid, S.solid ? 1 : 0);
-    const vis = readRects().slice(0, MAX);
-    const A = new Float32Array(MAX * 4), Bv = new Float32Array(MAX * 4), C = new Float32Array(MAX * 4);
+    // the page's glass loses most of its lensing under an open sheet: never glass on glass
     S.back = (S.back ?? 0) + ((S.backT ?? 0) - (S.back ?? 0)) * Math.min(1, (S.realDt ?? 0.016) * 6);
-    vis.forEach((s, i) => {
-      const r = s.rect, cx = (r.left + r.width / 2) * PX, cy = (r.top + r.height / 2) * PX;
-      const lensE = s.kind === 4 || !s.scroll ? s.lens : s.lens * (1 - 0.72 * S.back);
-      const sc = 1 - s.press * 0.012;
+    const back = 1 - 0.72 * S.back;
+    const A = new Float32Array(MAXB * 4), Bv = new Float32Array(MAXB * 4), C = new Float32Array(MAXB * 4);
+    let n = 0;
+    for (const s of S.shapes) {
+      const r = rectOf(s);
+      if (!r || n >= MAXB) continue;
+      const cx = (r.left + r.width / 2) * PX, cy = (r.top + r.height / 2) * PX, lensE = s.scroll ? s.lens * back : s.lens, fl = s.scroll ? 1 : 0;
       if (s.kind === 2) {
         const R = (Math.min(r.width, r.height) / 2 - s.tube) * PX;
-        A.set([cx, cy, R, R], i * 4); Bv.set([0, 2, lensE, s.press], i * 4); C.set([Math.max(0, Math.min(1, s.fill + S.slosh)), s.tube * PX, s.coral ? -1 : 0, s.scroll ? 1 : 0], i * 4);
+        A.set([cx, cy, R, R], n * 4); Bv.set([0, 2, lensE, Math.max(0, s.press)], n * 4); C.set([clamp(s.fill + (S.slosh ?? 0), 0, 1), s.tube * PX, s.coral ? -1 : 0, fl], n * 4);
       } else {
-        const hw = r.width / 2 * PX * sc, hh = r.height / 2 * PX * sc;
-        const rad = s.kind === 3 ? hh : Math.min(s.radius * PX * sc, hw, hh);
-        A.set([cx, cy, hw, hh], i * 4); Bv.set([rad, s.kind, lensE, s.press], i * 4); C.set([0, 0, s.sweep ?? 0, s.scroll ? 1 : 0], i * 4);
+        // pressed glass swells (a few points), and after the bounce settles back
+        const inf = s.press * (s.kind === 0 ? 3 : 2);
+        const hw = Math.max(0.5, (r.width / 2 + inf) * PX), hh = Math.max(0.5, (r.height / 2 + inf) * PX);
+        A.set([cx, cy, hw, hh], n * 4); Bv.set([clamp((s.radius + inf) * PX, 0, Math.min(hw, hh)), s.kind, lensE, Math.max(0, s.press)], n * 4); C.set([0, 0, s.sweep ?? 0, fl], n * 4);
       }
-    });
-    gl.uniform1i(g.uN, vis.length); gl.uniform4fv(g.uA, A); gl.uniform4fv(g.uB, Bv); gl.uniform4fv(g.uC, C);
-    const D = new Float32Array(MAX_DROPS * 4);
-    S.drops.slice(0, MAX_DROPS).forEach((d, i) => D.set([d.x * PX, d.y * PX, Math.max(0, d.r) * PX, 1], i * 4));
-    gl.uniform1i(g.uND, Math.min(MAX_DROPS, S.drops.length)); gl.uniform4fv(g.uD, D);
-    const R = new Float32Array(16).fill(-99);
-    S.ripples.forEach((r, i) => R.set([r.x * PX, r.y * PX, r.t0, r.k], i * 4));
-    gl.uniform4fv(g.uRip, R);
-    const c = S.cursor;
+      n++;
+    }
+    for (const b of S.blobs) {
+      if (n >= MAXB) break;
+      const q = b.lr, hw = Math.max(0.5, ((q.r - q.l) / 2) * PX), hh = Math.max(0.5, ((q.b - q.t) / 2) * PX), lq = b.liq ?? 0;
+      const rad = clamp(q.q * PX, 0, Math.min(hw, hh)), round = rad + (Math.min(hw, hh, 90 * PX) - rad) * 0.8 * lq;
+      A.set([((q.l + q.r) / 2) * PX, ((q.t + q.b) / 2) * PX, hw, hh], n * 4); Bv.set([Math.max(rad, round), b.kind, b.lens * back, 0.7 * lq], n * 4); C.set([0, 0, 0, 3], n * 4);
+      n++;
+    }
+    gl.uniform1i(g.uN, n); gl.uniform4fv(g.uA, A); gl.uniform4fv(g.uB, Bv); gl.uniform4fv(g.uC, C); gl.uniform1f(g.uGK, S.gk * PX);
+    // lenses inside the glass
+    const LA = new Float32Array(MAXL * 4), LB = new Float32Array(MAXL * 4), LL = new Float32Array(MAXL);
+    let nl = 0;
+    for (const L of S.lenses) {
+      if (nl >= MAXL || !L.lr || L.str < 0.004) continue;
+      const q = L.lr, inf = 3 * L.lift, hw = Math.max(0.5, ((q.r - q.l) / 2 + inf) * PX), hh = Math.max(0.5, ((q.b - q.t) / 2 + inf) * PX);
+      LA.set([((q.l + q.r) / 2) * PX, ((q.t + q.b) / 2) * PX, hw, hh], nl * 4);
+      LB.set([clamp((q.q + inf) * PX, 0, Math.min(hw, hh)), L.str, L.height * (1 + 0.8 * L.lift), Math.min(1, L.tint * (1 + 0.3 * L.lift))], nl * 4);
+      LL[nl] = L.layer; nl++;
+    }
+    gl.uniform1i(g.uNL, nl); gl.uniform4fv(g.uLA, LA); gl.uniform4fv(g.uLB, LB); gl.uniform1fv(g.uLL, LL);
+    // the overlay: each shape, and the drop it is being pulled from (or is sinking into)
+    const OA = new Float32Array(MAXO * 4), OB = new Float32Array(MAXO * 4);
+    let no = 0;
+    const putO = (q, kind, lensV, pr, lq = 0) => {
+      if (no >= MAXO) return;
+      const inf = pr * 2.5, hw = Math.max(0.5, ((q.r - q.l) / 2 + inf) * PX), hh = Math.max(0.5, ((q.b - q.t) / 2 + inf) * PX);
+      const rad = clamp((q.q + inf) * PX, 0, Math.min(hw, hh)), round = rad + (Math.min(hw, hh, 120 * PX) - rad) * 0.7 * lq;
+      OA.set([((q.l + q.r) / 2) * PX, ((q.t + q.b) / 2) * PX, hw, hh], no * 4);
+      OB.set([Math.max(rad, round), kind, lensV, Math.max(0, pr) + 0.6 * lq], no * 4); no++;
+    };
+    for (const ov of S.overs) { putO(ov.lr, ov.kind, ov.lens, ov.press, ov.liq ?? 0); if (ov.tether) putO(ov.tether.lr, ov.kind, ov.lens, 0); }
+    gl.uniform1i(g.uNO, no); gl.uniform4fv(g.uOA, OA); gl.uniform4fv(g.uOB, OB); gl.uniform1f(g.uOK, S.okk * PX);
+    // drops
+    const D = new Float32Array(MAXD * 4), DE = new Float32Array(MAXD * 4);
+    let nd = 0;
+    for (const d of S.drops) {
+      if (nd >= MAXD) break;
+      D.set([d.x * PX, d.y * PX, Math.max(0, d.r) * PX, d.cursor ? 2 : 1], nd * 4); DE.set([d.sx ?? 1, d.sy ?? 1, d.ax ?? 1, d.ay ?? 0], nd * 4); nd++;
+    }
+    gl.uniform1i(g.uND, nd); gl.uniform4fv(g.uD, D); gl.uniform4fv(g.uDE, DE);
+    const c = S.cursor, t = S.touch;
     gl.uniform4f(g.uCur, c.px * PX, c.py * PX, c.glass * (S.reduced ? 0 : 1), c.fine && !S.reduced ? Math.max(c.on, c.glass) : 0);
+    gl.uniform4f(g.uTouch, t ? t.x * PX : -1e4, t ? t.y * PX : -1e4, t && !S.reduced ? Math.max(0, t.rec.press) : 0, t ? t.layer : 0);
     gl.uniform2f(g.uLight, Math.cos(S.light), Math.sin(S.light));
     gl.uniform4f(g.uEdge, S.scroll.top * PX, S.scroll.bottom * PX, S.scroll.fade * PX, 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -874,11 +1315,18 @@ void main() {
   function spiralR() { const m = S.marks[S.marks.length - 1]; return m ? Math.hypot(m.dx, m.dy) : 0; }
 
   function backdrop(on) { S.backT = on ? 1 : 0; }
-  function sweep(el) { const s = S.shapes.find((x) => x.el === el); if (s && !S.reduced) s.sweep = S.now; }
-  function ringState(el, coral) { const s = S.shapes.find((x) => x.el === el); if (s) s.coral = !!coral; }
+  // (anything that animates keeps the page at full frame rate for a while)
+  function sweep(el) { const s = find(el); S.lastInput = S.now; if (s && !S.reduced) s.sweep = S.now; }
+  function ringState(el, coral) { const s = find(el); if (s) s.coral = !!coral; }
   function asleep(on) { S.dimT = on ? 0.72 : 1; }
   const debug = { meteor() { S.nextMeteor = 0; }, sat() { S.nextSat = 0; }, meet() { S.meetT = S.now; }, burst };
   function setScroll(y, top, bottom) { S.scroll.y = y; S.scroll.top = top; S.scroll.bottom = bottom; }
+  function setScroller(el) { S.scroller = el; }
   function stats() { return window.__lanceaStats; }
-  return { init, add, remove, show, setFill, press, ripple, burst, setDecisions, focus, markAt, setScroll, backdrop, sweep, ringState, asleep, debug, stats, get ok() { return S.ok; }, get reduced() { return S.reduced; }, get solid() { return S.solid; }, get now() { return S.now; } };
+  return {
+    init, add, remove, show, setFill, press, burst, setDecisions, focus, markAt, markHover, markPos, setScroll, setScroller,
+    backdrop, sweep, ringState, asleep, snapshot, flow, overlay, overlayOut, lens, hover, debug, stats,
+    get ok() { return S.ok; }, get reduced() { return S.reduced; }, get solid() { return S.solid; }, get now() { return S.now; },
+    get flowing() { return S.blobs.length > 0; },
+  };
 })();

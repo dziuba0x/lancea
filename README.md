@@ -222,11 +222,13 @@ sudo cp lancea.config.json /etc/lancea/config.json && sudo systemctl enable --no
 
 Five views:
 
-- **Now:** the state in one sentence, and the budget as a glass ring. Its amber liquid is the dollar budget spent across every rail. Inside the ring, every co-signed step is a white star, arranged in a spiral around the point where the two witnesses meet. The view also has the balances with their history, the latest decisions, and a countdown to the agent's next look.
-- **Timeline:** every decision and note, by day, with filters and search. A decision opens in a sheet with the decoded transaction, the price and each hash on its explorer.
+- **Now:** the state in one sentence, and the budget as a glass ring. Its amber liquid is the dollar budget spent across every rail. Inside the ring, every co-signed step is a white star, arranged in a spiral around the point where the two witnesses meet. **Replay** steps back through the decisions one by one: the ring, the stars, the figure and the list show that moment. The view also has the balances with their history, the latest decisions, and a countdown to the agent's next look.
+- **Timeline:** every decision and note, by day, with filters and search. A decision opens in a sheet with the decoded transaction, the price and each hash on its explorer. A right click (or a long press) opens a menu: copy the hash, open the explorer.
 - **Budget:** spend over time against the budget, a table view, the pace, what the budget paid for, and XRP as FTSO priced each mint.
 - **Keys:** who can move the money. Choose signers and see what can happen. It also shows each key, its explorer link and the guard's gas.
 - **How it works:** the flow from the agent's claim to the guard's verdict, for a first-time visitor.
+
+The status capsule is an island: when a decision arrives while you watch, it opens to say what happened, and a tap pours that decision's sheet out of it. Keys: `1`–`5` switch views, `/` searches, `Esc` closes.
 
 Every decision has two witnesses:
 
@@ -247,7 +249,15 @@ The page is one file, built by `scripts/dashboard-build.ts` into `docs/index.htm
 1. **The sky, drawn into a texture with mipmaps.** It has a nebula lit by the two witnesses, three layers of stars, a few JWST spikes, meteors, a satellite, a pulsar, a far galaxy and the decisions. When a new co-signature arrives, cyan and amber light meet at the white star, and a new star is born there.
 2. **The glass, drawn from the page's own geometry.** Its shape is a squircle bevel. It refracts each colour channel separately (IOR 1.44 / 1.50 / 1.57) and has a weak Fresnel term. A light that moves travels around each rim, and the pointer is a second light. The soft shadow shows through the glass too. Glass appears by gaining its lensing, not by fading. Drops merge with Apple's neck.
 
-It respects reduced motion (a still sky) and reduced transparency (solid panes). Without WebGL2 it falls back to CSS glass.
+The glass moves like a liquid, on SwiftUI's springs (`Spring(duration:bounce:)`):
+
+- **Two layers, never glass on glass.** The page's glass is one layer. The sheet, the menu and the toast are an overlay above it, which casts its shadow on the page and never merges with it.
+- **Matched geometry.** A sheet grows out of the row, the star or the island it describes, with a liquid neck to a drop left behind, and flows back into it when it closes.
+- **Flow between views.** The panes of one view flow into the layout of the next: a pane divides where the new view has more, and panes merge where it has fewer. In flight they blend like glass in a GlassEffectContainer and part as they slow down; the new words land with their glass.
+- **Interactive glass.** Under a finger the glass swells and lights up from the point of touch, then springs back. A tab or a filter can be pressed and dragged: its lens lifts out of the bar as a clear drop and settles on the nearest choice.
+- **The pointer's drop.** It stretches as it moves, wobbles when it stops, sheds two droplets when flung and focuses a caustic on the sky. Over a control it sinks into the glass and becomes that control's highlight.
+
+It respects reduced motion (a still sky, no flow) and reduced transparency (solid panes). Without WebGL2 it falls back to CSS glass.
 
 ## The drill: a staged hijack, and the re-arm
 

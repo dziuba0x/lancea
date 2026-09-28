@@ -38,6 +38,11 @@
   --fade-bottom: 0px;
   --out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --spring: cubic-bezier(0.32, 1.28, 0.42, 1);
+  /* SwiftUI's springs (smooth, snappy, bouncy): app.js replaces these with linear() curves sampled
+     from Spring(duration: 0.5, bounce: 0 / 0.15 / 0.3), and their settling times */
+  --e-smooth: cubic-bezier(0.2, 0.8, 0.2, 1); --d-smooth: 0.6s;
+  --e-snappy: cubic-bezier(0.3, 1.25, 0.45, 1); --d-snappy: 0.62s;
+  --e-bouncy: cubic-bezier(0.32, 1.45, 0.42, 1); --d-bouncy: 0.7s;
 }
 @media (max-width: 760px) {
   :root { --gutter: 16px; --r-pane: 24px; --scroll-top: 84px; --scroll-bottom: 150px; --fade-bottom: 84px; }
@@ -85,7 +90,7 @@ code, .mono { font-family: var(--mono); }
 /* ─── Glass hosts: transparent, the WebGL layer draws the material ────────── */
 .glass { position: relative; border-radius: var(--r-pane); }
 .pane { padding: 24px 26px; }
-.no-gl .glass, .solid .glass {
+.no-gl .glass, .solid .glass, .no-gl .menu, .solid .menu {
   background: rgba(12, 14, 24, 0.66);
   -webkit-backdrop-filter: blur(22px) saturate(1.35);
   backdrop-filter: blur(22px) saturate(1.35);
@@ -119,10 +124,24 @@ code, .mono { font-family: var(--mono); }
 .brand b { font: 700 23px/1 var(--sans); letter-spacing: -0.035em; }
 .brand .label { color: var(--ink-3); }
 .status {
-  justify-self: end; height: 44px; border-radius: 22px;
-  display: flex; align-items: center; gap: 12px; padding: 0 18px 0 16px;
-  white-space: nowrap;
+  justify-self: end; height: 44px; border-radius: 22px; position: relative;
+  display: flex; align-items: center; padding: 0; overflow: hidden; cursor: pointer;
+  white-space: nowrap; -webkit-user-select: none; user-select: none;
+  transition: width var(--d-bouncy) var(--e-bouncy);
 }
+/* The island: compact, it says whether the feed is live; wide, it tells what just happened. */
+.isl { display: flex; align-items: center; gap: 12px; padding: 0 18px 0 16px; height: 100%; flex: none;
+  transition: opacity 0.22s var(--out), filter 0.22s var(--out), transform var(--d-snappy) var(--e-snappy); }
+.isl-wide { position: absolute; left: 0; top: 0; gap: 10px; opacity: 0; filter: blur(5px); transform: scale(0.94); pointer-events: none; font-size: 14px; color: var(--ink-2); }
+.isl-wide b { color: var(--ink); font-weight: 600; }
+.isl-wide svg { width: 13px; height: 13px; color: var(--ink); flex: none; }
+.isl-wide .ev-usd { font: 500 14px/1 var(--sans); color: var(--ink); font-variant-numeric: tabular-nums; }
+.isl-wide .ev-open { color: var(--ink-3); font-size: 18px; margin-left: 2px; }
+.status[data-tone="coral"] .isl-wide b { color: var(--coral); }
+.status.wide .isl-compact { opacity: 0; filter: blur(5px); transform: scale(0.94); }
+.status.wide .isl-wide { opacity: 1; filter: none; transform: none; transition-delay: 0.12s; }
+.island-wide .brand { opacity: 0; transition: opacity 0.2s; }
+@media (max-width: 760px) { .isl-wide .ev-what { overflow: hidden; text-overflow: ellipsis; max-width: 46vw; } }
 .status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); flex: none; }
 .status.live .dot { background: var(--star); box-shadow: 0 0 12px rgba(255, 255, 255, 0.9); animation: breathe 2.4s ease-in-out infinite; }
 .status.away .dot { background: var(--ink-3); }
@@ -134,18 +153,22 @@ code, .mono { font-family: var(--mono); }
 .tabs {
   height: 48px; border-radius: 24px; padding: 4px;
   display: flex; align-items: center; gap: 2px; position: relative;
+  touch-action: none; -webkit-user-select: none; user-select: none;
 }
 .tab {
   position: relative; z-index: 1;
   height: 40px; padding: 0 16px; border: 0; border-radius: 20px; background: none; cursor: pointer;
   display: flex; align-items: center; gap: 8px;
   font: 500 14px/1 var(--sans); letter-spacing: -0.005em; color: var(--ink-2);
-  transition: color 0.35s var(--out);
+  transition: color 0.35s var(--out), translate 0.3s var(--out);
 }
-.tab svg { width: 18px; height: 18px; flex: none; opacity: 0.9; }
+.tab svg { width: 18px; height: 18px; flex: none; opacity: 0.9; overflow: visible; }
+.tab svg, .tab svg * { transform-box: fill-box; transform-origin: center; }
+#tab-budget svg path:nth-child(2) { transform-origin: left bottom; }
 .tab:hover { color: var(--ink); }
 .tab[aria-selected="true"] { color: var(--ink); }
 .no-gl .tab[aria-selected="true"], .solid .tab[aria-selected="true"] { background: rgba(245, 245, 247, 0.1); }
+.brand { transition: opacity 0.3s var(--out); }
 
 @media (max-width: 1560px) { .status .net { display: none; } }
 @media (max-width: 1180px) { .brand .label { display: none; } }
@@ -164,6 +187,9 @@ code, .mono { font-family: var(--mono); }
   .tab span { display: block; }
   .tab svg { width: 21px; height: 21px; }
   .tabs.mini { transform: translateX(-50%) scale(0.82) translateY(10px); }
+  .tab { transition: color 0.35s var(--out), translate 0.3s var(--out), opacity 0.25s var(--out); }
+  .sheet-open .tabs { pointer-events: none; }
+  .sheet-open .tab { opacity: 0; }
 }
 
 /* ─── Views ──────────────────────────────────────────────────────────────── */
@@ -177,12 +203,11 @@ code, .mono { font-family: var(--mono); }
 }
 @media (max-width: 760px) { .view { gap: 14px; } }
 
-/* Content arrives with the glass: the glass materialises (lensing), the words settle. */
-.rise { opacity: 0; transform: translateY(10px); transition: opacity 0.6s var(--out), transform 0.8s var(--out); }
-.in .rise { opacity: 1; transform: none; }
-.in .rise:nth-child(2) { transition-delay: 0.05s; } .in .rise:nth-child(3) { transition-delay: 0.1s; }
-.in .rise:nth-child(4) { transition-delay: 0.15s; } .in .rise:nth-child(5) { transition-delay: 0.2s; }
-.in .rise:nth-child(6) { transition-delay: 0.25s; } .in .rise:nth-child(7) { transition-delay: 0.3s; }
+/* Content arrives with its glass: the glass materialises or flows in (lensing), and the words settle
+   as it lands. On the way out the words go first, quickly, so the glass can flow away empty. */
+.rise { opacity: 0; transform: translateY(10px) scale(0.99); transition: opacity 0.5s var(--out), transform var(--d-snappy) var(--e-snappy), filter 0.4s var(--out); }
+.rise.shown { opacity: 1; transform: none; }
+.view.leaving .rise { opacity: 0; transform: translateY(-3px) scale(0.99); filter: blur(4px); transition: opacity 0.11s linear, transform 0.11s linear, filter 0.11s linear; transition-delay: 0s !important; }
 
 /* ─── Now: the hero ──────────────────────────────────────────────────────── */
 .hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); align-items: center; gap: 24px; min-height: 420px; }
@@ -202,9 +227,25 @@ code, .mono { font-family: var(--mono); }
 .sub q { color: var(--ink); quotes: "“" "”"; }
 .figure { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-top: 30px; }
 .figure b { font: 600 58px/1 var(--sans); letter-spacing: -0.04em; }
-.figure span { color: var(--ink-2); font-size: 15px; }
+.figure > span { color: var(--ink-2); font-size: 15px; }
 .facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 18px; }
 .facts .label b { color: var(--ink); font-weight: 500; }
+/* Replay: scrub through the agent's history (Apple Watch's Time Travel). A white tick for every
+   co-signed step, a coral one for every refusal; the knob is a drop of glass that swells when held. */
+.replay { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; margin-top: 22px; max-width: 540px; }
+.rp-track { position: relative; height: 36px; cursor: grab; touch-action: none; --f: 1; }
+.replay.drag .rp-track { cursor: grabbing; }
+.rp-line { position: absolute; left: 0; right: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: rgba(245, 245, 247, 0.1); overflow: hidden; }
+.rp-fill { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--f)); background: linear-gradient(90deg, rgba(245, 245, 247, 0.12), rgba(245, 245, 247, 0.55)); transition: transform 0.24s var(--e-snappy); }
+.rp-ticks i { position: absolute; top: 50%; width: 2px; height: 10px; margin: -5px 0 0 -1px; border-radius: 1px; background: rgba(245, 245, 247, 0.55); transition: opacity 0.3s, background 0.3s; }
+.rp-ticks i.coral { background: var(--coral); }
+.rp-ticks i.later { opacity: 0.25; }
+.rp-knob { position: absolute; top: 50%; left: calc(var(--f) * 100%); width: 30px; height: 22px; margin: -11px 0 0 -15px; border-radius: 11px; outline-offset: 4px;
+  transition: left 0.24s var(--e-snappy), transform var(--d-bouncy) var(--e-bouncy); }
+.replay.drag .rp-knob { transform: scale(1.4); }
+.rp-knob:focus-visible { outline: 2px solid rgba(245, 245, 247, 0.85); outline-offset: 4px; border-radius: 14px; }
+.rp-time { min-width: 8.5em; text-align: right; white-space: nowrap; }
+.replaying .rp-time { color: var(--amber); }
 
 .orbit { position: relative; justify-self: center; width: min(100%, 380px); aspect-ratio: 1; }
 .orbit .ring { position: absolute; inset: 7%; border-radius: 50%; }
@@ -218,6 +259,10 @@ code, .mono { font-family: var(--mono); }
 .stat b { display: block; font: 600 30px/1 var(--sans); letter-spacing: -0.03em; }
 .stat small { display: block; margin-top: 8px; color: var(--ink-3); font-size: 13px; }
 .stat .spark { display: block; width: 100%; height: 34px; margin-top: 12px; }
+.stat b, .figure b, .next-ring b, .segment small { font-variant-numeric: tabular-nums; }
+/* numbers roll digit by digit (SwiftUI's numericText) */
+.nd { display: inline-block; position: relative; }
+.nd-out { position: absolute; left: 0; top: 0; }
 .stat.low b { color: var(--coral); }
 
 /* A decision: two witnesses and a verdict. */
@@ -228,7 +273,8 @@ code, .mono { font-family: var(--mono); }
   transition: background 0.25s var(--out);
 }
 .decision + .decision { box-shadow: 0 -1px 0 var(--hair); }
-.decision:hover { background: rgba(245, 245, 247, 0.04); }
+.no-gl .decision:hover, .solid .decision:hover { background: rgba(245, 245, 247, 0.04); }
+@media (hover: none) { .decision:active { background: rgba(245, 245, 247, 0.05); } }
 .decision .when { font: 400 12px/1.35 var(--mono); color: var(--ink-3); padding-top: 2px; }
 .witness { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; align-items: baseline; }
 .witness i { width: 7px; height: 7px; border-radius: 50%; transform: translateY(-1px); }
@@ -258,15 +304,20 @@ code, .mono { font-family: var(--mono); }
 
 /* ─── Timeline ───────────────────────────────────────────────────────────── */
 .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-.segment { height: 44px; border-radius: 22px; padding: 4px; display: inline-flex; gap: 2px; }
+.segment { height: 44px; border-radius: 22px; padding: 4px; display: inline-flex; gap: 2px; touch-action: pan-y; -webkit-user-select: none; user-select: none; }
 .segment button {
   height: 36px; padding: 0 16px; border: 0; border-radius: 18px; background: none; cursor: pointer;
   font: 500 13.5px/1 var(--sans); color: var(--ink-2); display: inline-flex; align-items: center; gap: 8px;
-  transition: color 0.3s var(--out), background 0.3s var(--out);
+  transition: color 0.3s var(--out), background 0.3s var(--out), translate 0.3s var(--out);
 }
-.segment button[aria-pressed="true"] { color: var(--ink); background: rgba(245, 245, 247, 0.12); }
+.segment button[aria-pressed="true"] { color: var(--ink); }
+.no-gl .segment button[aria-pressed="true"], .solid .segment button[aria-pressed="true"] { background: rgba(245, 245, 247, 0.12); }
 .segment button small { font: 500 11px/1 var(--mono); color: var(--ink-3); }
-.search { height: 44px; border-radius: 22px; display: flex; align-items: center; gap: 10px; padding: 0 18px; flex: 1 1 240px; max-width: 420px; }
+.search { height: 44px; border-radius: 22px; display: flex; align-items: center; gap: 10px; padding: 0 18px; flex: 1 1 240px; max-width: 420px; transition: max-width var(--d-snappy) var(--e-snappy); }
+.search:focus-within { max-width: 560px; }
+.search:focus-within svg { color: var(--ink); }
+.search kbd { font: 500 11px/1 var(--mono); color: var(--ink-3); padding: 4px 7px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--hair-2); }
+.search:focus-within kbd { opacity: 0; }
 .search svg { width: 16px; height: 16px; color: var(--ink-3); flex: none; }
 .search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: none; color: var(--ink); font: 400 14.5px/1 var(--sans); }
 .search input::placeholder { color: var(--ink-3); }
@@ -291,7 +342,7 @@ code, .mono { font-family: var(--mono); }
   font-size: 13px; color: var(--ink-2); transform: translate(-50%, calc(-100% - 14px)); transition: opacity 0.15s;
 }
 .chart .tip b { display: block; color: var(--ink); font: 600 16px/1.2 var(--sans); }
-.linkbtn { border: 0; background: none; cursor: pointer; color: var(--ink-2); font: 500 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 0; }
+.linkbtn { border: 0; background: none; cursor: pointer; color: var(--ink-2); font: 500 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 0; transition: color 0.25s var(--out), translate 0.3s var(--out); }
 .linkbtn:hover { color: var(--ink); }
 table.data { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 table.data th { text-align: left; font: 500 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); padding: 10px 8px; }
@@ -312,14 +363,17 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
   position: relative; text-align: left; border: 0; cursor: pointer; padding: 18px 18px 16px; border-radius: 22px;
   background: rgba(3, 4, 9, 0.3); box-shadow: inset 0 0 0 1px var(--hair); transition: box-shadow 0.35s var(--out), background 0.35s var(--out), transform 0.5s var(--spring);
 }
-.signer:active { transform: scale(0.98); }
+.signer:active { transform: scale(0.985); }
 .signer[aria-pressed="true"] { background: rgba(245, 245, 247, 0.08); box-shadow: inset 0 0 0 1px rgba(245, 245, 247, 0.55), 0 0 30px rgba(255, 255, 255, 0.08); }
 .signer b { display: block; font: 600 17px/1.2 var(--sans); margin: 12px 0 4px; }
 .signer small { color: var(--ink-3); font-size: 13px; }
-.signer .check { position: absolute; top: 16px; right: 16px; width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--hair-2); display: grid; place-items: center; transition: background 0.3s; }
-.signer[aria-pressed="true"] .check { background: var(--ink); box-shadow: none; }
-.signer .check svg { width: 12px; height: 12px; color: var(--space); opacity: 0; }
-.signer[aria-pressed="true"] .check svg { opacity: 1; }
+.signer .switch { position: absolute; top: 16px; right: 16px; width: 46px; height: 28px; border-radius: 14px; background: rgba(245, 245, 247, 0.12); box-shadow: inset 0 0 0 1px var(--hair); transition: background 0.35s var(--out), box-shadow 0.35s var(--out); }
+.signer .switch i { position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 11px; background: #f5f5f7; box-shadow: 0 2px 7px rgba(0, 0, 0, 0.4);
+  transition: transform var(--d-snappy) var(--e-snappy), width 0.26s var(--out), background 0.3s var(--out); }
+.signer[aria-pressed="true"] .switch { background: rgba(245, 245, 247, 0.92); box-shadow: 0 0 22px rgba(255, 255, 255, 0.18); }
+.signer[aria-pressed="true"] .switch i { transform: translateX(18px); background: #07080f; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); }
+.signer:active .switch i { width: 28px; }
+.signer[aria-pressed="true"]:active .switch i { transform: translateX(12px); }
 .quorum { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: center; margin-top: 22px; }
 .quorum .q { display: flex; gap: 6px; }
 .quorum .q i { width: 44px; height: 10px; border-radius: 5px; background: rgba(245, 245, 247, 0.12); transition: background 0.4s var(--out), box-shadow 0.4s; }
@@ -333,8 +387,11 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
 .addr code { font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .addr a code { text-decoration: underline; text-decoration-color: var(--hair-2); text-underline-offset: 3px; }
 .addr a:hover code { text-decoration-color: var(--ink); }
-.copy { border: 0; background: none; cursor: pointer; width: 28px; height: 28px; border-radius: 14px; display: grid; place-items: center; color: var(--ink-3); flex: none; }
-.copy:hover { color: var(--ink); background: rgba(245, 245, 247, 0.08); }
+.copy { border: 0; background: none; cursor: pointer; width: 28px; height: 28px; border-radius: 14px; display: grid; place-items: center; color: var(--ink-3); flex: none; transition: color 0.25s var(--out), translate 0.3s var(--out); }
+.copy:hover { color: var(--ink); }
+.no-gl .copy:hover, .solid .copy:hover { background: rgba(245, 245, 247, 0.08); }
+.copy:active svg { transform: scale(0.86); }
+.copy svg { transition: transform var(--d-bouncy) var(--e-bouncy); }
 .copy svg { width: 14px; height: 14px; }
 .gauge { height: 6px; border-radius: 3px; background: rgba(245, 245, 247, 0.08); margin-top: 10px; overflow: hidden; }
 .gauge i { display: block; height: 100%; border-radius: 3px; background: var(--ink); }
@@ -358,18 +415,29 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
 .faq summary::-webkit-details-marker { display: none; }
 .faq summary::after { content: "+"; color: var(--ink-3); font: 400 20px/1 var(--sans); transition: transform 0.4s var(--spring); }
 .faq details[open] summary::after { transform: rotate(45deg); }
-.faq details p { margin: 0 0 16px; color: var(--ink-2); max-width: 70ch; }
+.faq details.closing summary::after { transform: none; }
+.faq details { overflow: hidden; }
+.faq details p { margin: 0 0 16px; color: var(--ink-2); max-width: 70ch; transition: opacity 0.3s var(--out); }
+.faq details.closing p { opacity: 0; }
+.faq summary::after { transition: transform var(--d-bouncy) var(--e-bouncy); }
 
 /* ─── Sheet: a decision in full ──────────────────────────────────────────── */
 .sheet {
-  position: absolute; z-index: 20; right: var(--gutter); top: 88px; bottom: 24px; width: min(520px, calc(100% - 2 * var(--gutter)));
-  border-radius: 32px; padding: 26px 28px; overflow-y: auto; scrollbar-width: none;
-  opacity: 0; transform: translateY(12px); transition: opacity 0.35s var(--out), transform 0.6s var(--spring); pointer-events: none;
+  position: absolute; z-index: 20; right: var(--gutter); top: 88px; width: min(520px, calc(100% - 2 * var(--gutter))); max-height: calc(100% - 112px);
+  border-radius: 32px; padding: 26px 28px; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain;
+  visibility: hidden; pointer-events: none; --p: 0;
+  transition: visibility 0s linear 0.2s;
 }
 .sheet::-webkit-scrollbar { display: none; }
-.sheet.open { opacity: 1; transform: none; pointer-events: auto; }
+.sheet.open { visibility: visible; pointer-events: auto; transition: none; }
+/* its words arrive as its glass lands, and leave first when it closes */
+.sheet > * { opacity: clamp(0, calc((var(--p) - 0.6) * 2.6), 1); transform: translateY(calc((1 - var(--p)) * 16px)) scale(calc(0.965 + 0.035 * var(--p))); transform-origin: 50% 0; }
+.sheet:not(.open) > * { opacity: 0; transition: opacity 0.12s linear; }
+.no-gl .sheet, .solid .sheet { opacity: 0; transform: translateY(12px); transition: opacity 0.35s var(--out), transform var(--d-snappy) var(--e-snappy), visibility 0s linear 0.35s; }
+.no-gl .sheet.open, .solid .sheet.open { opacity: 1; transform: none; transition: opacity 0.35s var(--out), transform var(--d-snappy) var(--e-snappy); }
 @media (max-width: 760px) { .sheet { left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; max-height: 82%; border-radius: 30px; } }
-.sheet .close { position: absolute; top: 18px; right: 18px; width: 36px; height: 36px; border-radius: 18px; border: 0; background: rgba(245, 245, 247, 0.1); cursor: pointer; display: grid; place-items: center; }
+.sheet .close { position: absolute; top: 18px; right: 18px; width: 36px; height: 36px; border-radius: 18px; border: 0; background: rgba(245, 245, 247, 0.1); cursor: pointer; display: grid; place-items: center; transition: translate 0.3s var(--out), background 0.25s var(--out); }
+.sheet .close:hover { background: rgba(245, 245, 247, 0.16); }
 .sheet .close svg { width: 14px; height: 14px; }
 .sheet h2 { margin: 12px 0 18px; font: 600 24px/1.2 var(--sans); letter-spacing: -0.02em; padding-right: 40px; }
 .sheet .witness { margin-bottom: 14px; }
@@ -419,11 +487,32 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
 
 /* A small confirmation that materialises in glass */
 .toast {
-  position: absolute; z-index: 30; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); transform: translate(-50%, 8px);
-  height: 40px; padding: 0 18px; border-radius: 20px; display: flex; align-items: center;
-  font: 500 13px/1 var(--sans); color: var(--ink); opacity: 0; pointer-events: none; transition: opacity 0.3s var(--out), transform 0.5s var(--spring);
+  position: absolute; z-index: 30; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); transform: translateX(-50%);
+  height: 40px; padding: 0 18px; border-radius: 20px; display: flex; align-items: center; --p: 0;
+  font: 500 13px/1 var(--sans); color: var(--ink); pointer-events: none; visibility: hidden;
 }
-.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.show { visibility: visible; }
+.toast span { opacity: clamp(0, calc((var(--p) - 0.4) * 2.5), 1); }
+.toast:not(.show) span { opacity: 0; transition: opacity 0.12s linear; }
+.no-gl .toast, .solid .toast { opacity: 0; transform: translate(-50%, 8px); transition: opacity 0.3s var(--out), transform var(--d-snappy) var(--e-snappy); visibility: visible; }
+.no-gl .toast.show, .solid .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.no-gl .toast span, .solid .toast span { opacity: 1; }
+
+/* A context menu, grown out of the point that was pressed */
+.menu {
+  position: absolute; z-index: 40; min-width: 250px; padding: 6px; border-radius: 20px; display: grid; gap: 1px; --p: 0;
+}
+.menu[hidden] { display: none; }
+.menu button {
+  display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 14px 0 12px; border: 0; border-radius: 13px; background: none;
+  font: 500 14px/1 var(--sans); color: var(--ink); text-align: left; cursor: pointer;
+  opacity: clamp(0, calc((var(--p) - 0.35) * 2.4), 1); transform: translateY(calc((1 - var(--p)) * -4px));
+}
+.menu button svg { width: 16px; height: 16px; color: var(--ink-2); flex: none; }
+.menu button:focus-visible { outline: none; background: rgba(245, 245, 247, 0.1); }
+.menu:not(.open) button { opacity: 0; transition: opacity 0.1s linear; }
+.no-gl .menu button:hover, .solid .menu button:hover { background: rgba(245, 245, 247, 0.08); }
+.no-gl .menu, .solid .menu { --p: 1; }
 @media (max-width: 760px) { .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); } }
 
 </style>
@@ -435,7 +524,6 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
   <header class="topbar">
     <a class="brand" href="#now" aria-label="Lancea Watch, the agent on a leash"><b>Lancea</b><span class="label">Agent on a leash · DELICTI</span></a>
     <nav class="tabs glass" id="tabs" role="tablist" aria-label="Views">
-      <span id="tab-indicator" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none"></span>
       <button class="tab" role="tab" id="tab-now" aria-controls="view-now" aria-selected="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.8 13.9 10.1 21.2 12 13.9 13.9 12 21.2 10.1 13.9 2.8 12 10.1 10.1Z"/></svg><span>Now</span></button>
       <button class="tab" role="tab" id="tab-timeline" aria-controls="view-timeline" aria-selected="false" tabindex="-1">
@@ -447,7 +535,10 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
       <button class="tab" role="tab" id="tab-how" aria-controls="view-how" aria-selected="false" tabindex="-1">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9.2" cy="12" r="5.6"/><circle cx="14.8" cy="12" r="5.6"/></svg><span>How it works</span></button>
     </nav>
-    <div class="status glass" id="status" role="status"><i class="dot"></i><span class="label on" id="status-text">Loading</span><span class="label net">XRPL testnet × Flare Coston2</span></div>
+    <div class="status glass" id="status" role="button" tabindex="0" aria-live="polite" aria-label="The feed: tap for details">
+      <span class="isl isl-compact" id="island-compact"><i class="dot"></i><span class="label on" id="status-text">Loading</span><span class="label net">XRPL testnet × Flare Coston2</span></span>
+      <span class="isl isl-wide" id="island-wide" aria-hidden="true"></span>
+    </div>
   </header>
 
   <main class="scroller" id="scroller">
@@ -461,6 +552,15 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
             <p class="sub rise" id="now-sub"></p>
             <div class="figure rise"><b id="now-spent">$0.00</b><span id="now-of"></span></div>
             <div class="facts rise" id="now-facts"></div>
+            <div class="replay rise" id="rp">
+              <span class="label">Replay</span>
+              <div class="rp-track" id="rp-track">
+                <div class="rp-line"><i class="rp-fill"></i></div>
+                <div class="rp-ticks" id="rp-ticks" aria-hidden="true"></div>
+                <span class="rp-knob glass" id="rp-knob" role="slider" tabindex="0" aria-label="Replay the agent's history" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-valuetext="Now"></span>
+              </div>
+              <span class="label on rp-time" id="rp-time">Now</span>
+            </div>
           </div>
           <div class="orbit rise" id="orbit">
             <div class="ring glass" id="ring" aria-hidden="true"></div>
@@ -493,14 +593,14 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
       </section>
 
       <section class="view" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline" hidden>
-        <div class="span-12 toolbar rise">
-          <div class="segment glass" id="filters" role="group" aria-label="Show">
+        <div class="span-12 toolbar">
+          <div class="segment glass rise" id="filters" role="group" aria-label="Show">
             <button data-f="all" aria-pressed="true">All <small></small></button>
             <button data-f="signed" aria-pressed="false">Co-signed <small></small></button>
             <button data-f="refused" aria-pressed="false">Refused <small></small></button>
             <button data-f="notes" aria-pressed="false">Notes <small></small></button>
           </div>
-          <label class="search glass" for="q"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.6"/><path d="m10.6 10.6 3.4 3.4"/></svg><input id="q" type="search" placeholder="Search reasons, amounts, hashes" autocomplete="off" aria-label="Search the timeline"></label>
+          <label class="search glass rise" for="q"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.6"/><path d="m10.6 10.6 3.4 3.4"/></svg><input id="q" type="search" placeholder="Search reasons, amounts, hashes" autocomplete="off" aria-label="Search the timeline"><kbd aria-hidden="true">/</kbd></label>
         </div>
         <div class="span-12" id="days" style="display:grid;gap:20px"></div>
       </section>
@@ -533,9 +633,9 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
           <div class="pane-head"><h2>Who can move the money</h2><span class="label">Quorum 2 · master key disabled</span></div>
           <p style="margin:0 0 18px;color:var(--ink-2);max-width:62ch">The account on the XRP Ledger needs signatures worth 2. Choose who signs and see what can happen.</p>
           <div class="signers">
-            <button class="signer" data-k="owner" aria-pressed="false"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i></i></span><b>The owner</b><small>Weight 2 · your key, on your computer</small></button>
-            <button class="signer" data-k="agent" aria-pressed="true"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i class="off"></i></span><b>The agent</b><small>Weight 1 · proposes and signs first</small></button>
-            <button class="signer" data-k="guard" aria-pressed="true"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i class="off"></i></span><b>The guard</b><small>Weight 1 · co-signs inside your rules</small></button>
+            <button class="signer" data-k="owner" aria-pressed="false"><span class="switch" aria-hidden="true"><i></i></span><span class="weight"><i></i><i></i></span><b>The owner</b><small>Weight 2 · your key, on your computer</small></button>
+            <button class="signer" data-k="agent" aria-pressed="true"><span class="switch" aria-hidden="true"><i></i></span><span class="weight"><i></i><i class="off"></i></span><b>The agent</b><small>Weight 1 · proposes and signs first</small></button>
+            <button class="signer" data-k="guard" aria-pressed="true"><span class="switch" aria-hidden="true"><i></i></span><span class="weight"><i></i><i class="off"></i></span><b>The guard</b><small>Weight 1 · co-signs inside your rules</small></button>
           </div>
           <div class="quorum"><div class="q" aria-hidden="true"><i></i><i></i></div><p class="verdict-line" id="k-verdict" aria-live="polite"></p></div>
         </div>
@@ -605,6 +705,7 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
   </aside>
   <div class="startip" id="startip" role="tooltip"></div>
   <div class="toast glass" id="toast" role="status" aria-live="polite"><span></span></div>
+  <div class="menu" id="menu" role="menu" aria-label="Decision" hidden></div>
 </div>
 <script type="application/json" id="sample">{"version":1,"generatedAt":"2026-09-28T17:22:16.242Z","networks":{"xrpl":"testnet","flare":"coston2","flareFork":false},"explorers":{"xrplTx":"https://testnet.xrpl.org/transactions/","xrplAccount":"https://testnet.xrpl.org/accounts/","flareTx":"https://coston2-explorer.flare.network/tx/","flareAddress":"https://coston2-explorer.flare.network/address/"},"account":{"address":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","personalAccount":"0x953E5e9DAC303918fCa12e2a67743ae2157e04F5","vaultName":"Firelight","xrpDrops":"97994680","fxrp":"20000000","shares":"78941615"},"keys":{"owner":"rBVLFttVTHDMyNpxLXmjsbVGMwc13uv2a1","agent":"rPWDAWM1MUPPoaLiePm6yRp66HH18Uo7qq","guard":"rG3maSxmDjLLXTQJXLi1jz1mPqNoFffsJw","guardFlare":"0x676359c706C9CF2931f6A9B8bF4b4CaaBA8b5Db6","agentEvm":"0xCD0C9af54aad6BAAb4c4dA261006106C5F049772"},"umbrella":{"id":"30","meter":"0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D","budgetUsd6":"500000000","spentUsd6":"150297144","tripwire":"1","strikes":"0","tripped":false},"fuel":{"guardWei":"101772876700000000000","agentWei":"438704350000000000"},"guard":[{"at":"2026-09-28T17:22:03.607Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq","amountDrops":"1000","feeDrops":"30","sequence":21121937,"memo":"110000000000000001312D000000000100000000000000000000000000000000","action":{"flow":"reference","kind":"vault","vault":"firelight","action":"deposit","walletId":0,"value":"20000000","vaultId":1}},"claim":{"intent":{"kind":"deposit","amount":"20000000","vaultId":1},"why":"20 FXRP sits idle in my personal account: deposit 20 into vault 1","by":"rules"},"decision":{"signed":true,"hash":"336990B0C9255C5DC2F09C77A98E7F00225C39940E61673BAFA276D7B0A0533E","usd6":"1553","reservation":"0x4a69cbc5c02fad6af2717410d4facee95e2239d2f9277a30a59cc70526e0d0a5","tallyUsd6":"150297144"}},{"at":"2026-09-28T17:16:48.866Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p","amountDrops":"20000000","feeDrops":"30","sequence":21121936,"memo":"464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5","action":{"flow":"mint","kind":"mint-to","recipient":"0x953e5e9dac303918fca12e2a67743ae2157e04f5"}},"claim":{"intent":{"kind":"mint","drops":"20000000"},"why":"47.99574 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},"decision":{"signed":true,"hash":"5D4D5BE8F0725ED414DA17BEC2C8AC85E22C5156FC0F15F58747CBAB24AF2392","usd6":"30203465","reservation":"0x9421533678b69d84b7d318b1eff96f3ec54f03bd4d6085a3c1d1a8cafaaec491","tallyUsd6":"150295591"}},{"at":"2026-09-28T17:11:33.693Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq","amountDrops":"1000","feeDrops":"30","sequence":21121935,"memo":"110000000000000001312D000000000100000000000000000000000000000000","action":{"flow":"reference","kind":"vault","vault":"firelight","action":"deposit","walletId":0,"value":"20000000","vaultId":1}},"claim":{"intent":{"kind":"deposit","amount":"20000000","vaultId":1},"why":"20.2 FXRP sits idle in my personal account: deposit 20 into vault 1","by":"rules"},"decision":{"signed":true,"hash":"38EE5652CD1E1914CA0C183964AF10F03E7E1C1959DDCC6498861269F5BFCFE7","usd6":"1535","reservation":"0x2f5b74cae0be1ae3ae9014720c165dcf96558ba6167e6af2f1da688e74b9f18b","tallyUsd6":"120092126"}},{"at":"2026-09-28T17:06:19.007Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p","amountDrops":"20000000","feeDrops":"30","sequence":21121934,"memo":"464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5","action":{"flow":"mint","kind":"mint-to","recipient":"0x953e5e9dac303918fca12e2a67743ae2157e04f5"}},"claim":{"intent":{"kind":"mint","drops":"20000000"},"why":"67.9968 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},"decision":{"signed":true,"hash":"40E81255C7C331064BD6187E48DB3A3781E2382ECEBED185B5BD13EE6017A8C5","usd6":"29853304","reservation":"0x127d1488512d22d534615a4cf4370675c90af6f130cb2350b334b5771bbd4965","tallyUsd6":"120090591"}},{"at":"2026-09-28T17:01:04.380Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq","amountDrops":"1000","feeDrops":"30","sequence":21121933,"memo":"110000000000000001312D000000000100000000000000000000000000000000","action":{"flow":"reference","kind":"vault","vault":"firelight","action":"deposit","walletId":0,"value":"20000000","vaultId":1}},"claim":{"intent":{"kind":"deposit","amount":"20000000","vaultId":1},"why":"20.4 FXRP sits idle in my personal account: deposit 20 into vault 1","by":"rules"},"decision":{"signed":true,"hash":"D9FBF3C75F80B8C20F1229916BB0F764B4D899EF44B40DDB121F51BA0BFCE485","usd6":"1542","reservation":"0xa054b67081a63227847abaccf0806302423d4c88c6a5c607f89012e06b5aaebd","tallyUsd6":"90237287"}},{"at":"2026-09-28T16:55:53.133Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p","amountDrops":"20000000","feeDrops":"30","sequence":21121932,"memo":"464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5","action":{"flow":"mint","kind":"mint-to","recipient":"0x953e5e9dac303918fca12e2a67743ae2157e04f5"}},"claim":{"intent":{"kind":"mint","drops":"20000000"},"why":"87.99786 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},"decision":{"signed":true,"hash":"FA326516DF554E946C6F9C1B6B33F1BA21C4587DFDF0C75639E327F8D498136E","usd6":"30001005","reservation":"0x6c434e010c0cf9319ed36744e932857e905b69debed45511ad6ceedab48672cf","tallyUsd6":"90235745"}},{"at":"2026-09-28T16:50:38.514Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq","amountDrops":"1000","feeDrops":"30","sequence":21121931,"memo":"110000000000000001312D000000000100000000000000000000000000000000","action":{"flow":"reference","kind":"vault","vault":"firelight","action":"deposit","walletId":0,"value":"20000000","vaultId":1}},"claim":{"intent":{"kind":"deposit","amount":"20000000","vaultId":1},"why":"20.6 FXRP sits idle in my personal account: deposit 20 into vault 1","by":"rules"},"decision":{"signed":true,"hash":"F892A7AC29351071281F5EFFA5C3B0C4157ED4C02EE68C524197B016293ADDF6","usd6":"1542","reservation":"0x8514380d44eab6e0156583528289db63ae5b9de73edc3369e15570cf8e67e3fd","tallyUsd6":"60234740"}},{"at":"2026-09-28T16:45:23.692Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p","amountDrops":"20000000","feeDrops":"30","sequence":21121930,"memo":"464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5","action":{"flow":"mint","kind":"mint-to","recipient":"0x953e5e9dac303918fca12e2a67743ae2157e04f5"}},"claim":{"intent":{"kind":"mint","drops":"20000000"},"why":"107.99892 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},"decision":{"signed":true,"hash":"CB725F4F8D744031498B02B0E2649D9C9C6C5882A25A0FEB89789D4B20E102DF","usd6":"30017545","reservation":"0x11a5f6931a06e0f7fe305528ceb2ae07432d7d5e424c22be9d2eaa647e52166e","tallyUsd6":"60233198"}},{"at":"2026-09-28T16:40:08.577Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq","amountDrops":"1000","feeDrops":"30","sequence":21121929,"memo":"11000000000000000121EAC00000000100000000000000000000000000000000","action":{"flow":"reference","kind":"vault","vault":"firelight","action":"deposit","walletId":0,"value":"19000000","vaultId":1}},"claim":{"intent":{"kind":"deposit","amount":"19000000","vaultId":1},"why":"19.8 FXRP sits idle in my personal account: deposit 19 into vault 1","by":"rules"},"decision":{"signed":true,"hash":"AD1374B1519969502C902A4EE8067DFCC522E54F74FF2E9C71ED94AAFF374D6A","usd6":"1548","reservation":"0xee3de9eabe7418c841040746b027842f7767ccdc069279a3ec9b4c4c2daa8fd0","tallyUsd6":"30215653"}},{"at":"2026-09-28T16:34:57.670Z","kind":"decision","tx":{"type":"Payment","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","destination":"rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p","amountDrops":"20000000","feeDrops":"30","sequence":21121928,"memo":"464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5","action":{"flow":"mint","kind":"mint-to","recipient":"0x953e5e9dac303918fca12e2a67743ae2157e04f5"}},"claim":{"intent":{"kind":"mint","drops":"20000000"},"why":"27.99998 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},"decision":{"signed":true,"hash":"9ECE96510AA47BC647D3D4EFEA6818AB344CF9A11834001F31DFF27C086AB219","usd6":"30214105","reservation":"0xfa6d3c11e0f0f7400eec60dc8643a2bf18930644afebf8171ca84d729762f981","tallyUsd6":"30214105"}},{"at":"2026-09-28T16:34:34.221Z","kind":"start","guard":"rG3maSxmDjLLXTQJXLi1jz1mPqNoFffsJw","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","umbrella":"30"}],"autopilot":[{"at":"2026-09-28T17:22:03.608Z","kind":"verdict","step":{"kind":"deposit","amount":"20000000","vaultId":1},"verdict":{"signed":true,"hash":"336990B0C9255C5DC2F09C77A98E7F00225C39940E61673BAFA276D7B0A0533E","usd6":"1553","reservation":"0x4a69cbc5c02fad6af2717410d4facee95e2239d2f9277a30a59cc70526e0d0a5","tallyUsd6":"150297144"}},{"at":"2026-09-28T17:21:50.888Z","kind":"proposal","state":{"xrpDrops":"97995710","fxrp":"20000000","shares":{"1":"78941615"}},"step":{"kind":"deposit","amount":"20000000","vaultId":1},"why":"20 FXRP sits idle in my personal account: deposit 20 into vault 1","by":"rules"},{"at":"2026-09-28T17:21:49.712Z","kind":"settled","step":{"kind":"mint","drops":"20000000"},"afterS":300,"state":{"xrpDrops":"97995710","fxrp":"20000000","shares":{"1":"78941615"}}},{"at":"2026-09-28T17:16:48.866Z","kind":"verdict","step":{"kind":"mint","drops":"20000000"},"verdict":{"signed":true,"hash":"5D4D5BE8F0725ED414DA17BEC2C8AC85E22C5156FC0F15F58747CBAB24AF2392","usd6":"30203465","reservation":"0x9421533678b69d84b7d318b1eff96f3ec54f03bd4d6085a3c1d1a8cafaaec491","tallyUsd6":"150295591"}},{"at":"2026-09-28T17:16:36.091Z","kind":"proposal","state":{"xrpDrops":"117995740","fxrp":"200000","shares":{"1":"78941615"}},"step":{"kind":"mint","drops":"20000000"},"why":"47.99574 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},{"at":"2026-09-28T17:16:34.661Z","kind":"settled","step":{"kind":"deposit","amount":"20000000","vaultId":1},"afterS":300,"state":{"xrpDrops":"117995740","fxrp":"200000","shares":{"1":"78941615"}}},{"at":"2026-09-28T17:11:33.694Z","kind":"verdict","step":{"kind":"deposit","amount":"20000000","vaultId":1},"verdict":{"signed":true,"hash":"38EE5652CD1E1914CA0C183964AF10F03E7E1C1959DDCC6498861269F5BFCFE7","usd6":"1535","reservation":"0x2f5b74cae0be1ae3ae9014720c165dcf96558ba6167e6af2f1da688e74b9f18b","tallyUsd6":"120092126"}},{"at":"2026-09-28T17:11:21.124Z","kind":"proposal","state":{"xrpDrops":"117996770","fxrp":"20200000","shares":{"1":"58956396"}},"step":{"kind":"deposit","amount":"20000000","vaultId":1},"why":"20.2 FXRP sits idle in my personal account: deposit 20 into vault 1","by":"rules"},{"at":"2026-09-28T17:11:19.939Z","kind":"settled","step":{"kind":"mint","drops":"20000000"},"afterS":300,"state":{"xrpDrops":"117996770","fxrp":"20200000","shares":{"1":"58956396"}}},{"at":"2026-09-28T17:06:19.008Z","kind":"verdict","step":{"kind":"mint","drops":"20000000"},"verdict":{"signed":true,"hash":"40E81255C7C331064BD6187E48DB3A3781E2382ECEBED185B5BD13EE6017A8C5","usd6":"29853304","reservation":"0x127d1488512d22d534615a4cf4370675c90af6f130cb2350b334b5771bbd4965","tallyUsd6":"120090591"}},{"at":"2026-09-28T17:06:06.520Z","kind":"proposal","state":{"xrpDrops":"137996800","fxrp":"400000","shares":{"1":"58956396"}},"step":{"kind":"mint","drops":"20000000"},"why":"67.9968 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},{"at":"2026-09-28T17:06:05.319Z","kind":"settled","step":{"kind":"deposit","amount":"20000000","vaultId":1},"afterS":300,"state":{"xrpDrops":"137996800","fxrp":"400000","shares":{"1":"58956396"}}},{"at":"2026-09-28T17:01:04.381Z","kind":"verdict","step":{"kind":"deposit","amount":"20000000","vaultId":1},"verdict":{"signed":true,"hash":"D9FBF3C75F80B8C20F1229916BB0F764B4D899EF44B40DDB121F51BA0BFCE485","usd6":"1542","reservation":"0xa054b67081a63227847abaccf0806302423d4c88c6a5c607f89012e06b5aaebd","tallyUsd6":"90237287"}},{"at":"2026-09-28T17:00:55.586Z","kind":"proposal","state":{"xrpDrops":"137997830","fxrp":"20400000","shares":{"1":"38971177"}},"step":{"kind":"deposit","amount":"20000000","vaultId":1},"why":"20.4 FXRP sits idle in my personal account: deposit 20 into vault 1","by":"rules"},{"at":"2026-09-28T17:00:54.202Z","kind":"settled","step":{"kind":"mint","drops":"20000000"},"afterS":300,"state":{"xrpDrops":"137997830","fxrp":"20400000","shares":{"1":"38971177"}}},{"at":"2026-09-28T16:55:53.134Z","kind":"verdict","step":{"kind":"mint","drops":"20000000"},"verdict":{"signed":true,"hash":"FA326516DF554E946C6F9C1B6B33F1BA21C4587DFDF0C75639E327F8D498136E","usd6":"30001005","reservation":"0x6c434e010c0cf9319ed36744e932857e905b69debed45511ad6ceedab48672cf","tallyUsd6":"90235745"}},{"at":"2026-09-28T16:55:40.644Z","kind":"proposal","state":{"xrpDrops":"157997860","fxrp":"600000","shares":{"1":"38971177"}},"step":{"kind":"mint","drops":"20000000"},"why":"87.99786 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},{"at":"2026-09-28T16:55:39.458Z","kind":"settled","step":{"kind":"deposit","amount":"20000000","vaultId":1},"afterS":300,"state":{"xrpDrops":"157997860","fxrp":"600000","shares":{"1":"38971177"}}},{"at":"2026-09-28T16:50:38.515Z","kind":"verdict","step":{"kind":"deposit","amount":"20000000","vaultId":1},"verdict":{"signed":true,"hash":"F892A7AC29351071281F5EFFA5C3B0C4157ED4C02EE68C524197B016293ADDF6","usd6":"1542","reservation":"0x8514380d44eab6e0156583528289db63ae5b9de73edc3369e15570cf8e67e3fd","tallyUsd6":"60234740"}},{"at":"2026-09-28T16:50:25.824Z","kind":"proposal","state":{"xrpDrops":"157998890","fxrp":"20600000","shares":{"1":"18985958"}},"step":{"kind":"deposit","amount":"20000000","vaultId":1},"why":"20.6 FXRP sits idle in my personal account: deposit 20 into vault 1","by":"rules"},{"at":"2026-09-28T16:50:24.631Z","kind":"settled","step":{"kind":"mint","drops":"20000000"},"afterS":300,"state":{"xrpDrops":"157998890","fxrp":"20600000","shares":{"1":"18985958"}}},{"at":"2026-09-28T16:45:23.693Z","kind":"verdict","step":{"kind":"mint","drops":"20000000"},"verdict":{"signed":true,"hash":"CB725F4F8D744031498B02B0E2649D9C9C6C5882A25A0FEB89789D4B20E102DF","usd6":"30017545","reservation":"0x11a5f6931a06e0f7fe305528ceb2ae07432d7d5e424c22be9d2eaa647e52166e","tallyUsd6":"60233198"}},{"at":"2026-09-28T16:45:10.759Z","kind":"proposal","state":{"xrpDrops":"177998920","fxrp":"800000","shares":{"1":"18985958"}},"step":{"kind":"mint","drops":"20000000"},"why":"107.99892 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},{"at":"2026-09-28T16:45:09.539Z","kind":"settled","step":{"kind":"deposit","amount":"19000000","vaultId":1},"afterS":300,"state":{"xrpDrops":"177998920","fxrp":"800000","shares":{"1":"18985958"}}},{"at":"2026-09-28T16:40:08.578Z","kind":"verdict","step":{"kind":"deposit","amount":"19000000","vaultId":1},"verdict":{"signed":true,"hash":"AD1374B1519969502C902A4EE8067DFCC522E54F74FF2E9C71ED94AAFF374D6A","usd6":"1548","reservation":"0xee3de9eabe7418c841040746b027842f7767ccdc069279a3ec9b4c4c2daa8fd0","tallyUsd6":"30215653"}},{"at":"2026-09-28T16:39:59.785Z","kind":"proposal","state":{"xrpDrops":"77999950","fxrp":"19800000","shares":{"1":"0"}},"step":{"kind":"deposit","amount":"19000000","vaultId":1},"why":"19.8 FXRP sits idle in my personal account: deposit 19 into vault 1","by":"rules"},{"at":"2026-09-28T16:39:58.582Z","kind":"settled","step":{"kind":"mint","drops":"20000000"},"afterS":300,"state":{"xrpDrops":"77999950","fxrp":"19800000","shares":{"1":"0"}}},{"at":"2026-09-28T16:34:57.671Z","kind":"verdict","step":{"kind":"mint","drops":"20000000"},"verdict":{"signed":true,"hash":"9ECE96510AA47BC647D3D4EFEA6818AB344CF9A11834001F31DFF27C086AB219","usd6":"30214105","reservation":"0xfa6d3c11e0f0f7400eec60dc8643a2bf18930644afebf8171ca84d729762f981","tallyUsd6":"30214105"}},{"at":"2026-09-28T16:34:48.617Z","kind":"proposal","state":{"xrpDrops":"97999980","fxrp":"0","shares":{"1":"0"}},"step":{"kind":"mint","drops":"20000000"},"why":"27.99998 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)","by":"rules"},{"at":"2026-09-28T16:34:46.561Z","kind":"start","agent":"rPWDAWM1MUPPoaLiePm6yRp66HH18Uo7qq","account":"rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn","umbrella":"30","brain":"rules","tickSeconds":300},{"at":"2026-09-28T16:34:46.526Z","kind":"acknowledged","umbrella":"30","tx":"0x70f69a759e3bc9a4308359466c797bf515d2b36b7d9f93e8a8d9d3f1386590c3"}],"note":"A snapshot of the live demo from 28 September 2026, shown because the live feed could not be reached."}</script>
 <script>
@@ -616,22 +717,86 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
  * Pass 2 draws clear Liquid Glass wherever the page marks a pane, a bar or the budget ring: a squircle
  * bevel, refraction per colour channel (IOR 1.44 / 1.50 / 1.57), weak Fresnel, a rim lit by a light
  * that moves and by the pointer, a hairline, and a soft shadow seen through the glass as well.
- * Glass appears by gaining its lensing, never by fading. Drops merge with Apple's neck (smooth-min).
+ *
+ * Two layers of glass, never glass on glass: the page's glass (panes, bars, the ring) and, above it,
+ * the overlay (the decision sheet, menus, toasts), which casts its shadow on the page and is never
+ * merged with it. Glass appears by gaining its lensing, never by fading (Apple's materialize), and
+ * moves like a liquid: every shape in flight is a rectangle on four springs (the edge that leads is
+ * stiffer than the one that trails, so it stretches as it travels and settles with a little bounce),
+ * and shapes in flight blend with each other the way a GlassEffectContainer blends glass within its
+ * spacing (a smooth minimum, Apple's neck). Springs are SwiftUI's: Spring(duration:bounce:).
  * The recipe is the one proven on the DELICTI hero (claude/45); here it runs live.
  */
 const Glass = (() => {
-  const MAX = 24, MAX_DROPS = 5;
+  const MAXB = 28, MAXL = 6, MAXO = 6, MAXD = 8;
   const mq = (q) => { try { return matchMedia(q); } catch { return { matches: false, addEventListener() {} }; } };
   const motionQ = mq("(prefers-reduced-motion: reduce)"), transQ = mq("(prefers-reduced-transparency: reduce)");
   const fineQ = mq("(hover: hover) and (pointer: fine)");
+
+  // SwiftUI's Spring(duration:bounce:) as the stiffness and damping of a unit mass:
+  // k = (2π / duration)², c = 4π (1 − bounce) / duration
+  const spr = (duration, bounce = 0) => ({ k: (2 * Math.PI / duration) ** 2, c: (4 * Math.PI * (1 - bounce)) / duration });
+  const SP = {
+    lens: spr(0.52, 0.14), fast: spr(0.2, 0), press: spr(0.28, 0.12), release: spr(0.5, 0.42),
+    fill: spr(0.8, 0.16), focus: spr(0.66, 0), layout: spr(0.42, 0.1), radius: spr(0.5, 0),
+    flowLead: spr(0.52, 0.12), flowTrail: spr(0.7, 0.12),
+    sheetLead: spr(0.46, 0.2), sheetTrail: spr(0.62, 0.2), shrink: spr(0.42, 0), grow: spr(0.46, 0),
+    lensLead: spr(0.34, 0.14), lensTrail: spr(0.54, 0.14), lift: spr(0.32, 0.24),
+    hoverLead: spr(0.24, 0.1), hoverTrail: spr(0.36, 0.1), hoverIn: spr(0.3, 0),
+    drop: spr(0.39, 0.25), sat1: spr(0.3, 0.3), sat2: spr(0.38, 0.28),
+    jelly: spr(0.34, 0.52), pop: spr(0.4, 0.34), evaporate: spr(1.1, 0),
+  };
+  const spring = (o, key, vkey, target, s, dt) => {
+    for (let t = dt; t > 1e-6; t -= 0.016) { const h = Math.min(0.016, t), f = -s.k * (o[key] - target) - s.c * o[vkey]; o[vkey] += f * h; o[key] += o[vkey] * h; }
+  };
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const box = (l, t, r, b) => ({ left: l, top: t, right: r, bottom: b, width: r - l, height: b - t });
+  const plain = (r) => box(r.left, r.top, r.right, r.bottom);
+  const around = (x, y, w, h = w) => box(x - w / 2, y - h / 2, x + w / 2, y + h / 2);
+  const mid = (r) => [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
+  const scaled = (r, k) => { const [x, y] = mid(r); return around(x, y, (r.right - r.left) * k, (r.bottom - r.top) * k); };
+  const rdist = (a, b) => Math.max(Math.abs(a.left - b.left), Math.abs(a.right - b.right), Math.abs(a.top - b.top), Math.abs(a.bottom - b.bottom));
+  const radiusOf = (el) => { try { return parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0; } catch { return 0; } };
+
+  /** A rectangle of liquid: four edges on springs. The edge that leads the motion is stiffer than the
+   *  one that trails, so the shape stretches along its path and bunches up, with a bounce, on arrival. */
+  class Liquid {
+    constructor(r, q = 0) { this.set(r, q); }
+    set(r, q = this.q ?? 0) { this.l = r.left; this.r = r.right; this.t = r.top; this.b = r.bottom; this.q = q; this.vl = this.vr = this.vt = this.vb = this.vq = 0; return this; }
+    step(g, gq, dt, lead, trail) {
+      const dx = (g.left + g.right - this.l - this.r) / 2, dy = (g.top + g.bottom - this.t - this.b) / 2;
+      const kx = Math.abs(dx) < 1 ? [lead, lead] : dx > 0 ? [trail, lead] : [lead, trail];
+      const ky = Math.abs(dy) < 1 ? [lead, lead] : dy > 0 ? [trail, lead] : [lead, trail];
+      spring(this, "l", "vl", g.left, kx[0], dt); spring(this, "r", "vr", g.right, kx[1], dt);
+      spring(this, "t", "vt", g.top, ky[0], dt); spring(this, "b", "vb", g.bottom, ky[1], dt);
+      if (gq != null) spring(this, "q", "vq", gq, SP.radius, dt);
+      if (this.r < this.l + 1) { const m = (this.l + this.r) / 2; this.l = m - 0.5; this.r = m + 0.5; }
+      if (this.b < this.t + 1) { const m = (this.t + this.b) / 2; this.t = m - 0.5; this.b = m + 0.5; }
+    }
+    get rect() { return box(this.l, this.t, this.r, this.b); }
+    speed() { return Math.max(Math.abs(this.vl), Math.abs(this.vr), Math.abs(this.vt), Math.abs(this.vb)); }
+    dist(g) { return rdist(this, { left: g.left, right: g.right, top: g.top, bottom: g.bottom }); }
+  }
+  // (Liquid keeps l/r/t/b; rdist reads left/right/top/bottom)
+  Object.defineProperties(Liquid.prototype, {
+    left: { get() { return this.l; } }, right: { get() { return this.r; } },
+    top: { get() { return this.t; } }, bottom: { get() { return this.b; } },
+  });
+
   const S = {
     ok: false, gl: null, cv: null, W: 0, H: 0, PX: 1, scale: 1,
     reduced: motionQ.matches, solid: transQ.matches,
-    t0: performance.now(), now: 0, last: 0, frame: 0, fade: 0,
-    shapes: [], drops: [], ripples: [], bursts: [], labels: [],
-    marks: [], path: [], hover: -1,
+    t0: performance.now(), now: 0, dt: 0.016, last: 0, frame: 0, fade: 0,
+    shapes: [], blobs: [], overs: [], lenses: [], drops: [], bursts: [], labels: [],
+    marks: [], path: [], hover: -1, gk: 0, okk: 0, touch: null, flowId: 0, scroller: null,
+    hoverEl: null, hoverOpt: null,
     focus: { x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, init: false },
-    cursor: { x: -1e4, y: -1e4, px: -1e4, py: -1e4, vx: 0, vy: 0, on: 0, onT: 0, glass: 0, glassT: 0, moved: 0, down: 0, fine: fineQ.matches },
+    cursor: {
+      x: -1e4, y: -1e4, px: -1e4, py: -1e4, vx: 0, vy: 0, on: 0, von: 0, onT: 0, glass: 0, moved: -99, down: 0,
+      press: 0, vpress: 0, st: 0, vst: 0, ax: 1, ay: 0, fine: fineQ.matches,
+      sat: [{ x: -1e4, y: -1e4, vx: 0, vy: 0 }, { x: -1e4, y: -1e4, vx: 0, vy: 0 }],
+    },
     scroll: { y: 0, py: 0, top: 0, bottom: 0, fade: 26 },
     light: 0, stats: { frames: 0, ms: 0 }, slowFrames: 0,
     meteors: [{ t0: -99, dur: 1, a: [0, 0], b: [0, 0] }, { t0: -99, dur: 1, a: [0, 0], b: [0, 0] }], nextMeteor: 4,
@@ -853,15 +1018,18 @@ uniform float uA;
 out vec4 o;
 void main() { o = vec4(vec3(uA), 1.); }`;
 
-  // The glass.
+  // The glass. Two layers: the page's glass, and the overlay above it (a sheet, a menu, a toast).
   const FS_GLASS = `#version 300 es
 precision highp float;
 uniform sampler2D uSky;
 uniform vec2 uRes; uniform float uPx, uTime, uSolid;
-uniform int uN; uniform vec4 uA[${MAX}]; uniform vec4 uB[${MAX}]; uniform vec4 uC[${MAX}];
-uniform int uND; uniform vec4 uD[${MAX_DROPS}];
-uniform vec4 uRip[4];
+uniform int uN; uniform vec4 uA[${MAXB}]; uniform vec4 uB[${MAXB}]; uniform vec4 uC[${MAXB}];
+uniform float uGK;
+uniform int uNL; uniform vec4 uLA[${MAXL}]; uniform vec4 uLB[${MAXL}]; uniform float uLL[${MAXL}];
+uniform int uNO; uniform vec4 uOA[${MAXO}]; uniform vec4 uOB[${MAXO}]; uniform float uOK;
+uniform int uND; uniform vec4 uD[${MAXD}]; uniform vec4 uDE[${MAXD}];
 uniform vec4 uCur;
+uniform vec4 uTouch;
 uniform vec2 uLight;
 uniform vec4 uEdge;
 out vec4 o;
@@ -874,27 +1042,42 @@ vec3 sdRR(vec2 p, vec4 a, float r) {
   return vec3(d, g * s);
 }
 vec3 sdRing(vec2 p, vec2 c, float R, float w) { vec2 q = p - c; float l = max(length(q), 1e-3); float s = l < R ? -1. : 1.; return vec3(abs(l - R) - w, q / l * s); }
-vec3 sdCirc(vec2 p, vec2 c, float r) { vec2 q = p - c; float l = max(length(q), 1e-3); return vec3(l - r, q / l); }
-vec3 smin3(vec3 a, vec3 b, float k) { float h = clamp(.5 + .5 * (b.x - a.x) / k, 0., 1.); return vec3(mix(b.x, a.x, h) - k * h * (1. - h), mix(b.yz, a.yz, h)); }
-
+// a drop stretched along its motion: an ellipse (axis e.zw, stretch e.x along it, e.y across)
+vec3 sdDrop(vec2 p, vec4 d, vec4 e) {
+  vec2 q = p - d.xy, ax = e.zw, ay = vec2(-e.w, e.z);
+  vec2 l = vec2(dot(q, ax) / e.x, dot(q, ay) / e.y);
+  float len = max(length(l), 1e-3); vec2 nl = l / len;
+  vec2 g = ax * (nl.x / e.x) + ay * (nl.y / e.y);
+  return vec3((len - d.z) * min(e.x, e.y), g / max(length(g), 1e-4));
+}
+vec3 smin3(vec3 a, vec3 b, float k) {
+  if (k < .01) return a.x < b.x ? a : b;
+  float h = clamp(.5 + .5 * (b.x - a.x) / k, 0., 1.);
+  return vec3(mix(b.x, a.x, h) - k * h * (1. - h), mix(b.yz, a.yz, h));
+}
+float edgeVis(vec2 p) { return smoothstep(uEdge.x, uEdge.x + uEdge.z, p.y) * (1. - smoothstep(uEdge.y - uEdge.z, uEdge.y, p.y)); }
+bool scrolls(int i) { return (int(uC[i].w + .5) & 1) != 0; }
+bool grouped(int i) { return (int(uC[i].w + .5) & 2) != 0; }
 vec3 shapeD(int i, vec2 p) {
-  float k = uB[i].y;
-  if (k > 1.5 && k < 2.5) return sdRing(p, uA[i].xy, uA[i].z, uC[i].y);
+  if (abs(uB[i].y - 2.) < .5) return sdRing(p, uA[i].xy, uA[i].z, uC[i].y);
   return sdRR(p, uA[i], uB[i].x);
 }
-vec3 scene(vec2 p, out int idx, out float dm) {
-  vec3 best = vec3(1e5, 0., 1.); idx = -1; dm = 0.;
-  for (int i = 0; i < ${MAX}; i++) {
+// the page's glass: panes in flight blend with each other (a GlassEffectContainer and its spacing),
+// the rest stay separate, and drops merge with whatever glass they meet
+vec3 sceneBase(vec2 p, out int idx, out float dm) {
+  vec3 best = vec3(1e5, 0., 1.), grp = vec3(1e5, 0., 1.); idx = -1; dm = 0.;
+  int gi = -1; float gd = 1e5;
+  for (int i = 0; i < ${MAXB}; i++) {
     if (i >= uN) break;
-    float k = uB[i].y; if (k > 2.5 && k < 3.5) continue;
-    if (uB[i].z < .003) continue;
     vec3 d = shapeD(i, p);
-    if (d.x < best.x) { best = d; idx = i; }
+    if (grouped(i)) { if (d.x < gd) { gd = d.x; gi = i; } grp = grp.x > 9e4 ? d : smin3(grp, d, uGK); }
+    else if (d.x < best.x) { best = d; idx = i; }
   }
-  for (int j = 0; j < ${MAX_DROPS}; j++) {
+  if (gi >= 0 && grp.x < best.x) { best = grp; idx = gi; }
+  for (int j = 0; j < ${MAXD}; j++) {
     if (j >= uND) break;
     if (uD[j].z < .5) continue;
-    vec3 dd = sdCirc(p, uD[j].xy, uD[j].z);
+    vec3 dd = sdDrop(p, uD[j], uDE[j]);
     float k = (idx >= 0 ? 16. : 24.) * uPx;
     float h = clamp(.5 + .5 * (dd.x - best.x) / k, 0., 1.);
     best = smin3(best, dd, k);
@@ -902,88 +1085,82 @@ vec3 scene(vec2 p, out int idx, out float dm) {
   }
   return best;
 }
-float edgeVis(vec2 p) { return smoothstep(uEdge.x, uEdge.x + uEdge.z, p.y) * (1. - smoothstep(uEdge.y - uEdge.z, uEdge.y, p.y)); }
-float sceneShadow(vec2 p) {
+float shadowBase(vec2 p) {
   float best = 1e5;
-  for (int i = 0; i < ${MAX}; i++) {
+  for (int i = 0; i < ${MAXB}; i++) {
     if (i >= uN) break;
-    float k = uB[i].y; if (k > 2.5 && k < 3.5) continue;
-    float l = uB[i].z * (uC[i].w > .5 ? edgeVis(p) : 1.);
+    float l = uB[i].z * (scrolls(i) ? edgeVis(p) : 1.);
     if (l < .003) continue;
     best = min(best, shapeD(i, p).x + (1. - l) * 40. * uPx);
   }
-  for (int j = 0; j < ${MAX_DROPS}; j++) { if (j >= uND) break; best = min(best, sdCirc(p, uD[j].xy, uD[j].z).x); }
+  for (int j = 0; j < ${MAXD}; j++) { if (j >= uND) break; best = min(best, sdDrop(p, uD[j], uDE[j]).x); }
+  return best;
+}
+// the overlay: its shapes blend only with each other (a sheet and the drop it was pulled from)
+vec3 sceneOver(vec2 p, out int idx) {
+  vec3 best = vec3(1e5, 0., 1.); idx = -1; float bd = 1e5;
+  for (int i = 0; i < ${MAXO}; i++) {
+    if (i >= uNO) break;
+    vec3 d = sdRR(p, uOA[i], uOB[i].x);
+    if (d.x < bd) { bd = d.x; idx = i; }
+    best = best.x > 9e4 ? d : smin3(best, d, uOK);
+  }
+  return best;
+}
+float shadowOver(vec2 p) {
+  float best = 1e5;
+  for (int i = 0; i < ${MAXO}; i++) { if (i >= uNO) break; best = min(best, sdRR(p, uOA[i], uOB[i].x).x + (1. - uOB[i].z) * 60. * uPx); }
   return best;
 }
 vec2 toUV(vec2 p) { return vec2(p.x / uRes.x, 1. - p.y / uRes.y); }
 vec2 bend(vec3 t, float h, float depth, float lim) { vec2 v = t.xy / max(-t.z, .06) * (h + depth); return v / (1. + length(v) / lim); }
 
-void main() {
-  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
-  vec2 uv = gl_FragCoord.xy / uRes;
-  vec3 sky = texture(uSky, uv).rgb;
-  int idx; float dm;
-  vec3 s = scene(p, idx, dm);
-  float d = s.x;
-  float kind = idx >= 0 ? uB[idx].y : 5.;
-  float lens = idx >= 0 ? uB[idx].z : 1.;
-  float vis = 1.;
-  if (idx >= 0 && uC[idx].w > .5) vis = smoothstep(uEdge.x, uEdge.x + uEdge.z, p.y) * (1. - smoothstep(uEdge.y - uEdge.z, uEdge.y, p.y));
-  lens = mix(lens * vis, 1., dm);
-  // the plane under the glass carries a soft, wide shadow, seen through the glass too
-  float sh = sceneShadow(p - vec2(0., 12. * uPx));
-  float shadow = .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, sh)) * lens + .08 * (1. - smoothstep(0., 5. * uPx, d)) * step(0., d) * lens;
-  vec3 plane = sky * (1. - shadow);
-  if (d > 1.5 * uPx || lens < .003) {
-    float hair = exp(-d * d / (.5 * uPx * uPx)) * .25 * lens;
-    o = vec4(plane + hair, 1.); return;
-  }
-  // material: pane, bar, ring, (indicator), sheet, chip; drops are true lenses
+// Liquid Glass, for either layer. kind: 0 pane, 1 bar, 2 ring, 4 sheet, 5 chip; dm: how much of a drop
+vec3 glassAt(vec2 p, vec2 uv, vec3 s, float kind, float hh, float tube, float lens, float lift, float dm, float layer, out float x) {
   float B, Hh, lod, mixb, dim, rimk, hairk;
-  float hh = idx >= 0 ? uA[idx].w : 12. * uPx;
-  if (kind < .5)      { B = 22. * uPx; Hh = 13. * uPx; lod = 3.3; mixb = .86; dim = .26; rimk = .62; hairk = .26; }
-  else if (kind < 1.5){ B = min(hh, 17. * uPx); Hh = B * .95; lod = 2.4; mixb = .74; dim = .26; rimk = 1.;  hairk = .34; }
-  else if (kind < 2.5){ B = uC[idx].y; Hh = uC[idx].y * 1.1; lod = 1.1; mixb = .4; dim = .06; rimk = 1.;  hairk = .36; }
-  else if (kind < 4.5){ B = 26. * uPx; Hh = 15. * uPx; lod = 4.2; mixb = .93; dim = .5;  rimk = .72; hairk = .26; }
-  else                { B = min(hh, 15. * uPx); Hh = B * .9; lod = 2.2; mixb = .66; dim = .22; rimk = .9;  hairk = .32; }
+  if (kind < .5)       { B = min(22. * uPx, hh * .92); Hh = 13. * uPx; lod = 3.3; mixb = .86; dim = .26; rimk = .62; hairk = .26; }
+  else if (kind < 1.5) { B = min(hh, 17. * uPx); Hh = B * .95; lod = 2.4; mixb = .74; dim = .26; rimk = 1.; hairk = .34; }
+  else if (kind < 2.5) { B = tube; Hh = tube * 1.1; lod = 1.1; mixb = .4; dim = .06; rimk = 1.; hairk = .36; }
+  else if (kind < 4.5) { B = min(26. * uPx, hh * .92); Hh = 15. * uPx; lod = 4.2; mixb = .93; dim = .5; rimk = .72; hairk = .26; }
+  else                 { B = min(hh, 15. * uPx); Hh = B * .9; lod = 2.2; mixb = .66; dim = .22; rimk = .9; hairk = .32; }
   float dr = 13. * uPx;
   B = mix(B, dr, dm); Hh = mix(Hh, dr * .9, dm); lod = mix(lod, .6, dm); mixb = mix(mixb, .2, dm); dim = mix(dim, 0., dm); rimk = mix(rimk, 1., dm); hairk = mix(hairk, .36, dm);
-  Hh *= lens * (1. + (idx >= 0 ? uB[idx].w : 0.) * .35);
+  Hh *= lens * (1. + lift * .45);
+  float d = s.x;
   // squircle bevel h = H (1 - (1 - x)^4)^(1/4)
-  float x = clamp(-d / B, 0., 1.);
+  x = clamp(-d / B, 0., 1.);
   float xm = max(x, .0015), om = 1. - xm, base = max(1. - om * om * om * om, 1e-5);
   float h = Hh * pow(base, .25);
   float dh = -(Hh / B) * om * om * om * pow(base, -.75);
   vec2 grad = normalize(s.yz + 1e-6);
   vec2 gh = dh * grad * step(d, 0.);
-  float indFill = 0.;
-  // the tab selection: a lens swelling inside its bar
-  for (int i = 0; i < ${MAX}; i++) {
-    if (i >= uN) break;
-    if (uB[i].y < 2.5 || uB[i].y > 3.5) continue;
-    vec3 di = sdRR(p, uA[i], uB[i].x);
-    indFill = max(indFill, (1. - smoothstep(-1.5 * uPx, .5 * uPx, di.x)) * uB[i].z);
+  // lenses inside the glass: a selection, and the highlight the pointer's drop turns into
+  float fillL = 0.;
+  for (int i = 0; i < ${MAXL}; i++) {
+    if (i >= uNL) break;
+    if (abs(uLL[i] - layer) > .5) continue;
+    vec3 di = sdRR(p, uLA[i], uLB[i].x);
+    fillL = max(fillL, (1. - smoothstep(-1.5 * uPx, .5 * uPx, di.x)) * uLB[i].y * uLB[i].w);
     if (di.x < 0.) {
-      float Bi = min(uA[i].w * .9, 14. * uPx), xi = clamp(-di.x / Bi, 0., 1.), omi = 1. - max(xi, .0015), bi = max(1. - omi * omi * omi * omi, 1e-5);
-      float Hi = uA[i].w * .28 * uB[i].z;
+      float Bi = min(uLA[i].w * .9, 14. * uPx), xi = clamp(-di.x / Bi, 0., 1.), omi = 1. - max(xi, .0015), bi = max(1. - omi * omi * omi * omi, 1e-5);
+      float Hi = uLA[i].w * uLB[i].z * uLB[i].y;
       h += Hi * pow(bi, .25);
       gh += -(Hi / Bi) * omi * omi * omi * pow(bi, -.75) * normalize(di.yz + 1e-6);
     }
   }
   // the pointer presses a shallow dome into the glass beneath it
-  if (uCur.z > .001 && kind != 2.) {
+  if (uCur.z > .001 && abs(kind - 2.) > .5) {
     vec2 cq = p - uCur.xy; float sg = 80. * uPx; float e = exp(-dot(cq, cq) / (2. * sg * sg));
     float Hc = 7. * uPx * uCur.z * smoothstep(0., .25, x);
     h += Hc * e; gh += Hc * e * (-cq / (sg * sg));
   }
-  // ripples from a touch, spreading like a liquid
-  float flash = 0.;
-  for (int i = 0; i < 4; i++) {
-    float dt = uTime - uRip[i].z; if (dt < 0. || dt > 1.6) continue;
-    vec2 rq = p - uRip[i].xy; float r = length(rq) + 1e-3; float front = dt * 520. * uPx;
-    float w = exp(-pow(r - front, 2.) / (2. * pow(34. * uPx, 2.))) * sin((r - front) / (13. * uPx)) * exp(-dt * 2.4) * uRip[i].w;
-    gh += rq / r * w * .55 * smoothstep(0., .2, x);
-    flash += exp(-r * r / (2. * pow(46. * uPx, 2.))) * exp(-dt * 6.5) * uRip[i].w;
+  // a finger (or a held click) swells the glass beneath it and lights it from within
+  float glow = 0.;
+  if (uTouch.z > .001 && abs(uTouch.w - layer) < .5) {
+    vec2 tq = p - uTouch.xy; float r2 = dot(tq, tq), sg = 64. * uPx, e = exp(-r2 / (2. * sg * sg));
+    float Ht = 11. * uPx * uTouch.z * smoothstep(0., .25, x);
+    h += Ht * e; gh += Ht * e * (-tq / (sg * sg));
+    glow = exp(-r2 / (2. * pow(120. * uPx, 2.))) * uTouch.z;
   }
   vec3 n = normalize(vec3(-gh, 1.));
   // refraction per channel: dispersion at the rims
@@ -996,8 +1173,8 @@ void main() {
   vec3 sharp = vec3(texture(uSky, uR).r, texture(uSky, uG).g, texture(uSky, uBl).b);
   vec3 soft = vec3(textureLod(uSky, uR, lod).r, textureLod(uSky, uG, lod).g, textureLod(uSky, uBl, lod).b);
   vec3 col = mix(sharp, soft, mixb * lens);
-  // the shadow on the plane, seen through the glass
-  col *= 1. - .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, sceneShadow(p + oG - vec2(0., 12. * uPx)))) * lens * .8;
+  // the shadow on the plane, seen through the page's glass
+  if (layer < .5) col *= 1. - .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, shadowBase(p + oG - vec2(0., 12. * uPx)))) * lens * .8;
   // the dimming layer for clear glass under text (HIG: about 35 %)
   col *= 1. - dim * lens * smoothstep(0., .4, x);
   col += (kind < 1.5 || kind > 3.5 ? .016 : .0) * lens * smoothstep(0., .3, x);
@@ -1005,15 +1182,15 @@ void main() {
   float F = .02 + .5 * pow(1. - n.z, 5.);
   vec3 env = mix(vec3(.03, .10, .14), vec3(.14, .09, .03), smoothstep(.15, .85, uv.x));
   col = mix(col, env, F * lens);
-  // light: a rim on the side facing the key light, a weaker one opposite, a hairline, a glint
+  // light: a rim on the side facing the key light (brighter near a finger), a weaker one opposite, a hairline, a glint
   float rimMask = pow(1. - x, 7.);
   vec2 nxy = length(n.xy) > 1e-4 ? normalize(n.xy) : vec2(0.);
   float face = max(dot(nxy, uLight), 0.), back = max(-dot(nxy, uLight), 0.);
-  col += rimMask * (face * .95 + back * .4 * (col * 1.8 + .06)) * rimk * lens;
+  col += rimMask * (face * .95 + back * .4 * (col * 1.8 + .06)) * rimk * lens * (1. + 1.6 * glow);
   col += exp(-d * d / (.45 * uPx * uPx)) * hairk * lens;
   vec3 L3 = normalize(vec3(uLight * .78, .62)), Hv = normalize(L3 + vec3(0., 0., 1.));
   float ndh = max(dot(n, Hv), 0.);
-  col += (pow(ndh, 120.) * .9 + pow(ndh, 18.) * .09) * lens * rimk * (1. - .85 * indFill);
+  col += (pow(ndh, 120.) * .9 + pow(ndh, 18.) * .09) * lens * rimk * (1. - .85 * fillL);
   // the pointer is a second light: glints on the nearest rims, a faint sheen beneath it
   if (uCur.w > .001) {
     vec2 cq = uCur.xy - p; float cd = length(cq);
@@ -1022,7 +1199,33 @@ void main() {
     col += pow(max(dot(n, Hc), 0.), 60.) * .9 * fall * uCur.w * lens * (1. - smoothstep(.25, .6, x));
     col += exp(-cd * cd / (2. * pow(130. * uPx, 2.))) * .04 * uCur.z * lens * smoothstep(0., .5, x);
   }
-  // the budget ring: amber light fills the spent part of the tube
+  // the light a finger lets into the glass
+  col += glow * vec3(.86, .94, 1.) * .1 * smoothstep(0., .35, x) * lens;
+  col = mix(col, min(col * 1.06 + vec3(.05), vec3(.32)), fillL * ((kind > .5 && kind < 1.5) || kind > 4.5 ? 1. : .55));
+  return col;
+}
+
+vec3 shadeBase(vec2 p, vec2 uv, vec3 sky) {
+  int idx; float dm;
+  vec3 s = sceneBase(p, idx, dm);
+  float d = s.x;
+  float kind = idx >= 0 ? uB[idx].y : 5.;
+  float lens = idx >= 0 ? uB[idx].z : 1.;
+  if (idx >= 0 && scrolls(idx)) lens *= edgeVis(p);
+  lens = mix(lens, 1., dm);
+  // the plane under the glass carries a soft, wide shadow, seen through the glass too
+  float sh = shadowBase(p - vec2(0., 12. * uPx));
+  float shadow = .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, sh)) * lens + .08 * (1. - smoothstep(0., 5. * uPx, d)) * step(0., d) * lens;
+  vec3 plane = sky * (1. - shadow);
+  // the pointer's drop focuses a little of the key light onto the sky beneath it: a caustic
+  if (uND > 0 && uD[0].w > 1.5) {
+    vec2 cq = p - uD[0].xy - vec2(4., 11.) * uPx; float cr = max(uD[0].z * .42, uPx);
+    plane += vec3(1., .97, .9) * exp(-dot(cq, cq) / (2. * cr * cr)) * .13 * smoothstep(3. * uPx, 10. * uPx, uD[0].z);
+  }
+  if (d > 1.5 * uPx || lens < .003) return plane + exp(-d * d / (.5 * uPx * uPx)) * .25 * lens;
+  float x;
+  vec3 col = glassAt(p, uv, s, kind, idx >= 0 ? uA[idx].w : 12. * uPx, idx >= 0 ? uC[idx].y : 0., lens, idx >= 0 ? uB[idx].w : 0., dm, 0., x);
+  // the budget ring: amber light fills the spent part of the tube, and bubbles drift through it
   if (kind > 1.5 && kind < 2.5) {
     vec2 rq = p - uA[idx].xy; float a = fract(atan(rq.x, -rq.y) / 6.2831853 + 1.);
     float Rr = uA[idx].z, wt = uC[idx].y * .78, fr = uC[idx].x, across = length(rq) - Rr;
@@ -1030,15 +1233,31 @@ void main() {
     float body = step(0., sBeg) * step(sEnd, 0.) * smoothstep(wt + uPx, wt - uPx, abs(across));
     vec2 endP = uA[idx].xy + Rr * vec2(sin(fr * 6.2831853), -cos(fr * 6.2831853)), begP = uA[idx].xy + vec2(0., -Rr);
     float caps = max(smoothstep(wt + uPx, wt - uPx, length(p - endP)), smoothstep(wt + uPx, wt - uPx, length(p - begP)));
-    float fill = max(body * smoothstep(-.5 * uPx, .5 * uPx, -sEnd + wt * 0.), caps) * step(.0005, fr);
+    float fill = max(body * smoothstep(-.5 * uPx, .5 * uPx, -sEnd), caps) * step(.0005, fr);
     float core = 1. - abs(across) / max(wt, 1.);
-    vec3 amber = uC[idx].z < -.5 ? vec3(1., .42, .42) * (.8 + .2 * sin(uTime * 1.8)) : vec3(1., .68, .27);
+    bool coral = uC[idx].z < -.5;
+    vec3 amber = coral ? vec3(1., .42, .42) * (.8 + .2 * sin(uTime * 1.8)) : vec3(1., .68, .27);
     float shimmer = .92 + .08 * sin(a * 110. - uTime * 1.4) * sin(a * 37. + uTime * .6);
     col = mix(col, col * .35 + amber * (.28 + .62 * core * core) * shimmer, fill * .86 * lens);
     col += vec3(1., .9, .72) * fill * pow(max(core, 0.), 6.) * .22 * lens;
+    // bubbles (a CAEmitterLayer in a tube): rise along the liquid toward its end and vanish there
+    if (fr > .02 && !coral) {
+      float bub = 0.;
+      for (int k = 0; k < 7; k++) {
+        float fk = float(k);
+        float ph = fract(fk * .371 + uTime * (.035 + .02 * fract(fk * .618)) / max(fr, .2));
+        float ang = ph * fr * 6.2831853;
+        float acr = sin(uTime * (.9 + fk * .23) + fk * 2.1) * wt * .42;
+        vec2 bp = uA[idx].xy + (Rr + acr) * vec2(sin(ang), -cos(ang));
+        float br = (1.1 + 1.4 * fract(fk * .73)) * uPx, dd = length(p - bp);
+        float life = smoothstep(0., .12, ph) * smoothstep(1., .8, ph);
+        bub += (smoothstep(br + uPx, br, dd) - .65 * smoothstep(br - .3 * uPx, br - 1.3 * uPx, dd)) * life;
+        bub += smoothstep(.9 * uPx, 0., length(p - bp + vec2(.35, .35) * br)) * .8 * life;
+      }
+      col += vec3(1., .94, .82) * bub * .3 * fill * lens;
+    }
   }
-  col += flash * vec3(.82, .93, 1.) * .13 * smoothstep(0., .3, x);
-  col = mix(col, min(col * 1.06 + vec3(.05), vec3(.32)), indFill * (kind > .5 && kind < 1.5 ? 1. : 0.));
+  // a sweep of light across a bar when it has news
   if (idx >= 0 && uC[idx].z > 0.) {
     float st = (uTime - uC[idx].z) / .9;
     if (st > 0. && st < 1.) {
@@ -1049,7 +1268,31 @@ void main() {
   if (uSolid > .5) col = mix(col, vec3(.045, .05, .08), .82 * smoothstep(0., .15, x) * lens);
   // antialiased silhouette
   float aa = smoothstep(-1.2 * uPx, 1.2 * uPx, d);
-  col = mix(col, plane + exp(-d * d / (.5 * uPx * uPx)) * .25 * lens, aa);
+  return mix(col, plane + exp(-d * d / (.5 * uPx * uPx)) * .25 * lens, aa);
+}
+
+void main() {
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec3 sky = texture(uSky, uv).rgb;
+  int oi = -1; vec3 so = vec3(1e5, 0., 1.);
+  if (uNO > 0) so = sceneOver(p, oi);
+  float ol = oi >= 0 ? uOB[oi].z : 0.;
+  // deep inside the overlay the page's glass is never seen, so it is not drawn
+  vec3 col = (so.x < -2. * uPx && ol > .995) ? vec3(0.) : shadeBase(p, uv, sky);
+  if (oi >= 0) {
+    // the overlay floats higher: its shadow on the page is wider and further down
+    float osh = shadowOver(p - vec2(0., 20. * uPx));
+    col *= 1. - .36 * (1. - smoothstep(-24. * uPx, 80. * uPx, osh)) * ol;
+    if (so.x < 1.5 * uPx) {
+      float x;
+      vec3 oc = glassAt(p, uv, so, uOB[oi].y, uOA[oi].w, 0., ol, uOB[oi].w, 0., 1., x);
+      if (uSolid > .5) oc = mix(oc, vec3(.045, .05, .08), .86 * smoothstep(0., .15, x));
+      float aa = smoothstep(-1.2 * uPx, 1.2 * uPx, so.x);
+      vec3 under = col + exp(-so.x * so.x / (.5 * uPx * uPx)) * .25 * ol;
+      col = mix(mix(col, oc, smoothstep(0., .35, ol)), under, aa);
+    }
+  }
   o = vec4(col, 1.);
 }`;
 
@@ -1104,6 +1347,8 @@ void main() {
     V.path = gl.createVertexArray(); B.path = gl.createBuffer();
     T.lab = gl.createTexture();
     canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); S.ok = false; document.documentElement.classList.add("no-gl"); });
+    // the highlight the pointer's drop turns into over a control (iPadOS's pointer, in glass)
+    S.lenses.push({ key: "hover", hover: true, lr: null, str: 0, vs: 0, lift: 0, vlift: 0, height: 0.2, tint: 0.62, layer: 0 });
     S.ok = true;
     resize(); drawLabels();
     if (document.fonts?.ready) document.fonts.ready.then(drawLabels);
@@ -1178,58 +1423,275 @@ void main() {
   }
 
   // ─── Shapes from the page ─────────────────────────────────────────────────
-  const KIND = { pane: 0, bar: 1, ring: 2, indicator: 3, sheet: 4, chip: 5 };
+  const KIND = { pane: 0, bar: 1, ring: 2, sheet: 4, chip: 5 };
+  const find = (el) => S.shapes.find((s) => s.el === el);
   function add(el, opts = {}) {
     if (!el) return null;
-    let sh = S.shapes.find((s) => s.el === el);
+    let sh = find(el);
     if (sh) return sh;
-    sh = { el, kind: KIND[opts.kind ?? "pane"], scroll: opts.scroll !== false, lens: 0, v: 0, target: opts.shown === false ? 0 : 1, press: 0, pv: 0, pressT: 0, delay: opts.delay ?? 0, since: S.now, fill: 0, fv: 0, fillT: 0, tube: opts.tube ?? 13, rect: null, radius: opts.radius, manual: opts.manual };
+    sh = {
+      el, kind: KIND[opts.kind ?? "pane"], scroll: opts.scroll !== false, lens: 0, v: 0, target: opts.shown === false ? 0 : 1,
+      press: 0, pv: 0, pressT: 0, delay: opts.delay ?? 0, since: S.now, fill: 0, fv: 0, fillT: 0, tube: opts.tube ?? 13,
+      rect: null, radius: opts.radius, manual: opts.manual, held: false, lr: null, last: null, fast: false, sweep: 0,
+    };
     S.shapes.push(sh);
     return sh;
   }
   function remove(el) { S.shapes = S.shapes.filter((s) => s.el !== el); }
-  function show(el, on, delay = 0) { const s = S.shapes.find((x) => x.el === el); if (s) { s.target = on ? 1 : 0; s.delay = delay; s.since = S.now; } }
-  function setFill(el, f) { const s = S.shapes.find((x) => x.el === el); if (s) s.fillT = Math.max(0, Math.min(1, f)); }
-  function press(el, on) { const s = S.shapes.find((x) => x.el === el); if (s) s.pressT = on ? 1 : 0; }
+  /** Materialize (on) or dematerialize (off) a shape's glass. {instant} skips the spring, {fast} leaves quickly. */
+  function show(el, on, delay = 0, o = {}) {
+    const s = find(el); if (!s) return;
+    s.held = false; s.target = on ? 1 : 0; s.delay = delay; s.since = S.now; s.fast = !!o.fast;
+    if (o.instant || S.reduced) { s.lens = s.target; s.v = 0; if (!on) s.last = null; }
+  }
+  function setFill(el, f) { const s = find(el); if (s) { if (Math.abs(s.fillT - f) > 0.001) S.lastInput = S.now; s.fillT = clamp(f, 0, 1); } }
+  function press(el, on) { const s = find(el); if (s) s.pressT = on ? 1 : 0; }
 
-  // ─── Pointer, touch, ripples ──────────────────────────────────────────────
+  // The glass follows the page each frame. Panes that scroll glide to a new layout (a pane that grows, a
+  // column that reflows) instead of jumping; the spring runs in the scroller's coordinates, so scrolling
+  // itself is never lagged.
+  function settle(s, r) {
+    const sy = S.scroller ? S.scroller.scrollTop : 0;
+    const g = box(r.left, r.top + sy, r.right, r.bottom + sy);
+    if (!s.lr || s.held || s.lens < 0.05 || S.reduced || rdist(s.lr, g) > 480) s.lr = s.lr ? s.lr.set(g, 0) : new Liquid(g, 0);
+    else s.lr.step(g, null, S.dt, SP.layout, SP.layout);
+    return box(s.lr.l, s.lr.t - sy, s.lr.r, s.lr.b - sy);
+  }
+  function rectOf(s) {
+    if (!s.held && s.lens < 0.003 && s.target === 0) { s.rect = null; return null; }
+    let r = s.manual ? s.manual() : s.el.getBoundingClientRect();
+    if (!r || r.width < 1 || r.height < 1) {
+      // hidden by the page while its glass is still dematerialising: it stays where it was until it is gone
+      if (s.last && s.lens > 0.003 && !s.held) r = s.last;
+      else { s.rect = null; return null; }
+    } else {
+      if (s.scroll && s.kind === 0 && !s.manual) r = settle(s, r);
+      s.last = plain(r);
+    }
+    s.rect = r;
+    if (s.radius == null) s.radius = radiusOf(s.el);
+    if (s.held || r.bottom < -80 || r.top > innerHeight + 80) return null;
+    return r;
+  }
+
+  // ─── Flow: the glass of one view becomes the glass of the next ────────────
+  // Each pane of the new layout is born from a pane of the old one (in reading order), so where there are
+  // more new panes than old ones a pane divides, and where there are fewer, panes merge. In flight they
+  // are one body of liquid; they part as they slow down. The new view's words arrive as their glass lands.
+  const onScreen = (r) => box(r.left, Math.max(r.top, -60), r.right, Math.max(Math.max(r.top, -60) + 8, Math.min(r.bottom, innerHeight + 60)));
+  const reading = (a, b) => { const ra = a.rect ?? a, rb = b.rect ?? b; return Math.abs(ra.top - rb.top) > 12 ? ra.top - rb.top : ra.left - rb.left; };
+  function snapshot(root) {
+    const out = [];
+    for (const s of S.shapes) {
+      if (s.held || s.kind === 2 || !s.rect || s.lens < 0.2) continue;
+      if (root && !root.contains(s.el)) continue;
+      const r = s.rect; if (r.bottom < 0 || r.top > innerHeight || r.width < 2) continue;
+      out.push({ rect: onScreen(r), radius: Math.min(s.radius ?? 0, r.width / 2, r.height / 2), kind: s.kind });
+    }
+    for (const b of S.blobs) if (b.lens > 0.2) out.push({ rect: b.lr.rect, radius: b.lr.q, kind: b.kind });
+    return out.sort(reading);
+  }
+  function flow(from, targets, o = {}) {
+    S.blobs.length = 0;
+    const tos = targets.map(find).filter(Boolean);
+    for (const s of tos) { s.held = true; s.lens = 0; s.v = 0; s.target = 0; s.lr = null; if (s.radius == null) s.radius = radiusOf(s.el); }
+    S.flowOn = { onLand: o.onLand };
+    if (!S.ok || S.reduced || !from.length || !tos.length) {
+      tos.forEach((s, j) => { s.held = false; s.target = 1; s.since = S.now; s.delay = S.reduced ? 0 : 0.05 + j * 0.045; if (S.reduced) s.lens = 1; o.onLand?.(s.el); });
+      // nothing to flow into: the old glass dissolves where it is
+      if (!tos.length) for (const f of from) S.blobs.push({ lr: new Liquid(f.rect, f.radius), from: f.rect, kind: f.kind, to: null, delay: 0, t0: S.now, lens: 1, vlens: 0 });
+      return;
+    }
+    const n = tos.length, m = from.length, used = new Set(), stagger = o.stagger ?? 0.032;
+    const mk = (f, s, j, merge) => S.blobs.push({
+      lr: new Liquid(f.rect, f.radius), kind: s.kind, to: s, delay: Math.min(0.28, j * stagger), t0: S.now, merge,
+      landed: false, revealed: merge, d0: Math.max(1, rdist(f.rect, onScreen(s.el.getBoundingClientRect()))), lens: 1, vlens: 0, liq: 0,
+    });
+    tos.forEach((s, j) => { const i = n === 1 ? 0 : Math.min(m - 1, Math.floor((j * m) / n)); used.add(i); mk(from[i], s, j, false); });
+    from.forEach((f, i) => { if (!used.has(i)) mk(f, tos[Math.min(n - 1, Math.round((i * n) / m))], i, true); });
+  }
+  function updateFlow(dt) {
+    if (!S.blobs.length) { S.gk += (0 - S.gk) * Math.min(1, dt * 8); return; }
+    let fastest = 0, done = true;
+    for (const b of S.blobs) {
+      if (!b.to) {
+        b.lr.step(scaled(b.from, 0.9), null, dt, SP.lensLead, SP.lensLead); spring(b, "lens", "vlens", 0, SP.lens, dt);
+        if (b.lens > 0.01) done = false;
+        continue;
+      }
+      if (S.now - b.t0 < b.delay) { done = false; continue; }
+      const r0 = b.to.el.getBoundingClientRect();
+      if (r0.width < 1) { b.landed = true; continue; }
+      const g = onScreen(r0);
+      b.lr.step(g, Math.min(b.to.radius ?? 0, g.width / 2, g.height / 2), dt, SP.flowLead, SP.flowTrail);
+      const sp = b.lr.speed();
+      fastest = Math.max(fastest, sp);
+      // in flight a pane is a drop: its corners round off with speed, and it lifts a little
+      b.liq += (smooth(60, 1100, sp) - b.liq) * Math.min(1, dt * 12);
+      const d = rdist(b.lr, g);
+      if (!b.revealed && 1 - d / b.d0 > 0.7) { b.revealed = true; S.flowOn?.onLand?.(b.to.el); }
+      if (!b.landed && ((d < 0.75 && b.lr.speed() < 16) || S.now - b.t0 > 2.6)) b.landed = true;
+      if (!b.landed) done = false;
+    }
+    S.gk += (24 * smooth(40, 700, fastest) - S.gk) * Math.min(1, dt * 10);
+    if (done) {
+      for (const b of S.blobs) {
+        if (!b.to || b.merge) continue;
+        const s = b.to; s.held = false; s.lens = 1; s.v = 0; s.target = 1; s.lr = null;
+        if (!b.revealed) S.flowOn?.onLand?.(s.el);
+      }
+      S.blobs.length = 0; S.flowOn = null;
+    }
+  }
+
+  // ─── Overlay: a sheet, a menu or a toast, pulled out of the glass it came from ───
+  // matchedGeometry: the overlay's glass starts as its source (a row, a star, a button) and flows to where
+  // the page puts it; a drop left at the source keeps a liquid neck to it until it snaps, then shrinks
+  // away. Closing reverses it: the glass flows back and sinks into the source. With no source it
+  // materializes where it stands.
+  function overlay(el, o = {}) {
+    if (!S.ok || !el) return;
+    const goal = el.getBoundingClientRect();
+    let ov = S.overs.find((x) => x.el === el);
+    const src = o.from ? plain(o.from) : scaled(goal, 0.94);
+    const q0 = o.fromRadius ?? radiusOf(el);
+    if (!ov) {
+      ov = { el, kind: KIND[o.kind ?? "sheet"], lr: new Liquid(src, q0), lens: o.from ? 0.45 : 0, vl: 0, press: 0, pv: 0, pressT: 0, p: 0, tether: null };
+      ov.tether = o.from && !S.reduced ? { lr: new Liquid(src, q0) } : null;
+      S.overs.push(ov);
+    } else ov.tether = null; // opened again while it was closing: it simply turns around
+    ov.state = "in"; ov.onFrame = o.onFrame; ov.onDone = null; ov.radius = radiusOf(el); ov.sink = false; ov.p = 0;
+    ov.d0 = Math.max(1, rdist(ov.lr, goal));
+    if (S.reduced) { ov.lr.set(goal, ov.radius); ov.lens = 1; ov.p = 1; ov.tether = null; }
+  }
+  function overlayOut(el, o = {}) {
+    const ov = S.overs.find((x) => x.el === el);
+    if (!ov) { o.onDone?.(); return; }
+    ov.state = "out"; ov.onDone = o.onDone; ov.onFrame = null; ov.sink = false;
+    ov.to = o.to ? plain(o.to) : null; ov.toRadius = o.toRadius ?? 14; ov.from = ov.lr.rect;
+    const [x, y] = ov.to ? mid(ov.to) : [0, 0];
+    ov.tether = ov.to && !S.reduced ? { lr: new Liquid(around(x, y, 0, 0), 0) } : null;
+    if (S.reduced || !S.ok) { S.overs = S.overs.filter((x2) => x2 !== ov); o.onDone?.(); }
+  }
+  function updateOverlays(dt) {
+    let moving = 0;
+    for (const ov of [...S.overs]) {
+      const t = ov.tether;
+      if (ov.state === "in") {
+        const g = ov.el.getBoundingClientRect();
+        if (g.width < 1) { overlayOut(ov.el); continue; }
+        ov.lr.step(g, ov.radius, dt, SP.sheetLead, SP.sheetTrail);
+        spring(ov, "lens", "vl", 1, SP.lens, dt);
+        ov.liq = (ov.liq ?? 0) + (smooth(80, 1400, ov.lr.speed()) - (ov.liq ?? 0)) * Math.min(1, dt * 12);
+        ov.p = Math.max(ov.p, 1 - Math.min(1, rdist(ov.lr, g) / ov.d0));
+        if (t) {
+          const [x, y] = mid(t.lr); t.lr.step(around(x, y, 0, 0), 0, dt, SP.shrink, SP.shrink);
+          if (t.lr.r - t.lr.l < 1.5 && t.lr.b - t.lr.t < 1.5) ov.tether = null;
+        }
+        ov.onFrame?.(ov.p);
+      } else {
+        ov.liq = (ov.liq ?? 0) + (smooth(80, 1400, ov.lr.speed()) - (ov.liq ?? 0)) * Math.min(1, dt * 12);
+        if (ov.to) {
+          ov.lr.step(ov.to, ov.toRadius, dt, SP.sheetLead, SP.sheetTrail);
+          if (t) t.lr.step(ov.to, ov.toRadius, dt, SP.grow, SP.grow);
+          if (!ov.sink && rdist(ov.lr, ov.to) < 5) ov.sink = true;
+          if (ov.sink) spring(ov, "lens", "vl", 0, SP.fast, dt);
+        } else {
+          ov.lr.step(scaled(ov.from, 0.9), null, dt, SP.lensLead, SP.lensLead);
+          spring(ov, "lens", "vl", 0, SP.lens, dt);
+        }
+        if (ov.lens < 0.01) { S.overs = S.overs.filter((x) => x !== ov); ov.onDone?.(); continue; }
+      }
+      moving = Math.max(moving, ov.lr.speed());
+    }
+    const want = S.overs.some((x) => x.tether) ? 44 * smooth(20, 380, moving) : 0;
+    S.okk += (want - S.okk) * Math.min(1, dt * 10);
+  }
+
+  // ─── Lenses inside the glass: selections, and the pointer's highlight ─────
+  /** A lens that swells inside a bar: get() returns {rect, radius, lift, layer} or null. */
+  function lens(key, get, o = {}) {
+    S.lenses = S.lenses.filter((x) => x.key !== key);
+    const L = { key, get, hover: false, lr: null, str: 0, vs: 0, lift: 0, vlift: 0, height: o.height ?? 0.28, tint: o.tint ?? 1, layer: o.layer ?? 0 };
+    S.lenses.push(L);
+    return L;
+  }
+  /** The control under the pointer: the pointer's drop sinks into the glass and becomes its highlight. */
+  function hover(el, o) { S.hoverEl = el || null; S.hoverOpt = o || null; }
+  const pointerBox = (r) => around(S.cursor.x, S.cursor.y, 2 * r);
+  function hoverGoal() {
+    const el = S.hoverEl, o = S.hoverOpt ?? {}, c = S.cursor;
+    if (!el || !el.isConnected || !c.fine || S.reduced || !c.onT) return null;
+    const r = el.getBoundingClientRect(); if (r.width < 1) return null;
+    const ix = o.inset?.[0] ?? 0, iy = o.inset?.[1] ?? 0;
+    const rect = box(r.left - ix, r.top - iy, r.right + ix, r.bottom + iy);
+    const radius = o.radius === "capsule" ? Math.min(rect.width, rect.height) / 2 : Math.min(o.radius ?? 14, rect.width / 2, rect.height / 2);
+    return { rect, radius, layer: o.layer ?? 0, lift: 0 };
+  }
+  function updateLenses(dt) {
+    for (const L of S.lenses) {
+      const g = L.hover ? hoverGoal() : L.get?.();
+      if (g) {
+        if (!L.lr || L.str < 0.02) L.lr = L.hover ? new Liquid(pointerBox(9), 9) : new Liquid(g.rect, g.radius);
+        if (S.reduced) { L.lr.set(g.rect, g.radius); L.str = 1; L.lift = 0; }
+        else {
+          L.lr.step(g.rect, g.radius, dt, L.hover ? SP.hoverLead : SP.lensLead, L.hover ? SP.hoverTrail : SP.lensTrail);
+          spring(L, "str", "vs", 1, L.hover ? SP.hoverIn : SP.lens, dt);
+          spring(L, "lift", "vlift", g.lift ?? 0, SP.lift, dt);
+        }
+        L.layer = g.layer ?? 0;
+      } else if (L.lr) {
+        if (L.hover) L.lr.step(pointerBox(7), 7, dt, SP.hoverLead, SP.hoverTrail);
+        spring(L, "str", "vs", 0, SP.fast, dt);
+        if (L.str < 0.004) { L.str = 0; L.vs = 0; }
+      }
+    }
+  }
+
+  // ─── Pointer and touch ────────────────────────────────────────────────────
   function listen() {
     addEventListener("pointermove", (e) => {
       const c = S.cursor; c.fine = e.pointerType === "mouse";
       c.x = e.clientX; c.y = e.clientY; c.moved = S.now; c.onT = c.fine ? 1 : 0;
+      if (S.touch && e.buttons) { S.touch.x = e.clientX; S.touch.y = e.clientY; }
     }, { passive: true });
     addEventListener("pointerleave", () => { S.cursor.onT = 0; });
-    for (const ev of ["scroll", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => { S.lastInput = S.now; }, { passive: true, capture: true });
     document.addEventListener("mouseleave", () => { S.cursor.onT = 0; });
+    for (const ev of ["scroll", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => { S.lastInput = S.now; }, { passive: true, capture: true });
+    // Apple's interactive glass: under a finger the glass swells a little, lights up from where it is
+    // touched, and springs back with a bounce when let go. A tap on the sky squashes the pointer's drop.
     addEventListener("pointerdown", (e) => {
-      const s = shapeAt(e.clientX, e.clientY);
-      if (s) { ripple(e.clientX, e.clientY, 1); s.pressT = 1; S.cursor.down = 1; }
+      const c = S.cursor; c.down = 1; S.lastInput = S.now;
+      if (e.pointerType !== "mouse") { c.fine = false; c.onT = 0; }
+      const hit = hitTest(e.clientX, e.clientY);
+      if (hit && hit.rec.kind !== 2) { hit.rec.pressT = 1; S.touch = { x: e.clientX, y: e.clientY, rec: hit.rec, layer: hit.layer }; }
+      else if (c.fine && !S.reduced) c.vst -= 4.5;
     }, { passive: true });
-    addEventListener("pointerup", () => { for (const s of S.shapes) s.pressT = 0; S.cursor.down = 0; }, { passive: true });
-    addEventListener("pointercancel", () => { for (const s of S.shapes) s.pressT = 0; }, { passive: true });
+    const up = () => { for (const s of S.shapes) s.pressT = 0; for (const o of S.overs) o.pressT = 0; S.cursor.down = 0; };
+    addEventListener("pointerup", up, { passive: true });
+    addEventListener("pointercancel", up, { passive: true });
   }
-  function shapeAt(x, y) {
-    for (let i = S.shapes.length - 1; i >= 0; i--) {
-      const s = S.shapes[i]; const r = s.rect;
-      if (!r || s.lens < 0.2 || s.kind === 3) continue;
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return s;
-    }
+  function hitTest(x, y) {
+    const inside = (r) => r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    for (let i = S.overs.length - 1; i >= 0; i--) { const o = S.overs[i]; if (o.lens > 0.2 && o.state === "in" && inside(o.lr)) return { rec: o, layer: 1 }; }
+    for (let i = S.shapes.length - 1; i >= 0; i--) { const s = S.shapes[i]; if (!s.held && s.lens > 0.2 && inside(s.rect)) return { rec: s, layer: 0 }; }
     return null;
-  }
-  function ripple(x, y, k = 1) {
-    if (S.reduced) return;
-    S.ripples.push({ x, y, t0: S.now, k }); if (S.ripples.length > 4) S.ripples.shift();
   }
   function burst(x, y, coral) { S.bursts.push({ x, y, t0: S.now, coral }); if (S.bursts.length > 6) S.bursts.shift(); }
 
   // ─── Decisions in the sky ─────────────────────────────────────────────────
   // An Archimedean spiral around the white star: the oldest decision closest, the newest outermost.
   let decisions = [];
+  /** animateNew: true for what arrives live (the two lights meet, a star is born with a burst);
+   *  "soft" for scrubbing through time (new stars simply swell into place). */
   function setDecisions(list, animateNew) {
-    const known = new Set(decisions.map((d) => d.key));
-    decisions = list.map((d, i) => ({ ...d, born: known.has(d.key) || !animateNew ? -99 : S.now + 0.25 + i * 0.02 }));
+    const was = new Map(decisions.map((d) => [d.key, d.born]));
+    const soft = animateNew === "soft";
+    if (animateNew) S.lastInput = S.now;
+    decisions = list.map((d, i) => ({ ...d, born: was.has(d.key) ? (soft ? was.get(d.key) : -99) : soft && !S.reduced ? S.now : !animateNew ? -99 : S.now + 0.25 + i * 0.02 }));
     layoutMarks();
-    if (animateNew) {
+    const known = new Set(was.keys());
+    if (animateNew && !soft) {
       const fresh = decisions.filter((d) => !known.has(d.key));
       if (fresh.some((d) => d.kind === 0) && !S.reduced) S.meetT = S.now + 0.2;
       fresh.forEach((d) => { d.born = S.now + (d.kind === 0 ? 1.45 : 0.3); setTimeout(() => { const m = S.marks.find((x) => x.key === d.key); if (m) burst(m.x, m.y, d.kind > 0); }, d.kind === 0 ? 1450 : 300); });
@@ -1251,29 +1713,57 @@ void main() {
     S.hover = best; return best >= 0 ? S.marks[best] : null;
   }
 
+  function markHover(key) { S.hoverKey = key || null; }
+  function hoverIndex() { if (S.hoverKey) { const i = S.marks.findIndex((m) => m.key === S.hoverKey); if (i >= 0) return i; } return S.hover; }
+  function markPos(key) { const m = S.marks.find((x) => x.key === key); return m && S.focus.marks > 0.5 ? { x: m.x, y: m.y } : null; }
+
   // ─── The loop ─────────────────────────────────────────────────────────────
-  const spring = (o, key, vkey, target, k, c, dt) => { for (let t = dt; t > 1e-6; t -= 0.016) { const h = Math.min(0.016, t), f = -k * (o[key] - target) - c * o[vkey]; o[vkey] += f * h; o[key] += o[vkey] * h; } };
+  // The pointer's drop: a droplet of glass that follows the pointer, stretches as it moves and wobbles
+  // when it stops, sheds two small droplets when flung (they catch up and merge again), pops back when the
+  // pointer wakes, evaporates when it rests, focuses a caustic on the sky, and sinks into any glass it
+  // meets, where it turns into the highlight of the control beneath.
+  function updateCursor(dt) {
+    const c = S.cursor, now = S.now;
+    const idle = now - c.moved > 2.6;
+    const want = c.fine && !S.reduced && !idle && c.onT ? 1 : 0;
+    spring(c, "on", "von", want, want ? SP.pop : SP.evaporate, dt);
+    if (!want && c.on < 0.003) { c.on = 0; c.von = 0; }
+    if (c.px < -1e3) { c.px = c.x; c.py = c.y; for (const t of c.sat) { t.x = c.x; t.y = c.y; } }
+    spring(c, "px", "vx", c.x, SP.drop, dt); spring(c, "py", "vy", c.y, SP.drop, dt);
+    let lead = { x: c.px, y: c.py };
+    c.sat.forEach((t, i) => {
+      spring(t, "x", "vx", lead.x, i ? SP.sat2 : SP.sat1, dt); spring(t, "y", "vy", lead.y, i ? SP.sat2 : SP.sat1, dt);
+      // surface tension: a droplet never strays far
+      const dx = t.x - lead.x, dy = t.y - lead.y, d = Math.hypot(dx, dy), max = i ? 46 : 64;
+      if (d > max) { t.x = lead.x + (dx / d) * max; t.y = lead.y + (dy / d) * max; }
+      lead = t;
+    });
+    const v = Math.hypot(c.vx, c.vy);
+    if (v > 60) { const k = Math.min(1, dt * 16); c.ax += (c.vx / v - c.ax) * k; c.ay += (c.vy / v - c.ay) * k; const l = Math.hypot(c.ax, c.ay) || 1; c.ax /= l; c.ay /= l; }
+    spring(c, "st", "vst", Math.min(0.34, v / 3600), SP.jelly, dt);
+    c.st = clamp(c.st, -0.3, 0.45);
+    spring(c, "press", "vpress", c.down && !S.touch ? 1 : 0, c.down ? SP.press : SP.release, dt);
+    const over = c.fine ? hitTest(c.x, c.y) : null;
+    c.glass += ((over && over.rec.kind !== 2 ? 1 : 0) - c.glass) * Math.min(1, dt * 6);
+  }
   function update(dt) {
     const c = S.cursor, now = S.now;
     // shapes: lens (materialize), press, ring fill
     for (const s of S.shapes) {
-      const tgt = now - s.since >= s.delay ? s.target : s.lens < 0.01 ? 0 : s.target === 0 ? 0 : s.lens;
-      if (S.reduced) { s.lens = tgt; s.v = 0; } else spring(s, "lens", "v", tgt, 150, 21, dt);
-      if (s.lens < 0) { s.lens = 0; s.v = 0; }
-      spring(s, "press", "pv", s.pressT, 420, 28, dt);
-      if (S.reduced) s.fill = s.fillT; else spring(s, "fill", "fv", s.fillT, 60, 13, dt);
+      if (s.held) { s.lens = 0; s.v = 0; }
+      else {
+        const tgt = now - s.since >= s.delay ? s.target : s.lens < 0.01 ? 0 : s.target === 0 ? 0 : s.lens;
+        if (S.reduced) { s.lens = tgt; s.v = 0; } else spring(s, "lens", "v", tgt, tgt === 0 && s.fast ? SP.fast : SP.lens, dt);
+        if (s.lens < 0) { s.lens = 0; s.v = 0; }
+      }
+      spring(s, "press", "pv", s.pressT, s.pressT ? SP.press : SP.release, dt);
+      if (S.reduced) s.fill = s.fillT; else spring(s, "fill", "fv", s.fillT, SP.fill, dt);
     }
-    // cursor drop follows the pointer with a little lag, then settles into the sky when still
-    const idle = now - c.moved > 2.6;
-    const tgtOn = c.fine && !S.reduced && !idle ? c.onT : 0;
-    c.on += (tgtOn - c.on) * Math.min(1, dt * 7);
-    if (c.px < -1e3) { c.px = c.x; c.py = c.y; }
-    spring(c, "px", "vx", c.x, 260, 24, dt); spring(c, "py", "vy", c.y, 260, 24, dt);
-    const over = c.fine ? shapeAt(c.x, c.y) : null;
-    c.glassT = over && over.kind !== 2 ? 1 : 0;
-    c.glass += (c.glassT * (c.fine ? 1 : 0) - c.glass) * Math.min(1, dt * 6);
+    for (const o of S.overs) spring(o, "press", "pv", o.pressT, o.pressT ? SP.press : SP.release, dt);
+    if (S.touch && !S.touch.rec.pressT && Math.abs(S.touch.rec.press) < 0.004 && Math.abs(S.touch.rec.pv) < 0.05) S.touch = null;
+    updateFlow(dt); updateOverlays(dt); updateLenses(dt); updateCursor(dt);
     // focus (the white star and its spiral) glides to where the page puts it
-    if (S.reduced) { S.focus.x = S.focus.tx; S.focus.y = S.focus.ty; } else { spring(S.focus, "x", "vx", S.focus.tx, 90, 19, dt); spring(S.focus, "y", "vy", S.focus.ty, 90, 19, dt); }
+    if (S.reduced) { S.focus.x = S.focus.tx; S.focus.y = S.focus.ty; } else { spring(S.focus, "x", "vx", S.focus.tx, SP.focus, dt); spring(S.focus, "y", "vy", S.focus.ty, SP.focus, dt); }
     S.focus.marks = (S.focus.marks ?? 1) + ((S.focus.marksT ?? 1) - (S.focus.marks ?? 1)) * Math.min(1, (S.realDt ?? dt) * (S.reduced ? 60 : 5));
     for (const m of S.marks) { m.x = S.focus.x + m.dx; m.y = S.focus.y + m.dy; }
     // key light swings slowly (±20°) so highlights travel around every silhouette
@@ -1294,9 +1784,27 @@ void main() {
         S.nextSat = now + S.sat.dur + 30 + Math.random() * 60;
       }
     }
+    // drops: the pointer's first (it casts the caustic), its two droplets, then the margins' drops
+    S.drops.length = 0;
+    const r0 = 12.5 * Math.max(0, c.on) * (1 - c.glass) * (1 + 0.26 * c.press);
+    if (r0 > 0.6) {
+      const k = 1 + c.st;
+      S.drops.push({ x: c.px, y: c.py, r: r0, sx: k, sy: 1 / k, ax: c.ax, ay: c.ay, cursor: true });
+      let lead = { x: c.px, y: c.py };
+      c.sat.forEach((t, i) => {
+        const rr = r0 * (i ? 0.3 : 0.42) * smooth(6, 22, Math.hypot(t.x - lead.x, t.y - lead.y));
+        if (rr > 0.6) S.drops.push({ x: t.x, y: t.y, r: rr });
+        lead = t;
+      });
+    }
+    // a lens lifted by a finger rises out of its bar as a clear drop, larger than the bar, and merges back
+    for (const L of S.lenses) {
+      if (L.hover || !L.lr || L.lift < 0.02 || L.str < 0.2) continue;
+      const q = L.lr, hw = (q.r - q.l) / 2, hh = (q.b - q.t) / 2, r = (hh + 7) * L.lift;
+      if (r > 0.6) S.drops.push({ x: (q.l + q.r) / 2, y: (q.t + q.b) / 2, r, sx: Math.max(1, (hw + 7) / (hh + 7)), sy: 1, ax: 1, ay: 0 });
+    }
     // decorative drops in the margins (wide screens only); they meet, merge and part
     const content = Math.min(1200, innerWidth - 64), margin = (innerWidth - content) / 2;
-    S.drops.length = 0;
     if (!S.reduced && margin > 70 && S.fade > 0.6) {
       const t = now * 0.16;
       const mk = (side, ph, r, yb) => {
@@ -1308,28 +1816,10 @@ void main() {
       };
       mk(-1, 0.3, 12, 0.46); mk(-1, 2.6, 7, 0.52); mk(1, 1.4, 10, 0.62);
     }
-    const dr = 12.5 * c.on * (1 - c.glass) * (1 + c.down * 0.25);
-    if (dr > 0.6) S.drops.push({ x: c.px, y: c.py, r: dr });
     const sv = (S.scroll.y - (S.scroll.py ?? S.scroll.y)) / Math.max(dt, 0.001); S.scroll.py = S.scroll.y;
     S.sloshV = (S.sloshV ?? 0); S.slosh = (S.slosh ?? 0);
-    if (!S.reduced) { spring(S, "slosh", "sloshV", Math.max(-0.018, Math.min(0.018, sv * 0.000012)), 60, 7, dt); } else S.slosh = 0;
-    S.ripples = S.ripples.filter((r) => now - r.t0 < 1.6);
+    if (!S.reduced) spring(S, "slosh", "sloshV", clamp(sv * 0.000012, -0.018, 0.018), { k: 60, c: 7 }, dt); else S.slosh = 0;
     S.bursts = S.bursts.filter((b) => now - b.t0 < 3);
-  }
-
-  function readRects() {
-    const out = [];
-    for (const s of S.shapes) {
-      if (s.lens < 0.003 && s.target === 0) { s.rect = null; continue; }
-      const r = s.manual ? s.manual() : s.el.getBoundingClientRect();
-      if (!r || r.width < 1 || r.height < 1) { s.rect = null; continue; }
-      if (r.bottom < -80 || r.top > innerHeight + 80) { s.rect = r; continue; }
-      s.rect = r;
-      let rad = s.radius;
-      if (rad == null) { const cs = getComputedStyle(s.el); rad = parseFloat(cs.borderTopLeftRadius) || 0; s.radius = rad; }
-      out.push(s);
-    }
-    return out;
   }
 
   function loop(ms) {
@@ -1337,9 +1827,10 @@ void main() {
     if (!S.ok || document.hidden || window.__lanceaFreeze) return;
     const now = (ms - S.t0) / 1000, real = Math.max(0.001, now - S.now), dt = Math.min(0.12, real);
     // when nobody has touched the page for a while, 30 frames a second is plenty for a sky
-    const idle = now - Math.max(S.cursor.moved, S.lastInput ?? 0) > 8 && !S.ripples.length;
+    const busy = S.blobs.length || S.overs.length || S.touch || S.cursor.down;
+    const idle = now - Math.max(S.cursor.moved, S.lastInput ?? 0) > 8 && !busy;
     if (idle && !S.reduced && real < 1 / 45 && (S.skip = !S.skip)) return;
-    S.now = now; S.frame++; S.realDt = Math.min(0.5, real);
+    S.now = now; S.dt = dt; S.frame++; S.realDt = Math.min(0.5, real);
     S.fade = S.reduced ? 1 : Math.min(1, S.fade + dt / 1.8);
     const t1 = performance.now();
     try { update(dt); render(); } catch (e) { if (!S.err) { S.err = e; console.error("glass:", e); } window.__lanceaErr = String(e && e.stack || e); }
@@ -1348,8 +1839,21 @@ void main() {
     // keep it smooth on slower machines: step the resolution down if frames run long
     if (real > 0.024 && !idle && S.frame > 90) { if (++S.slowFrames > 40 && S.scale > 0.6) { S.scale = Math.max(0.6, S.scale - 0.15); S.slowFrames = 0; S.W = 0; resize(); drawLabels(); } }
     else S.slowFrames = Math.max(0, S.slowFrames - 1);
-    window.__lanceaStats = { fps: +(1 / S.stats.real).toFixed(1), cpuMs: +S.stats.ms.toFixed(2), scale: S.scale, shapes: S.shapes.length, marks: S.marks.length };
+    window.__lanceaStats = { fps: +(1 / S.stats.real).toFixed(1), cpuMs: +S.stats.ms.toFixed(2), scale: S.scale, shapes: S.shapes.length, marks: S.marks.length, blobs: S.blobs.length, overs: S.overs.length };
   }
+  // for tests: what the glass holds right now
+  window.__lanceaDump = () => ({
+    drops: S.drops.map((d) => [Math.round(d.x), Math.round(d.y), +d.r.toFixed(1)]),
+    lenses: S.lenses.filter((L) => L.lr && L.str > 0.004).map((L) => [L.key, Math.round(L.lr.l), Math.round(L.lr.t), Math.round(L.lr.r), Math.round(L.lr.b), +L.str.toFixed(2)]),
+    blobs: S.blobs.length, overs: S.overs.length, touch: !!S.touch,
+    shapes: S.shapes.filter((x) => x.rect && x.lens > 0.01).map((x) => [x.el.id || x.el.className.split(" ")[0], Math.round(x.rect.left), Math.round(x.rect.top), Math.round(x.rect.width), +x.lens.toFixed(2)]),
+  });
+  // for tests: advance the clock by hand while the page is frozen (window.__lanceaFreeze)
+  window.__lanceaStep = (sec = 0.1, n = 6) => {
+    if (!S.ok) return false;
+    for (let i = 0; i < n; i++) { S.now += sec / n; S.dt = sec / n; S.realDt = sec / n; S.frame++; S.fade = Math.min(1, S.fade + sec / n / 1.8); update(sec / n); if (i < n - 1) for (const s of S.shapes) rectOf(s); }
+    render(); return true;
+  };
 
   function render() {
     const gl = S.gl, W = S.W, H = S.H, PX = S.PX, now = S.now;
@@ -1439,11 +1943,12 @@ void main() {
       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 24, 0);
       gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 24, 8);
       gl.uniform2f(P.marks.u.uRes, W, H); gl.uniform1f(P.marks.u.uPx, PX); gl.uniform1f(P.marks.u.uTime, now);
-      gl.uniform1f(P.marks.u.uFade, S.fade * S.focus.marks); gl.uniform1f(P.marks.u.uHover, S.hover);
+      gl.uniform1f(P.marks.u.uFade, S.fade * S.focus.marks); gl.uniform1f(P.marks.u.uHover, hoverIndex());
       gl.drawArrays(gl.POINTS, 0, S.marks.length);
     }
     gl.disable(gl.BLEND);
     gl.bindTexture(gl.TEXTURE_2D, T.sky.tex); gl.generateMipmap(gl.TEXTURE_2D);
+
 
     // 2. glass, to the screen
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H);
@@ -1451,31 +1956,68 @@ void main() {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.sky.tex);
     const g = P.glass.u;
     gl.uniform1i(g.uSky, 0); gl.uniform2f(g.uRes, W, H); gl.uniform1f(g.uPx, PX); gl.uniform1f(g.uTime, now); gl.uniform1f(g.uSolid, S.solid ? 1 : 0);
-    const vis = readRects().slice(0, MAX);
-    const A = new Float32Array(MAX * 4), Bv = new Float32Array(MAX * 4), C = new Float32Array(MAX * 4);
+    // the page's glass loses most of its lensing under an open sheet: never glass on glass
     S.back = (S.back ?? 0) + ((S.backT ?? 0) - (S.back ?? 0)) * Math.min(1, (S.realDt ?? 0.016) * 6);
-    vis.forEach((s, i) => {
-      const r = s.rect, cx = (r.left + r.width / 2) * PX, cy = (r.top + r.height / 2) * PX;
-      const lensE = s.kind === 4 || !s.scroll ? s.lens : s.lens * (1 - 0.72 * S.back);
-      const sc = 1 - s.press * 0.012;
+    const back = 1 - 0.72 * S.back;
+    const A = new Float32Array(MAXB * 4), Bv = new Float32Array(MAXB * 4), C = new Float32Array(MAXB * 4);
+    let n = 0;
+    for (const s of S.shapes) {
+      const r = rectOf(s);
+      if (!r || n >= MAXB) continue;
+      const cx = (r.left + r.width / 2) * PX, cy = (r.top + r.height / 2) * PX, lensE = s.scroll ? s.lens * back : s.lens, fl = s.scroll ? 1 : 0;
       if (s.kind === 2) {
         const R = (Math.min(r.width, r.height) / 2 - s.tube) * PX;
-        A.set([cx, cy, R, R], i * 4); Bv.set([0, 2, lensE, s.press], i * 4); C.set([Math.max(0, Math.min(1, s.fill + S.slosh)), s.tube * PX, s.coral ? -1 : 0, s.scroll ? 1 : 0], i * 4);
+        A.set([cx, cy, R, R], n * 4); Bv.set([0, 2, lensE, Math.max(0, s.press)], n * 4); C.set([clamp(s.fill + (S.slosh ?? 0), 0, 1), s.tube * PX, s.coral ? -1 : 0, fl], n * 4);
       } else {
-        const hw = r.width / 2 * PX * sc, hh = r.height / 2 * PX * sc;
-        const rad = s.kind === 3 ? hh : Math.min(s.radius * PX * sc, hw, hh);
-        A.set([cx, cy, hw, hh], i * 4); Bv.set([rad, s.kind, lensE, s.press], i * 4); C.set([0, 0, s.sweep ?? 0, s.scroll ? 1 : 0], i * 4);
+        // pressed glass swells (a few points), and after the bounce settles back
+        const inf = s.press * (s.kind === 0 ? 3 : 2);
+        const hw = Math.max(0.5, (r.width / 2 + inf) * PX), hh = Math.max(0.5, (r.height / 2 + inf) * PX);
+        A.set([cx, cy, hw, hh], n * 4); Bv.set([clamp((s.radius + inf) * PX, 0, Math.min(hw, hh)), s.kind, lensE, Math.max(0, s.press)], n * 4); C.set([0, 0, s.sweep ?? 0, fl], n * 4);
       }
-    });
-    gl.uniform1i(g.uN, vis.length); gl.uniform4fv(g.uA, A); gl.uniform4fv(g.uB, Bv); gl.uniform4fv(g.uC, C);
-    const D = new Float32Array(MAX_DROPS * 4);
-    S.drops.slice(0, MAX_DROPS).forEach((d, i) => D.set([d.x * PX, d.y * PX, Math.max(0, d.r) * PX, 1], i * 4));
-    gl.uniform1i(g.uND, Math.min(MAX_DROPS, S.drops.length)); gl.uniform4fv(g.uD, D);
-    const R = new Float32Array(16).fill(-99);
-    S.ripples.forEach((r, i) => R.set([r.x * PX, r.y * PX, r.t0, r.k], i * 4));
-    gl.uniform4fv(g.uRip, R);
-    const c = S.cursor;
+      n++;
+    }
+    for (const b of S.blobs) {
+      if (n >= MAXB) break;
+      const q = b.lr, hw = Math.max(0.5, ((q.r - q.l) / 2) * PX), hh = Math.max(0.5, ((q.b - q.t) / 2) * PX), lq = b.liq ?? 0;
+      const rad = clamp(q.q * PX, 0, Math.min(hw, hh)), round = rad + (Math.min(hw, hh, 90 * PX) - rad) * 0.8 * lq;
+      A.set([((q.l + q.r) / 2) * PX, ((q.t + q.b) / 2) * PX, hw, hh], n * 4); Bv.set([Math.max(rad, round), b.kind, b.lens * back, 0.7 * lq], n * 4); C.set([0, 0, 0, 3], n * 4);
+      n++;
+    }
+    gl.uniform1i(g.uN, n); gl.uniform4fv(g.uA, A); gl.uniform4fv(g.uB, Bv); gl.uniform4fv(g.uC, C); gl.uniform1f(g.uGK, S.gk * PX);
+    // lenses inside the glass
+    const LA = new Float32Array(MAXL * 4), LB = new Float32Array(MAXL * 4), LL = new Float32Array(MAXL);
+    let nl = 0;
+    for (const L of S.lenses) {
+      if (nl >= MAXL || !L.lr || L.str < 0.004) continue;
+      const q = L.lr, inf = 3 * L.lift, hw = Math.max(0.5, ((q.r - q.l) / 2 + inf) * PX), hh = Math.max(0.5, ((q.b - q.t) / 2 + inf) * PX);
+      LA.set([((q.l + q.r) / 2) * PX, ((q.t + q.b) / 2) * PX, hw, hh], nl * 4);
+      LB.set([clamp((q.q + inf) * PX, 0, Math.min(hw, hh)), L.str, L.height * (1 + 0.8 * L.lift), Math.min(1, L.tint * (1 + 0.3 * L.lift))], nl * 4);
+      LL[nl] = L.layer; nl++;
+    }
+    gl.uniform1i(g.uNL, nl); gl.uniform4fv(g.uLA, LA); gl.uniform4fv(g.uLB, LB); gl.uniform1fv(g.uLL, LL);
+    // the overlay: each shape, and the drop it is being pulled from (or is sinking into)
+    const OA = new Float32Array(MAXO * 4), OB = new Float32Array(MAXO * 4);
+    let no = 0;
+    const putO = (q, kind, lensV, pr, lq = 0) => {
+      if (no >= MAXO) return;
+      const inf = pr * 2.5, hw = Math.max(0.5, ((q.r - q.l) / 2 + inf) * PX), hh = Math.max(0.5, ((q.b - q.t) / 2 + inf) * PX);
+      const rad = clamp((q.q + inf) * PX, 0, Math.min(hw, hh)), round = rad + (Math.min(hw, hh, 120 * PX) - rad) * 0.7 * lq;
+      OA.set([((q.l + q.r) / 2) * PX, ((q.t + q.b) / 2) * PX, hw, hh], no * 4);
+      OB.set([Math.max(rad, round), kind, lensV, Math.max(0, pr) + 0.6 * lq], no * 4); no++;
+    };
+    for (const ov of S.overs) { putO(ov.lr, ov.kind, ov.lens, ov.press, ov.liq ?? 0); if (ov.tether) putO(ov.tether.lr, ov.kind, ov.lens, 0); }
+    gl.uniform1i(g.uNO, no); gl.uniform4fv(g.uOA, OA); gl.uniform4fv(g.uOB, OB); gl.uniform1f(g.uOK, S.okk * PX);
+    // drops
+    const D = new Float32Array(MAXD * 4), DE = new Float32Array(MAXD * 4);
+    let nd = 0;
+    for (const d of S.drops) {
+      if (nd >= MAXD) break;
+      D.set([d.x * PX, d.y * PX, Math.max(0, d.r) * PX, d.cursor ? 2 : 1], nd * 4); DE.set([d.sx ?? 1, d.sy ?? 1, d.ax ?? 1, d.ay ?? 0], nd * 4); nd++;
+    }
+    gl.uniform1i(g.uND, nd); gl.uniform4fv(g.uD, D); gl.uniform4fv(g.uDE, DE);
+    const c = S.cursor, t = S.touch;
     gl.uniform4f(g.uCur, c.px * PX, c.py * PX, c.glass * (S.reduced ? 0 : 1), c.fine && !S.reduced ? Math.max(c.on, c.glass) : 0);
+    gl.uniform4f(g.uTouch, t ? t.x * PX : -1e4, t ? t.y * PX : -1e4, t && !S.reduced ? Math.max(0, t.rec.press) : 0, t ? t.layer : 0);
     gl.uniform2f(g.uLight, Math.cos(S.light), Math.sin(S.light));
     gl.uniform4f(g.uEdge, S.scroll.top * PX, S.scroll.bottom * PX, S.scroll.fade * PX, 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -1484,18 +2026,27 @@ void main() {
   function spiralR() { const m = S.marks[S.marks.length - 1]; return m ? Math.hypot(m.dx, m.dy) : 0; }
 
   function backdrop(on) { S.backT = on ? 1 : 0; }
-  function sweep(el) { const s = S.shapes.find((x) => x.el === el); if (s && !S.reduced) s.sweep = S.now; }
-  function ringState(el, coral) { const s = S.shapes.find((x) => x.el === el); if (s) s.coral = !!coral; }
+  // (anything that animates keeps the page at full frame rate for a while)
+  function sweep(el) { const s = find(el); S.lastInput = S.now; if (s && !S.reduced) s.sweep = S.now; }
+  function ringState(el, coral) { const s = find(el); if (s) s.coral = !!coral; }
   function asleep(on) { S.dimT = on ? 0.72 : 1; }
   const debug = { meteor() { S.nextMeteor = 0; }, sat() { S.nextSat = 0; }, meet() { S.meetT = S.now; }, burst };
   function setScroll(y, top, bottom) { S.scroll.y = y; S.scroll.top = top; S.scroll.bottom = bottom; }
+  function setScroller(el) { S.scroller = el; }
   function stats() { return window.__lanceaStats; }
-  return { init, add, remove, show, setFill, press, ripple, burst, setDecisions, focus, markAt, setScroll, backdrop, sweep, ringState, asleep, debug, stats, get ok() { return S.ok; }, get reduced() { return S.reduced; }, get solid() { return S.solid; }, get now() { return S.now; } };
+  return {
+    init, add, remove, show, setFill, press, burst, setDecisions, focus, markAt, markHover, markPos, setScroll, setScroller,
+    backdrop, sweep, ringState, asleep, snapshot, flow, overlay, overlayOut, lens, hover, debug, stats,
+    get ok() { return S.ok; }, get reduced() { return S.reduced; }, get solid() { return S.solid; }, get now() { return S.now; },
+    get flowing() { return S.blobs.length > 0; },
+  };
 })();
 
 /* Lancea Watch: the page. It reads the demo machine's feed.json (every minute), turns it into five
  * views and hands the sky what belongs in it: where the white star sits, and a star for every decision.
- * Everything a viewer reads is plain HTML; the glass and the sky are drawn by glass.js underneath. */
+ * Everything a viewer reads is plain HTML; the glass and the sky are drawn by glass.js underneath.
+ * Motion follows SwiftUI: springs (smooth, snappy, bouncy), numbers that roll digit by digit, glass that
+ * flows from one layout into the next, and a sheet pulled out of the row it describes. */
 (() => {
   "use strict";
   const FEED_URL = "https://raw.githubusercontent.com/dziuba0x/lancea-feed/main/feed.json";
@@ -1505,12 +2056,15 @@ void main() {
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const cut = (s, a = 6, b = 4) => (s && s.length > a + b + 1 ? `${s.slice(0, a)}…${s.slice(-b)}` : s ?? "");
+  const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s ?? "");
   const u6 = (x) => Number(x ?? 0) / 1e6;
   const usd = (x, d = 2) => "$" + u6(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const money = (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const num = (x, d = 2) => Number(x).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: d });
   const xrp = (drops) => num(u6(drops), 6);
   const c2flr = (wei) => (wei == null ? null : Number(BigInt(wei) / 10n ** 14n) / 1e4);
   const clock = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   const dayKey = (iso) => new Date(iso).toDateString();
   const dayName = (iso) => {
     const d = new Date(iso), t = new Date(), y = new Date(Date.now() - 864e5);
@@ -1522,20 +2076,57 @@ void main() {
     const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
     return s < 90 ? "just now" : s < 5400 ? `${Math.round(s / 60)} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`;
   };
+  const inView = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.bottom > 0 && r.top < innerHeight; };
+  const byReading = (a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return Math.abs(ra.top - rb.top) > 12 ? ra.top - rb.top : ra.left - rb.left; };
   const STAR = '<svg viewBox="0 0 12 12" aria-hidden="true"><path fill="currentColor" d="M6 0 7.1 4.9 12 6 7.1 7.1 6 12 4.9 7.1 0 6 4.9 4.9Z"/></svg>';
-  const X_ICON = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
   const COPY = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="2"/><path d="M10.5 3.5v-.5a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"/></svg>';
+  const OPEN = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/><path d="M6 8h4M8 6v4"/></svg>';
+  const OUT = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"/></svg>';
 
-  /** Numbers roll to a new value (the digits settle like a counter), and never on reduced motion. */
-  function roll(el, to, fmt) {
-    if (!el) return;
-    const from = Number(el.dataset.v ?? NaN); el.dataset.v = to;
-    if (!Number.isFinite(from) || from === to || Glass.reduced) { el.textContent = fmt(to); return; }
-    const t0 = performance.now(), dur = 900;
-    const step = (now) => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 4); el.textContent = fmt(from + (to - from) * e); if (k < 1 && el.dataset.v == to) requestAnimationFrame(step); };
-    requestAnimationFrame(step);
+  // ─── Motion: SwiftUI's springs, for CSS and the Web Animations API ────────
+  /** Spring(duration:bounce:) as a CSS linear() easing sampled until it settles, and that time. */
+  function springEase(duration, bounce, n = 48) {
+    const w0 = (2 * Math.PI) / duration, z = 1 - bounce, wd = w0 * Math.sqrt(Math.max(1e-6, 1 - z * z));
+    const pos = (t) => (z >= 1 ? 1 - Math.exp(-w0 * t) * (1 + w0 * t) : 1 - Math.exp(-z * w0 * t) * (Math.cos(wd * t) + ((z * w0) / wd) * Math.sin(wd * t)));
+    const env = (t) => Math.exp(-z * w0 * t) * (z >= 1 ? 1 + w0 * t : w0 / wd);
+    let T = 0.1; while (env(T) > 0.0015 && T < 3) T += 0.01;
+    const pts = []; for (let i = 0; i <= n; i++) pts.push(i === n ? 1 : +pos((i / n) * T).toFixed(4));
+    return { easing: `linear(${pts.join(", ")})`, ms: Math.round(T * 1000) };
   }
-  const st = { feed: null, sample: null, live: false, away: false, m: null, tab: "now", filter: "all", q: "", signers: new Set(["agent", "guard"]), table: false, sheet: null, seen: new Set(), booted: false };
+  const LINEAR = (() => { try { return CSS.supports("transition-timing-function", "linear(0, 1)"); } catch { return false; } })();
+  const EASE = {
+    smooth: LINEAR ? springEase(0.5, 0) : { easing: "cubic-bezier(.2,.8,.2,1)", ms: 600 },
+    snappy: LINEAR ? springEase(0.5, 0.15) : { easing: "cubic-bezier(.3,1.25,.45,1)", ms: 620 },
+    bouncy: LINEAR ? springEase(0.5, 0.3) : { easing: "cubic-bezier(.32,1.45,.42,1)", ms: 700 },
+  };
+  for (const [k, e] of Object.entries(EASE)) { document.documentElement.style.setProperty(`--e-${k}`, e.easing); document.documentElement.style.setProperty(`--d-${k}`, `${e.ms}ms`); }
+
+  /** Numbers change like SwiftUI's .numericText(): each digit that changes rolls, the others stay put.
+   *  dir 1 rolls up (a value that grows), -1 rolls down (a countdown). */
+  function numText(el, text, dir = 1) {
+    if (!el) return;
+    text = String(text);
+    const prev = el.__t; el.__t = text;
+    if (prev === text) return;
+    if (prev == null || Glass.reduced || !el.animate) { el.textContent = text; return; }
+    const a = [...prev], b = [...text], off = a.length - b.length, frag = document.createDocumentFragment();
+    let k = 0;
+    b.forEach((ch, i) => {
+      const was = a[i + off];
+      if (was === ch || !/\d/.test(ch)) { frag.append(ch); return; }
+      const slot = document.createElement("span"); slot.className = "nd";
+      const inn = document.createElement("span"); inn.textContent = ch; slot.append(inn);
+      const delay = k++ * 26;
+      inn.animate([{ transform: `translateY(${dir * 0.62}em)`, opacity: 0, filter: "blur(2px)" }, { transform: "none", opacity: 1, filter: "none" }], { duration: EASE.snappy.ms, easing: EASE.snappy.easing, delay, fill: "backwards" });
+      if (was != null && /\d/.test(was)) {
+        const out = document.createElement("span"); out.className = "nd-out"; out.textContent = was; out.setAttribute("aria-hidden", "true"); slot.append(out);
+        out.animate([{ transform: "none", opacity: 1, filter: "none" }, { transform: `translateY(${-dir * 0.62}em)`, opacity: 0, filter: "blur(2px)" }], { duration: 300, easing: "cubic-bezier(.4,0,1,1)", delay, fill: "forwards" }).onfinish = () => out.remove();
+      }
+      frag.append(slot);
+    });
+    el.textContent = ""; el.append(frag);
+  }
+  const st = { feed: null, sample: null, live: false, away: false, m: null, tab: "now", onScreen: null, filter: "all", q: "", signers: new Set(["agent", "guard"]), table: false, sheet: null, sheetFrom: null, seen: new Set(), booted: false };
 
   // ─── The model: what the feed says, in the words the page uses ────────────
   function link(kind, hash, text) {
@@ -1560,6 +2151,14 @@ void main() {
     if (a.kind === "user-op") return `Runs a custom batch of calls from your personal account: <em>arbitrary code</em>`;
     if (a.kind === "refused" || a.kind === "undecodable") return `An instruction the guard cannot read: <em>${esc(a.reason)}</em>`;
     return `Pays ${amount} to <code>${cut(tx.destination, 6, 4)}</code>`;
+  }
+  /** The same, in a few words (for the island). */
+  function doesShort(tx) {
+    const a = tx.action ?? {};
+    if (a.kind === "mint-to") return `Mints ${num(u6(tx.amountDrops), 2)} XRP into FXRP`;
+    if (a.kind === "vault") return `${a.action === "deposit" ? "Deposits" : a.action === "redeem" ? "Redeems" : "Claims"} ${num(u6(a.value), 2)} ${a.action === "deposit" ? "FXRP" : "shares"}`;
+    if (a.kind === "fxrp-redeem") return `Redeems ${num(u6(a.value), 2)} FXRP`;
+    return `Pays ${num(u6(tx.amountDrops), 2)} XRP`;
   }
   const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
 
@@ -1616,7 +2215,7 @@ void main() {
   function decisionRow(d, compact) {
     const v = d.kind === 0 ? `<span class="v signed">${STAR} Co-signed</span>` : d.kind === 2 ? `<span class="v struck">Refused · struck</span>` : `<span class="v refused">Refused</span>`;
     const by = d.by === "drill" ? `<span class="label"> · drill, a staged hijack</span>` : d.by === "ai" ? `<span class="label"> · by AI</span>` : "";
-    return `<li class="decision" tabindex="0" data-key="${esc(d.key)}" aria-label="Open this decision">
+    return `<li class="decision" tabindex="0" data-key="${esc(d.key)}" aria-label="Open this decision" aria-haspopup="dialog">
       <div class="when">${compact ? clock(d.at) : `${clock(d.at)}<br><span>${ago(d.at)}</span>`}</div>
       <div>
         <div class="witness said"><i></i><p>${d.why ? esc(d.why) : '<span style="color:var(--ink-3)">No reason given</span>'}${by}</p></div>
@@ -1650,16 +2249,19 @@ void main() {
 
   // ─── Now ──────────────────────────────────────────────────────────────────
   function renderNow() {
-    const m = st.m, s = stateOf(), u = m.u;
-    const pill = $("#now-pill"); pill.className = `pill glass rise ${s.tone}`; $("span", pill).textContent = s.pill;
+    const m = st.m, s = stateOf(), u = m.u, ds = shownDecisions(), replay = rp.t != null;
+    const spent = replay ? spentAt(ds) : u6(u.spentUsd6), frac = m.budget ? Math.min(1, spent / m.budget) : 0;
+    const at = replay ? (ds.length ? `at ${clock(ds[ds.length - 1].at)}` : "before the first step") : "";
+    const pill = $("#now-pill"); pill.classList.remove("coral", "grey", "star"); pill.classList.add(replay ? "grey" : s.tone); $("span", pill).textContent = replay ? "Replay" : s.pill;
     $("#now-head").textContent = s.head; $("#now-sub").innerHTML = s.sub;
-    roll($("#now-spent"), u6(u.spentUsd6), (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    $("#now-of").innerHTML = `spent of ${usd(u.budgetUsd6, 0)} across XRPL and Flare · ${Math.round(m.frac * 100)}%`;
+    const prev = Number($("#now-spent").dataset.v ?? 0); $("#now-spent").dataset.v = spent;
+    numText($("#now-spent"), money(spent), spent < prev ? -1 : 1);
+    $("#now-of").innerHTML = `spent of ${usd(u.budgetUsd6, 0)} across XRPL and Flare · ${Math.round(frac * 100)}%${at ? ` · ${at}` : ""}`;
     const left = m.until ? Math.max(0, Math.ceil((m.until - Date.now()) / 864e5)) : null;
     $("#now-facts").innerHTML = [
       `<span class="label">Umbrella <b>#${esc(u.id)}</b></span>`,
       `<span class="label">Tripwire <b>${esc(u.strikes)} of ${esc(u.tripwire)}</b></span>`,
-      left != null ? `<span class="label">Window <b>${left} days left</b></span>` : `<span class="label">Decisions <b>${m.decisions.length}</b></span>`,
+      left != null && !replay ? `<span class="label">Window <b>${left} days left</b></span>` : `<span class="label">Decisions <b>${ds.length}</b></span>`,
     ].join("");
     // stats with their history (from what the agent saw at each proposal)
     const hist = (f) => m.proposals.map((p) => f(p.state)).filter((v) => Number.isFinite(v));
@@ -1670,7 +2272,7 @@ void main() {
     const low = m.gasGuard != null && m.gasGuard < 0.5;
     stat("#stat-gas", "The guard's gas", m.gasGuard != null ? `${num(m.gasGuard, 2)}` : "?", m.gasGuard != null ? (low ? "C2FLR · low: top it up from the Coston2 faucet" : `C2FLR · about ${Math.floor(m.gasGuard / 0.13)} decisions`) : "C2FLR · not in this feed", "");
     $("#stat-gas").classList.toggle("low", low);
-    const list = m.decisions.slice(-4).reverse();
+    const list = ds.slice(-4).reverse();
     $("#now-list").innerHTML = list.length ? list.map((d) => decisionRow(d, false)).join("") : `<li class="empty">No decisions yet. The agent looks every ${Math.round(m.tick / 60)} minutes.</li>`;
     const lastP = m.proposals[m.proposals.length - 1];
     const planEl = $("#now-plan");
@@ -1678,28 +2280,72 @@ void main() {
     else if (st.away) planEl.innerHTML = "<b>Nothing while the machine is off.</b> When it is back, the agent looks at the account and proposes the next step.";
     else planEl.innerHTML = lastP ? `<b>Last it said:</b> ${esc(lastP.why)}` : "<b>Waiting for its first look.</b>";
   }
+  /** A stat pane, built once and then updated in place, so its figure can roll. */
   function stat(sel, label, value, small, sparkSvg) {
     const el = $(sel);
-    el.innerHTML = `<span class="label">${esc(label)}</span><b>${value}</b><small>${small}</small>${sparkSvg}`;
+    if (!el.__built) { el.innerHTML = `<span class="label"></span><b></b><small></small><div class="sp"></div>`; el.__built = true; }
+    $(".label", el).textContent = label; numText($("b", el), value, 1); $("small", el).innerHTML = small; $(".sp", el).innerHTML = sparkSvg;
   }
-  function tickNext() {
-    if (!st.m) return;
+  function nextLeft() {
+    if (!st.m) return null;
     const m = st.m, tick = m.tick * 1000;
     const last = m.lastAuto ? Date.parse(m.lastAuto.at) : Date.parse(st.feed.generatedAt);
     let next = last + tick; while (next < Date.now() - 1000) next += tick;
-    const left = Math.max(0, (next - Date.now()) / 1000), frac = 1 - left / m.tick;
+    return Math.max(0, (next - Date.now()) / 1000);
+  }
+  function tickNext() {
+    if (!st.m) return;
+    const m = st.m, left = nextLeft(), frac = 1 - left / m.tick;
     const on = !st.away && !m.u.tripped && st.live;
-    $("#next-time").textContent = on ? `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}` : "—";
+    numText($("#next-time"), on ? mmss(left) : "—", -1);
     $("#next-cap").textContent = on ? "until it looks again" : st.live ? "paused" : "sample data";
     const c = 2 * Math.PI * 32;
     $("#next-arc").setAttribute("stroke-dasharray", `${(on ? frac : 0) * c} ${c}`);
   }
 
+  // ─── Replay: step through the agent's history (Apple Watch's Time Travel) ──
+  // One step on the track per decision (a white tick for a co-signature, a coral one for a refusal),
+  // from before the first to now at the far right. The ring, the stars, the figure and the list follow.
+  const rp = { i: null, t: null, drag: false };
+  const shownDecisions = () => (rp.t == null ? st.m.decisions : st.m.decisions.filter((d) => Date.parse(d.at) <= rp.t));
+  const spentAt = (ds) => { const last = ds.filter((d) => d.kind === 0 && d.tally != null).pop(); return last ? u6(last.tally) : 0; };
+  function renderReplay() {
+    if (!st.m) return;
+    const n = st.m.decisions.length, pos = (i) => (i + 1) / (n + 1);
+    if (rp.i != null && rp.i >= n) { rp.i = null; rp.t = null; }
+    $("#rp-ticks").innerHTML = st.m.decisions.map((d, i) => `<i class="${d.kind ? "coral" : ""}${rp.i != null && i > rp.i ? " later" : ""}" style="left:${(pos(i) * 100).toFixed(2)}%"></i>`).join("");
+    const f = rp.i == null ? 1 : pos(rp.i);
+    $("#rp-track").style.setProperty("--f", f.toFixed(4));
+    const d = rp.i != null && rp.i >= 0 ? st.m.decisions[rp.i] : null;
+    const label = rp.i == null ? "Now" : d ? `${dayName(d.at)} ${clock(d.at)}` : "Before the first";
+    const k = $("#rp-knob"); k.setAttribute("aria-valuenow", String(Math.round(f * 100))); k.setAttribute("aria-valuetext", label);
+    $("#rp-time").textContent = label;
+    document.documentElement.classList.toggle("replaying", rp.i != null);
+  }
+  /** The ring and the stars show what was true at the replay's moment (or now). */
+  function skyNow(animate) {
+    const ds = shownDecisions(), frac = rp.t != null ? Math.min(1, spentAt(ds) / (st.m.budget || 1)) : st.m.frac;
+    Glass.setFill($("#ring"), frac); $("#ring").style.setProperty("--frac", frac);
+    Glass.setDecisions(ds.map((d) => ({ key: d.key, kind: d.kind, d })), animate);
+  }
+  /** i: a decision's index, -1 for before the first, null for now. */
+  function setReplay(i) {
+    if (!st.m) return;
+    const n = st.m.decisions.length;
+    if (i != null) i = Math.max(-1, Math.min(n, Math.round(i)));
+    if (i === n) i = null;
+    if (i === rp.i) return;
+    rp.i = i;
+    rp.t = i == null ? null : i < 0 ? (n ? Date.parse(st.m.decisions[0].at) - 1 : 0) : Date.parse(st.m.decisions[i].at);
+    renderReplay(); renderNow(); skyNow("soft");
+  }
+
   // ─── Timeline ─────────────────────────────────────────────────────────────
-  function renderTimeline() {
+  /** o.flow: the day panes flow from their old layout into the new one; o.keep: their words stay put. */
+  function renderTimeline(o = {}) {
     const m = st.m, q = st.q.trim().toLowerCase();
     const counts = { all: m.decisions.length + m.notes.length, signed: m.signed, refused: m.refused, notes: m.notes.length };
-    $$("#filters button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.f === st.filter)); $("small", b).textContent = counts[b.dataset.f]; });
+    $$("#filters button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.f === st.filter)); numText($("small", b), String(counts[b.dataset.f]), 1); });
     let items = [];
     if (st.filter !== "notes") items.push(...m.decisions.filter((d) => st.filter === "all" || (st.filter === "signed" ? d.kind === 0 : d.kind > 0)).map((d) => ({ at: d.at, html: decisionRow(d, true), text: `${d.why} ${d.tx.action?.kind ?? ""} ${d.d.hash ?? ""} ${d.d.reason ?? ""} ${xrp(d.tx.amountDrops)}` })));
     if (st.filter === "all" || st.filter === "notes") items.push(...m.notes.map((e) => ({ at: e.at, html: noteRow(e), text: `${e.kind} ${e.step?.kind ?? ""} ${e.error ?? ""}` })));
@@ -1708,16 +2354,27 @@ void main() {
     const days = new Map();
     for (const it of items) { const k = dayKey(it.at); if (!days.has(k)) days.set(k, { name: dayName(it.at), items: [] }); days.get(k).items.push(it); }
     const host = $("#days");
-    const old = $$(".day", host); old.forEach((el) => Glass.remove(el));
+    const here = st.onScreen === "timeline" && st.booted;
+    const from = here && o.flow && Glass.ok ? Glass.snapshot(host) : null;
+    $$(".day", host).forEach((el) => Glass.remove(el));
     host.innerHTML = days.size ? [...days.values()].map((d) => `<div class="glass pane day rise"><h3>${esc(d.name)}<span class="label">${d.items.length} ${d.items.length === 1 ? "event" : "events"}</span></h3><ul class="decisions">${d.items.map((i) => i.html).join("")}</ul></div>`).join("")
       : `<div class="glass pane day rise"><p class="empty">Nothing matches${q ? ` “${esc(st.q)}”` : ""}.</p></div>`;
-    $$(".day", host).forEach((el, i) => Glass.add(el, { kind: "pane", delay: 0.04 * i, shown: st.tab === "timeline" }));
+    const els = $$(".day", host);
+    els.forEach((el) => Glass.add(el, { kind: "pane", shown: false }));
+    if (!here) return;
+    if (o.keep) els.forEach((el) => el.classList.add("shown"));
+    if (from) {
+      const vis = els.filter(inView);
+      els.filter((el) => !vis.includes(el)).forEach((el) => { Glass.show(el, true, 0, { instant: true }); el.classList.add("shown"); });
+      Glass.flow(from, vis, { onLand: (el) => el.classList.add("shown") });
+    } else els.forEach((el, i) => { Glass.show(el, true, 0.04 * i); reveal(el, i); });
   }
+  function setFilter(f) { if (f === st.filter) return; st.filter = f; renderTimeline({ flow: true }); }
 
   // ─── Budget ───────────────────────────────────────────────────────────────
   function renderBudget() {
     const m = st.m, u = m.u;
-    roll($("#b-spent"), u6(u.spentUsd6), (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    numText($("#b-spent"), money(u6(u.spentUsd6)), 1);
     $("#b-of").textContent = `of ${usd(u.budgetUsd6, 0)} · ${(m.frac * 100).toFixed(1)}% used`;
     $("#b-meter").style.transform = `scaleX(${m.frac})`;
     const rate = m.days ? m.spent / m.days : null;
@@ -1771,13 +2428,19 @@ void main() {
       <line x1="${pl}" x2="${W - pr}" y1="${Y(m.budget)}" y2="${Y(m.budget)}" stroke="rgba(245,245,247,.5)"/>
       <text x="${W - pr}" y="${Y(m.budget) - 8}" text-anchor="end" fill="#a1a1a6" font-family="Geist Mono, monospace" font-size="11" letter-spacing="1.4">BUDGET ${usd(m.u.budgetUsd6, 0)}</text>
       <path d="${d}V${Y(0)}H${X(t0)}Z" fill="#ffae45" opacity=".1"/>
-      <path d="${d}" fill="none" stroke="#ffae45" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path class="line" d="${d}" fill="none" stroke="#ffae45" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
       <circle cx="${X(t1)}" cy="${Y(last.v)}" r="4.5" fill="#ffae45" stroke="#07080f" stroke-width="2"/>
       <text x="${X(t1) - 10}" y="${Y(last.v) - 12}" text-anchor="end" fill="#f5f5f7" font-family="Geist, sans-serif" font-size="13" font-weight="600">${usd(m.u.spentUsd6)}</text>
       <line id="b-cross" x1="0" x2="0" y1="${pt}" y2="${H - pb}" stroke="rgba(245,245,247,.35)" opacity="0"/>
       <circle id="b-dot" r="4.5" fill="#ffae45" stroke="#07080f" stroke-width="2" opacity="0"/>
     </svg><div class="tip" id="b-tip" style="opacity:0"></div>`;
     const svg = $("svg", host), tip = $("#b-tip"), cross = $("#b-cross"), dot = $("#b-dot");
+    // the line draws itself in, the first time it is seen
+    const line = $("path.line", host);
+    if (!Glass.reduced && !chart.drawn && line.getTotalLength && st.onScreen === "budget") {
+      chart.drawn = true; const L = line.getTotalLength();
+      line.animate([{ strokeDasharray: `0 ${L}` }, { strokeDasharray: `${L} 0` }], { duration: 1100, easing: EASE.smooth.easing, delay: 250, fill: "backwards" });
+    }
     const move = (clientX) => {
       const r = svg.getBoundingClientRect(), x = ((clientX - r.left) / r.width) * W;
       const t = t0 + ((x - pl) / (W - pl - pr)) * (t1 - t0);
@@ -1819,16 +2482,27 @@ void main() {
     else if (has("agent") && has("guard")) text = ["It moves, but only what the guard co-signs.", "2 of 2: the guard adds its signature only inside your budget and rules, priced by FTSO."];
     else if (has("agent")) text = ["Nothing moves.", "The agent alone is weight 1 of the 2 needed. A hijacked agent cannot spend."];
     else text = ["Nothing moves.", "The guard alone is weight 1. It never starts a transaction; it only co-signs the agent's."];
-    $("#k-verdict").innerHTML = `${esc(text[0])}<small>${esc(text[1])}</small>`;
+    const el = $("#k-verdict"), html = `${esc(text[0])}<small>${esc(text[1])}</small>`;
+    if (el.innerHTML === html) return;
+    el.innerHTML = html;
+    if (!Glass.reduced && el.animate && st.booted) el.animate([{ opacity: 0, transform: "translateY(6px)", filter: "blur(3px)" }, { opacity: 1, transform: "none", filter: "none" }], { duration: EASE.snappy.ms, easing: EASE.snappy.easing });
   }
 
-  // ─── Sheet: one decision, in full ─────────────────────────────────────────
-  let sheetFrom = null;
-  function openSheet(key, fromEl) {
+  // ─── Sheet: one decision in full, pulled out of the glass it came from ─────
+  const rowOf = (key) => $$(`.decision[data-key="${CSS.escape(key)}"]`).find((el) => el.offsetParent && inView(el)) ?? null;
+  function sourceRect(from) {
+    if (!from) return null;
+    if (from.nodeType) { const r = from.getBoundingClientRect(); return r.width ? r : null; }
+    return { left: from.x - 9, right: from.x + 9, top: from.y - 9, bottom: from.y + 9 };
+  }
+  const radiusFor = (from) => (!from?.nodeType ? 9 : from.id === "status" ? from.getBoundingClientRect().height / 2 : 16);
+  /** from: the element it grows out of (a row, the island) or a point (a star). */
+  function openSheet(key, from) {
     const d = st.m.decisions.find((x) => x.key === key); if (!d) return;
+    const again = st.sheet != null;
     st.sheet = key;
     const tx = d.tx, dec = d.d;
-    const v = d.kind === 0 ? `<span class="pill" style="height:28px;box-shadow:inset 0 0 0 1px rgba(245,245,247,.22)">${"<i></i>"}<span>Co-signed</span></span>` : `<span class="pill coral" style="height:28px;box-shadow:inset 0 0 0 1px rgba(255,107,107,.4)"><i></i><span>${d.kind === 2 ? "Refused · struck" : "Refused"}</span></span>`;
+    const v = d.kind === 0 ? `<span class="pill" style="height:28px;box-shadow:inset 0 0 0 1px rgba(245,245,247,.22)"><i></i><span>Co-signed</span></span>` : `<span class="pill coral" style="height:28px;box-shadow:inset 0 0 0 1px rgba(255,107,107,.4)"><i></i><span>${d.kind === 2 ? "Refused · struck" : "Refused"}</span></span>`;
     $("#sheet-body").innerHTML = `${v}
       <h2 id="sheet-title">${d.kind === 0 ? "The guard added the second signature." : "The guard refused to sign."}</h2>
       <div class="witness said"><i></i><p>${esc(d.why || "No reason given")}${d.by ? `<span class="label"> · ${d.by === "drill" ? "drill, a staged hijack" : `by ${esc(d.by)}`}</span>` : ""}</p></div>
@@ -1845,94 +2519,184 @@ void main() {
         ${dec.reservation ? `<dt>Reserved on Flare</dt><dd>${link("flare", dec.reservation)}</dd>` : ""}
         ${dec.struck ? `<dt>Strike on Flare</dt><dd>${link("flare", dec.struck)}</dd>` : ""}
       </dl>`;
-    sheetFrom = fromEl?.getBoundingClientRect() ?? null;
-    morph.t = 0; morph.v = 0; morph.target = 1;
-    $("#sheet").classList.add("open"); $("#sheet").setAttribute("aria-hidden", "false"); $("#scrim").classList.add("open");
+    if (again) return;
+    const sh = $("#sheet");
+    sh.classList.add("open"); sh.setAttribute("aria-hidden", "false"); $("#scrim").classList.add("open");
     document.documentElement.classList.add("sheet-open"); Glass.backdrop(true);
-    Glass.show($("#sheet"), true);
-    setTimeout(() => $("#sheet .close").focus({ preventScroll: true }), 60);
+    if (innerWidth <= 760) Glass.show($("#tabs"), false, 0, { fast: true }); // a sheet covers the phone's tab bar
+    st.sheetFrom = from ? (from.nodeType ? { el: from } : { pt: from }) : null;
+    if (Glass.ok && !Glass.reduced) {
+      sh.style.setProperty("--p", "0");
+      const src = sourceRect(from);
+      Glass.overlay(sh, { kind: "sheet", from: src, fromRadius: src ? radiusFor(from) : undefined, onFrame: (p) => sh.style.setProperty("--p", p.toFixed(3)) });
+    } else { sh.style.setProperty("--p", "1"); Glass.overlay(sh, { kind: "sheet" }); }
+    const viaKey = st.viaKey; st.viaKey = false;
+    setTimeout(() => $("#sheet .close").focus({ preventScroll: true, focusVisible: viaKey }), 80);
   }
   function closeSheet() {
     if (!st.sheet) return;
-    const row = $(`.decision[data-key="${CSS.escape(st.sheet)}"]`);
-    sheetFrom = row && row.offsetParent ? row.getBoundingClientRect() : null;
-    st.sheet = null; morph.target = 0;
-    $("#sheet").classList.remove("open"); $("#sheet").setAttribute("aria-hidden", "true"); $("#scrim").classList.remove("open");
+    const key = st.sheet, sh = $("#sheet"), f = st.sheetFrom;
+    let to = null, toR = 16;
+    if (f?.pt) { const p = Glass.markPos(key); if (p) { to = { left: p.x - 8, right: p.x + 8, top: p.y - 8, bottom: p.y + 8 }; toR = 8; } }
+    else if (f?.el?.id === "status") { const r = f.el.getBoundingClientRect(); to = r; toR = r.height / 2; }
+    if (!to) { const row = rowOf(key); if (row) to = row.getBoundingClientRect(); }
+    st.sheet = null; st.sheetFrom = null;
+    sh.classList.remove("open"); sh.setAttribute("aria-hidden", "true"); $("#scrim").classList.remove("open");
     document.documentElement.classList.remove("sheet-open"); Glass.backdrop(false);
-    Glass.show($("#sheet"), false);
-  }
-  // the sheet's glass grows out of the row it came from (a matched-geometry morph)
-  const morph = { t: 0, v: 0, target: 0, last: 0 };
-  function sheetRect() {
-    const el = $("#sheet"), r = el.getBoundingClientRect();
-    const now = Glass.now, dt = Math.min(0.05, Math.max(0.001, now - (morph.last || now))); morph.last = now;
-    if (Glass.reduced) morph.t = morph.target; else { const f = -170 * (morph.t - morph.target) - 24 * morph.v; morph.v += f * dt; morph.t += morph.v * dt; }
-    if (!sheetFrom) return r;
-    const k = Math.max(0, Math.min(1.08, morph.t)), l = (a, b) => a + (b - a) * k;
-    const left = l(sheetFrom.left, r.left), top = l(sheetFrom.top, r.top), right = l(sheetFrom.right, r.right), bottom = l(sheetFrom.bottom, r.bottom);
-    return { left, top, right, bottom, width: right - left, height: bottom - top };
+    Glass.show($("#tabs"), true, 0.12);
+    Glass.overlayOut(sh, { to, toRadius: toR });
   }
 
-  // ─── Tabs, with a lens that slides and stretches between them ─────────────
-  const ind = { lead: 0, trail: 0, lv: 0, tv: 0, w: 0, wv: 0, last: 0, init: false };
-  function indicatorRect() {
-    const bar = $("#tabs"), tab = $(`#tab-${st.tab}`); if (!tab) return null;
-    const br = bar.getBoundingClientRect(), tr = tab.getBoundingClientRect();
-    const goalL = tr.left, goalR = tr.right;
-    const now = Glass.now, dt = Math.min(0.05, Math.max(0.001, now - (ind.last || now))); ind.last = now;
-    if (!ind.init || Glass.reduced) { ind.lead = goalL; ind.trail = goalR; ind.init = true; }
-    else {
-      const moveRight = goalL > ind.lead;
-      const fastK = 240, slowK = 120;
-      const kL = moveRight ? slowK : fastK, kR = moveRight ? fastK : slowK;
-      const fL = -kL * (ind.lead - goalL) - 2 * Math.sqrt(kL) * 0.9 * ind.lv, fR = -kR * (ind.trail - goalR) - 2 * Math.sqrt(kR) * 0.9 * ind.tv;
-      ind.lv += fL * dt; ind.lead += ind.lv * dt; ind.tv += fR * dt; ind.trail += ind.tv * dt;
-    }
-    const top = tr.top + 1, bottom = tr.bottom - 1;
-    return { left: ind.lead, right: ind.trail, top, bottom, width: ind.trail - ind.lead, height: bottom - top, _bar: br };
+  // ─── Tabs and segments: a lens that you can press, lift and drag ───────────
+  // iOS 26's tab bar: under a finger the selection lifts into a larger, clearer lens that follows it
+  // between the tabs; let go and it settles on the nearest one with a bounce.
+  function liquidControl(host, o) {
+    const drag = { on: false, x: 0, x0: 0, moved: false };
+    Glass.lens(o.key, () => {
+      const sel = o.current(); if (!sel || !sel.offsetParent) return null;
+      const r = sel.getBoundingClientRect(); if (r.width < 1) return null;
+      if (!drag.on) return { rect: r, radius: r.height / 2, lift: 0 };
+      const hr = host.getBoundingClientRect(), w = r.width, pad = 4;
+      const cx = Math.min(Math.max(drag.x, hr.left + pad + w / 2), hr.right - pad - w / 2);
+      return { rect: { left: cx - w / 2, right: cx + w / 2, top: r.top, bottom: r.bottom }, radius: r.height / 2, lift: 1 };
+    }, o.lens);
+    const nearest = (x) => { let best = null, bd = 1e9; for (const b of o.items()) { const r = b.getBoundingClientRect(); const d = Math.abs(x - (r.left + r.width / 2)); if (r.width && d < bd) { bd = d; best = b; } } return best; };
+    host.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !Glass.ok || !e.target.closest("button")) return;
+      drag.on = true; drag.x = drag.x0 = e.clientX; drag.moved = false;
+      const move = (ev) => { drag.x = ev.clientX; if (Math.abs(drag.x - drag.x0) > 6) drag.moved = true; };
+      const end = (ev) => {
+        removeEventListener("pointermove", move); removeEventListener("pointerup", end); removeEventListener("pointercancel", end);
+        drag.on = false;
+        if (ev.type === "pointerup" && drag.moved) { const b = nearest(drag.x); if (b) { o.pick(b); swallowClick(host); } }
+      };
+      addEventListener("pointermove", move, { passive: true }); addEventListener("pointerup", end); addEventListener("pointercancel", end);
+    });
   }
+  function swallowClick(host) {
+    const f = (e) => { e.stopPropagation(); e.preventDefault(); };
+    host.addEventListener("click", f, { capture: true, once: true });
+    setTimeout(() => host.removeEventListener("click", f, { capture: true }), 350);
+  }
+  /** SF Symbols' effects, one for each tab's icon, when it is chosen. */
+  function tabFx(tab) {
+    if (Glass.reduced) return;
+    const svg = $(`#tab-${tab} svg`); if (!svg?.animate) return;
+    const B = { duration: EASE.bouncy.ms, easing: EASE.bouncy.easing }, N = { duration: EASE.snappy.ms, easing: EASE.snappy.easing };
+    const kids = [...svg.children];
+    if (tab === "now") svg.animate([{ transform: "rotate(-45deg) scale(.6)" }, { transform: "none" }], B);
+    if (tab === "timeline") kids.forEach((k, i) => k.animate([{ transform: i ? "scale(.2)" : "translateX(-5px)", opacity: 0 }, { transform: "none", opacity: 1 }], { ...N, delay: i * 50, fill: "backwards" }));
+    if (tab === "budget") kids[1]?.animate([{ transform: "rotate(-100deg)" }, { transform: "none" }], B);
+    if (tab === "keys") svg.animate([{ transform: "rotate(0)" }, { transform: "rotate(-16deg)", offset: 0.22 }, { transform: "rotate(12deg)", offset: 0.48 }, { transform: "rotate(-6deg)", offset: 0.74 }, { transform: "rotate(0)" }], { duration: 640, easing: "ease-in-out" });
+    if (tab === "how") { kids[0]?.animate([{ transform: "translateX(-4px)" }, { transform: "none" }], B); kids[1]?.animate([{ transform: "translateX(4px)" }, { transform: "none" }], B); }
+  }
+  function reveal(el, i = 0) { el.style.transitionDelay = `${Math.min(i, 10) * 50}ms`; el.classList.add("shown"); setTimeout(() => { el.style.transitionDelay = ""; }, 1400); }
   function go(tab, opts = {}) {
     if (!TABS.includes(tab)) tab = "now";
-    const prev = st.tab; st.tab = tab;
+    if (st.booted && tab === st.tab) return;
+    st.tab = tab;
     TABS.forEach((t) => { const b = $(`#tab-${t}`); b.setAttribute("aria-selected", String(t === tab)); b.tabIndex = t === tab ? 0 : -1; });
     if (!opts.silent) try { history.replaceState(null, "", `#${tab}`); } catch {}
-    const show = () => {
-      TABS.forEach((t) => { const v = $(`#view-${t}`); if (t !== tab) { v.hidden = true; v.classList.remove("in"); } });
-      const v = $(`#view-${tab}`); v.hidden = false;
-      $("#scroller").scrollTop = 0;
-      $$(".glass", v).forEach((el, i) => Glass.show(el, true, 0.05 + i * 0.045));
-      if (tab === "budget" && st.m) chart();
-      void v.offsetWidth; v.classList.add("in");
-    };
-    if (prev === tab || !st.booted) { show(); return; }
-    $$(".glass", $(`#view-${prev}`)).forEach((el) => Glass.show(el, false));
-    $(`#view-${prev}`).classList.remove("in");
-    setTimeout(show, Glass.reduced ? 0 : 200);
+    closeMenu();
+    if (rp.t != null && tab !== "now") setReplay(null);
+    const next = $(`#view-${tab}`);
+    clearTimeout(st.swapT);
+    if (!st.booted || !Glass.ok || Glass.reduced || !st.onScreen) { tabFx(tab); showView(next, tab); return; }
+    tabFx(tab);
+    const old = $(`#view-${st.onScreen}`);
+    if (st.onScreen === tab) { old.classList.remove("leaving"); if (tab === "now") Glass.show($("#ring"), true); return; }
+    // the words leave first, quickly; then the glass flows into the new layout and the new words land with it
+    old.classList.add("leaving");
+    if (st.onScreen === "now") Glass.show($("#ring"), false, 0, { fast: true });
+    st.swapT = setTimeout(() => swap(old, next, tab), 110);
+  }
+  function hideView(v) {
+    v.hidden = true; v.classList.remove("in", "leaving");
+    $$(".rise", v).forEach((el) => el.classList.remove("shown"));
+  }
+  function showView(next, tab) {
+    TABS.forEach((t) => { const v = $(`#view-${t}`); if (v !== next) { hideView(v); $$(".glass", v).forEach((el) => Glass.show(el, false, 0, { instant: true })); } });
+    next.hidden = false; st.onScreen = tab;
+    $("#scroller").scrollTop = 0; syncScroll();
+    $$(".glass", next).forEach((el, i) => Glass.show(el, true, 0.05 + i * 0.045));
+    if (tab === "budget" && st.m) chart();
+    void next.offsetWidth; next.classList.add("in");
+    $$(".rise", next).forEach((el, i) => reveal(el, i));
+  }
+  function swap(old, next, tab) {
+    const from = Glass.snapshot(old);
+    $$(".glass", old).forEach((el) => Glass.show(el, false, 0, { instant: el.id !== "ring" }));
+    hideView(old);
+    next.hidden = false; st.onScreen = tab;
+    $("#scroller").scrollTop = 0; syncScroll();
+    if (tab === "budget" && st.m) chart();
+    void next.offsetWidth;
+    const glass = $$(".glass", next).filter((el) => el.id !== "ring");
+    const vis = glass.filter(inView).sort(byReading);
+    glass.filter((el) => !vis.includes(el)).forEach((el) => { Glass.show(el, true, 0, { instant: true }); el.classList.add("shown"); });
+    Glass.flow(from, vis, { onLand: (el) => el.classList.add("shown") });
+    $$(".rise", next).filter((el) => !el.classList.contains("glass")).forEach((el, i) => setTimeout(() => { if (!next.hidden) el.classList.add("shown"); }, 140 + i * 55));
+    if (tab === "now") Glass.show($("#ring"), true, 0.22);
+    next.classList.add("in");
+  }
+
+  // ─── The island: the status capsule opens up when something happens ──────
+  const isl = { key: null, t: 0 };
+  function islandFit() {
+    const s = $("#status"), part = s.classList.contains("wide") ? $("#island-wide") : $("#island-compact");
+    const max = innerWidth - (innerWidth <= 760 ? 32 : 64);
+    s.style.width = `${Math.min(max, Math.ceil(part.scrollWidth))}px`;
+  }
+  function islandShow(html, tone, key, ms = 6500) {
+    const s = $("#status");
+    $("#island-wide").innerHTML = html; s.dataset.tone = tone; isl.key = key;
+    s.classList.add("wide"); islandFit(); Glass.sweep(s);
+    document.documentElement.classList.add("island-wide");
+    clearTimeout(isl.t); isl.t = setTimeout(islandHide, ms);
+  }
+  function islandHide() {
+    const s = $("#status"); clearTimeout(isl.t); isl.key = null;
+    s.classList.remove("wide"); document.documentElement.classList.remove("island-wide"); islandFit();
+  }
+  function islandEvent(d) {
+    const verdict = d.kind === 0 ? `${STAR}<b>Co-signed</b>` : `<b>${d.kind === 2 ? "Refused · struck" : "Refused"}</b>`;
+    const what = d.kind === 0 ? doesShort(d.tx) : d.why ? `“${esc(clip(d.why, 46))}”` : "The guard would not sign";
+    return `${verdict}<span class="ev-what">${what}</span>${d.usd6 && d.kind === 0 ? `<span class="ev-usd">${usd(d.usd6, u6(d.usd6) < 0.01 ? 4 : 2)}</span>` : ""}<span class="ev-open" aria-hidden="true">›</span>`;
+  }
+  function feedInfo() {
+    if (!st.feed) return "<b>Loading</b>";
+    if (!st.live) return `<b>Sample data</b><span class="ev-what">the live feed could not be reached</span>`;
+    const left = nextLeft(), on = !st.away && !st.m?.u.tripped;
+    return `<b>${st.away ? "Offline" : "Live"}</b><span class="ev-what">published ${ago(st.feed.generatedAt)}${on && left != null ? ` · the agent looks again in ${mmss(left)}` : ""}</span>`;
   }
 
   // ─── Status, feed and live updates ────────────────────────────────────────
   function renderStatus() {
     const s = $("#status");
     s.classList.remove("live", "away", "sample");
-    if (!st.live) { s.classList.add("sample"); $("#status-text").textContent = "Sample data"; return; }
-    s.classList.add(st.away ? "away" : "live");
-    $("#status-text").textContent = st.away ? `Offline · last seen ${ago(st.feed.generatedAt)}` : `Live · ${ago(st.feed.generatedAt)}`;
-    $("#foot-source").textContent = st.away ? `The demo machine was last seen ${ago(st.feed.generatedAt)}. This is its last state.` : `Published by the demo machine ${ago(st.feed.generatedAt)}.`;
+    if (!st.live) { s.classList.add("sample"); $("#status-text").textContent = "Sample data"; }
+    else {
+      s.classList.add(st.away ? "away" : "live");
+      $("#status-text").textContent = st.away ? `Offline · last seen ${ago(st.feed.generatedAt)}` : `Live · ${ago(st.feed.generatedAt)}`;
+      $("#foot-source").textContent = st.away ? `The demo machine was last seen ${ago(st.feed.generatedAt)}. This is its last state.` : `Published by the demo machine ${ago(st.feed.generatedAt)}.`;
+    }
+    if (!s.classList.contains("wide")) islandFit();
   }
   function apply(feed, live) {
     const animate = st.live && live; // stars are born only for what arrives while you watch
     st.feed = feed; st.live = live;
     st.away = live && (Date.now() - Date.parse(feed.generatedAt)) / 1000 > AWAY_S;
     st.m = build(feed);
-    renderStatus(); renderNow(); renderTimeline(); renderBudget(); renderKeys();
-    Glass.setFill($("#ring"), st.m.frac);
-    Glass.ringState($("#ring"), st.m.u.tripped);
-    $("#ring").style.setProperty("--frac", st.m.frac); $("#ring").classList.toggle("coral", !!st.m.u.tripped);
+    const fresh = animate ? st.m.decisions.filter((d) => !st.seen.has(d.key)) : [];
+    st.m.decisions.forEach((d) => st.seen.add(d.key));
+    renderStatus(); renderNow(); renderTimeline({ flow: true, keep: true }); renderBudget(); renderKeys();
+    Glass.ringState($("#ring"), st.m.u.tripped); $("#ring").classList.toggle("coral", !!st.m.u.tripped);
     Glass.asleep(st.away);
     if (live) Glass.sweep($("#status"));
-    Glass.setDecisions(st.m.decisions.map((d) => ({ key: d.key, kind: d.kind, d })), animate);
+    renderReplay(); skyNow(rp.t != null ? "soft" : animate);
     if (!live) $("#foot-source").textContent = feed.note ?? "Sample data from a rehearsal: the live feed could not be reached.";
     if (st.sheet) openSheet(st.sheet);
+    if (fresh.length) { const d = fresh[fresh.length - 1]; islandShow(islandEvent(d), d.kind === 0 ? "star" : "coral", d.key, 7000); }
     tickNext();
   }
   async function load() {
@@ -1949,10 +2713,78 @@ void main() {
     setTimeout(load, 60000);
   }
 
-  function toast(text) {
+  // ─── Small confirmations and the context menu, in the overlay's glass ─────
+  function toast(text, fromEl) {
     const el = $("#toast"); $("span", el).textContent = text;
-    el.classList.add("show"); Glass.show(el, true);
-    clearTimeout(st.toastT); st.toastT = setTimeout(() => { el.classList.remove("show"); Glass.show(el, false); }, 1400);
+    el.classList.add("show");
+    el.style.setProperty("--p", Glass.ok && !Glass.reduced ? "0" : "1");
+    if (Glass.ok) Glass.overlay(el, { kind: "chip", from: fromEl && inView(fromEl) ? fromEl.getBoundingClientRect() : null, fromRadius: 14, onFrame: (p) => el.style.setProperty("--p", p.toFixed(3)) });
+    clearTimeout(st.toastT);
+    st.toastT = setTimeout(() => { el.classList.remove("show"); Glass.overlayOut(el, {}); }, 1500);
+  }
+  function copy(text, fromEl) {
+    navigator.clipboard?.writeText(text).then(() => toast("Copied", fromEl)).catch(() => {
+      const code = fromEl?.parentElement?.querySelector("code");
+      if (code) { const r = document.createRange(); r.selectNodeContents(code); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Selected: press ⌘C to copy", fromEl); }
+    });
+  }
+  let menuAt = null;
+  function openMenu(x, y, d) {
+    const m = $("#menu"), ex = st.feed.explorers ?? {}, fork = !!st.feed.networks?.flareFork;
+    if (menuAt) { menuAt = null; Glass.overlayOut(m, {}); }
+    const items = [
+      ["open", "Open the decision", OPEN],
+      d.d.hash && ["copy-hash", "Copy the XRPL hash", COPY],
+      d.d.hash && ex.xrplTx && ["xrpl", "View it on the XRPL explorer", OUT],
+      d.d.struck && ex.flareTx && !fork && ["strike", "View the strike on Flare", OUT],
+      d.why && ["copy-why", "Copy what the agent said", COPY],
+    ].filter(Boolean);
+    m.innerHTML = items.map(([k, t, ic]) => `<button role="menuitem" data-m="${k}">${ic}<span>${t}</span></button>`).join("");
+    m.hidden = false; m.classList.add("open");
+    const w = m.offsetWidth, h = m.offsetHeight;
+    m.style.left = `${Math.max(12, Math.min(x, innerWidth - w - 12))}px`;
+    m.style.top = `${y + h + 12 > innerHeight ? Math.max(12, y - h) : y}px`;
+    menuAt = { x, y, d };
+    m.style.setProperty("--p", Glass.ok && !Glass.reduced ? "0" : "1");
+    if (Glass.ok) Glass.overlay(m, { kind: "sheet", from: { left: x - 5, right: x + 5, top: y - 5, bottom: y + 5 }, fromRadius: 5, onFrame: (p) => m.style.setProperty("--p", p.toFixed(3)) });
+    m.querySelector("button")?.focus({ preventScroll: true });
+  }
+  function closeMenu() {
+    const m = $("#menu"); if (!menuAt) return;
+    const { x, y } = menuAt; menuAt = null;
+    m.classList.remove("open");
+    if (!Glass.ok) { m.hidden = true; return; }
+    Glass.overlayOut(m, { to: { left: x - 3, right: x + 3, top: y - 3, bottom: y + 3 }, toRadius: 3, onDone: () => { if (!menuAt) m.hidden = true; } });
+  }
+  function menuFor(key, x, y) { const d = st.m?.decisions.find((q) => q.key === key); if (d) openMenu(x, y, d); }
+
+  // ─── The pointer: its drop becomes the highlight of the control beneath ───
+  const HOVER = ".tab, #filters button, .linkbtn, .copy, .close, .signer, .faq summary, .decision, #status, .menu button";
+  const LIFT = ".tab, #filters button, .copy, .close, .linkbtn";
+  function hoverOpts(el) {
+    const layer = el.closest(".sheet, .menu") ? 1 : 0;
+    if (el.matches(".tab, #filters button, #status, .copy, .close")) return { radius: "capsule", layer };
+    if (el.matches(".linkbtn")) return { radius: "capsule", inset: [12, 2], layer };
+    if (el.matches(".signer")) return { radius: 22, layer };
+    if (el.matches(".faq summary")) return { radius: 14, inset: [12, 0], layer };
+    if (el.matches(".menu button")) return { radius: 11, layer };
+    return { radius: 16, layer };
+  }
+  let hovEl = null;
+  function onHover(e) {
+    if (e.pointerType !== "mouse") return;
+    const el = e.target.closest?.(HOVER) ?? null;
+    if (el !== hovEl) {
+      if (hovEl?.matches(LIFT)) hovEl.style.translate = "";
+      hovEl = el;
+      Glass.hover(el, el ? hoverOpts(el) : null);
+      Glass.markHover(el?.matches(".decision") ? el.dataset.key : null);
+    }
+    // small controls lean toward the pointer (iPadOS's lift)
+    if (el && el.matches(LIFT) && !Glass.reduced) {
+      const r = el.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+      el.style.translate = `${(dx * 0.07).toFixed(2)}px ${(dy * 0.12).toFixed(2)}px`;
+    }
   }
 
   // ─── Wiring ───────────────────────────────────────────────────────────────
@@ -1962,30 +2794,102 @@ void main() {
       const i = TABS.indexOf(st.tab);
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); const n = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length]; go(n); $(`#tab-${n}`).focus(); }
     });
+    let press = null; // a long press on a row opens its menu (touch)
     document.addEventListener("click", (e) => {
+      if (press?.fired) { press = null; e.preventDefault(); return; }
       const goEl = e.target.closest("[data-go]"); if (goEl) { go(goEl.dataset.go); return; }
       const row = e.target.closest(".decision[data-key]"); if (row && !e.target.closest("a")) { openSheet(row.dataset.key, row); return; }
-      const cp = e.target.closest("[data-copy]");
-      if (cp) {
-        const txt = cp.dataset.copy;
-        navigator.clipboard?.writeText(txt).then(() => toast("Copied")).catch(() => { const r = document.createRange(); const code = cp.parentElement.querySelector("code"); if (code) { r.selectNodeContents(code); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Selected: press ⌘C to copy"); } });
-        return;
-      }
+      const cp = e.target.closest("[data-copy]"); if (cp) { copy(cp.dataset.copy, cp); return; }
       const sg = e.target.closest(".signer");
       if (sg) { const k = sg.dataset.k; st.signers.has(k) ? st.signers.delete(k) : st.signers.add(k); quorum(); }
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeSheet();
-      if (/^[1-5]$/.test(e.key) && !e.target.closest?.("input, textarea") && !e.metaKey && !e.ctrlKey && !e.altKey) go(TABS[Number(e.key) - 1]);
-      if (e.key === "Enter" && e.target.matches?.(".decision[data-key]")) openSheet(e.target.dataset.key, e.target);
+      if (e.key === "Escape") { if (menuAt) closeMenu(); else if (st.sheet) closeSheet(); else if (rp.t != null) setReplay(null); return; }
+      const typing = e.target.closest?.("input, textarea");
+      if (/^[1-5]$/.test(e.key) && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) go(TABS[Number(e.key) - 1]);
+      if (e.key === "/" && !typing) { e.preventDefault(); const was = st.onScreen; go("timeline"); setTimeout(() => $("#q").focus({ preventScroll: true }), was === "timeline" ? 0 : 420); }
+      if (e.key === "Enter" && e.target.matches?.(".decision[data-key]")) { st.viaKey = true; openSheet(e.target.dataset.key, e.target); }
+      if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && e.target.matches?.(".decision[data-key]")) { e.preventDefault(); const r = e.target.getBoundingClientRect(); menuFor(e.target.dataset.key, r.left + 40, r.top + r.height / 2); }
     });
     $("#scrim").addEventListener("click", closeSheet);
     $("#sheet .close").addEventListener("click", closeSheet);
-    $$("#filters button").forEach((b) => b.addEventListener("click", () => { st.filter = b.dataset.f; renderTimeline(); }));
-    $("#q").addEventListener("input", (e) => { st.q = e.target.value; renderTimeline(); });
+    $$("#filters button").forEach((b) => b.addEventListener("click", () => setFilter(b.dataset.f)));
+    $("#q").addEventListener("input", (e) => { st.q = e.target.value; renderTimeline({ flow: true, keep: true }); });
     $("#b-tabletoggle").addEventListener("click", () => {
       st.table = !st.table; $("#b-table").hidden = !st.table; $("#b-chartbox").hidden = st.table;
       $("#b-tabletoggle").textContent = st.table ? "Chart" : "Table";
+    });
+    // the island: tap it for the feed, or for the decision it is showing
+    $("#status").addEventListener("click", () => {
+      if (isl.key) { const k = isl.key; openSheet(k, $("#status")); islandHide(); return; }
+      if ($("#status").classList.contains("wide")) { islandHide(); return; }
+      islandShow(feedInfo(), "info", null, 5200);
+    });
+    $("#status").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#status").click(); } });
+    // the context menu: right click, the menu key, or a long press
+    document.addEventListener("contextmenu", (e) => {
+      const row = e.target.closest(".decision[data-key]");
+      if (!row || e.target.closest("a") || !st.m) return;
+      e.preventDefault(); menuFor(row.dataset.key, e.clientX, e.clientY);
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (menuAt && !e.target.closest("#menu")) closeMenu();
+      if (e.pointerType === "mouse") return;
+      const row = e.target.closest(".decision[data-key]"); if (!row) return;
+      const x = e.clientX, y = e.clientY;
+      press = { x, y, fired: false, t: setTimeout(() => { if (!press) return; press.fired = true; menuFor(row.dataset.key, x, y); }, 520) };
+    }, { passive: true });
+    document.addEventListener("pointermove", (e) => { if (press && !press.fired && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) { clearTimeout(press.t); press = null; } onHover(e); }, { passive: true });
+    document.addEventListener("pointerup", () => { if (press && !press.fired) { clearTimeout(press.t); press = null; } }, { passive: true });
+    $("#menu").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-m]"); if (!b || !menuAt) return;
+      const d = menuAt.d, k = b.dataset.m, ex = st.feed.explorers ?? {};
+      if (k === "copy-hash") copy(d.d.hash, b);
+      if (k === "copy-why") copy(d.why, b);
+      closeMenu();
+      if (k === "open") openSheet(d.key, rowOf(d.key));
+      if (k === "xrpl") window.open(`${ex.xrplTx}${d.d.hash}`, "_blank", "noopener");
+      if (k === "strike") window.open(`${ex.flareTx}${d.d.struck}`, "_blank", "noopener");
+    });
+    $("#menu").addEventListener("keydown", (e) => {
+      const bs = $$("#menu button"), i = bs.indexOf(document.activeElement);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); bs[(i + (e.key === "ArrowDown" ? 1 : bs.length - 1)) % bs.length]?.focus(); }
+    });
+    // questions open and close on a spring. The <details> itself is animated: its answer lives in a
+    // slot the browser keeps hidden while closed, where an animation would not run.
+    $$(".faq details").forEach((d) => {
+      const sum = $("summary", d);
+      sum.addEventListener("click", (e) => {
+        if (Glass.reduced || !d.animate) return;
+        e.preventDefault();
+        d.getAnimations().forEach((a) => a.cancel());
+        const from = d.offsetHeight;
+        if (d.open && !d.classList.contains("closing")) {
+          d.classList.add("closing");
+          const to = sum.offsetHeight + 8;
+          d.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: 380, easing: EASE.smooth.easing }).onfinish = () => { d.open = false; d.classList.remove("closing"); };
+        } else {
+          d.classList.remove("closing"); d.open = true;
+          // (the details' own height is not updated yet here; its answer's is)
+          const ans = $("p", d), to = sum.offsetHeight + 8 + (ans ? ans.offsetHeight + (parseFloat(getComputedStyle(ans).marginBottom) || 0) : 0);
+          d.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: EASE.snappy.ms, easing: EASE.snappy.easing });
+        }
+      });
+    });
+    // replay: drag along the track, or use the arrow keys on its knob; double-click returns to now
+    const tr = $("#rp-track");
+    const scrub = (x) => { const r = tr.getBoundingClientRect(), n = st.m?.decisions.length ?? 0; setReplay(Math.round(Math.min(1, Math.max(0, (x - r.left) / r.width)) * (n + 1)) - 1); };
+    tr.addEventListener("pointerdown", (e) => { if (e.button) return; rp.drag = true; try { tr.setPointerCapture(e.pointerId); } catch {} $("#rp").classList.add("drag"); scrub(e.clientX); });
+    tr.addEventListener("pointermove", (e) => { if (rp.drag) scrub(e.clientX); });
+    const endScrub = () => { if (!rp.drag) return; rp.drag = false; $("#rp").classList.remove("drag"); };
+    for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) tr.addEventListener(ev, endScrub);
+    tr.addEventListener("dblclick", () => setReplay(null));
+    $("#rp-knob").addEventListener("keydown", (e) => {
+      const n = st.m?.decisions.length ?? 0, cur = rp.i ?? n;
+      if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); setReplay(cur - 1); }
+      if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); setReplay(cur + 1); }
+      if (e.key === "Home") { e.preventDefault(); setReplay(-1); }
+      if (e.key === "End") { e.preventDefault(); setReplay(null); }
     });
     // the sky's stars answer the pointer
     const hit = $("#orbit-hit"), tip = $("#startip");
@@ -1997,15 +2901,16 @@ void main() {
       tip.style.left = `${mk.x}px`; tip.style.top = `${mk.y}px`; tip.classList.add("show");
     });
     hit.addEventListener("pointerleave", () => { tip.classList.remove("show"); Glass.markAt(-1e4, -1e4); });
-    hit.addEventListener("click", (e) => { const mk = Glass.markAt(e.clientX, e.clientY); if (mk) openSheet(mk.data.d.key); });
+    hit.addEventListener("click", (e) => { const mk = Glass.markAt(e.clientX, e.clientY); if (mk) { tip.classList.remove("show"); openSheet(mk.data.d.key, { x: mk.x, y: mk.y }); } });
+    hit.addEventListener("contextmenu", (e) => { const mk = Glass.markAt(e.clientX, e.clientY); if (mk) { e.preventDefault(); tip.classList.remove("show"); menuFor(mk.data.d.key, e.clientX, e.clientY); } });
     // scroll: the sky follows a little, the phone's tab bar steps aside
     const sc = $("#scroller"); let lastY = 0;
     sc.addEventListener("scroll", () => {
       const y = sc.scrollTop, tabs = $("#tabs");
       if (innerWidth <= 760) { if (y > lastY + 6 && y > 80) tabs.classList.add("mini"); else if (y < lastY - 6) tabs.classList.remove("mini"); }
-      lastY = y; syncScroll();
+      lastY = y; syncScroll(); if (menuAt) closeMenu();
     }, { passive: true });
-    addEventListener("resize", () => { syncScroll(); clearTimeout(st.rs); st.rs = setTimeout(() => st.m && !$("#view-budget").hidden && chart(), 150); });
+    addEventListener("resize", () => { syncScroll(); islandFit(); closeMenu(); clearTimeout(st.rs); st.rs = setTimeout(() => st.m && st.onScreen === "budget" && chart(), 150); });
     addEventListener("hashchange", () => go(location.hash.slice(1), { silent: true }));
   }
   function syncScroll() {
@@ -2017,7 +2922,7 @@ void main() {
   function anchor() {
     requestAnimationFrame(anchor);
     const ring = $("#ring");
-    if (st.tab === "now" && ring && !ring.closest("[hidden]")) {
+    if (st.onScreen === "now" && st.tab === "now" && ring && !ring.closest("[hidden]")) {
       const r = ring.getBoundingClientRect(), cy = r.top + r.height / 2, top = innerWidth <= 760 ? 84 : 104;
       // the spiral belongs to the ring: when the ring slides under the top bar, its stars go with it
       Glass.focus(r.left + r.width / 2, cy, r.width / 2, cy > top + 30 && cy < innerHeight - (innerWidth <= 760 ? 110 : 20));
@@ -2029,16 +2934,17 @@ void main() {
     const gl = Glass.init($("#sky"));
     if (!gl) document.documentElement.classList.add("no-gl");
     if (Glass.solid) document.documentElement.classList.add("solid");
+    Glass.setScroller($("#scroller"));
     st.sample = JSON.parse($("#sample").textContent);
-    // glass: navigation (fixed) and content (scrolls)
+    // glass: navigation (fixed) and content (scrolls); the sheet, menus and toasts are the overlay's
     Glass.add($("#tabs"), { kind: "bar", scroll: false, delay: 0.25 });
     Glass.add($("#status"), { kind: "bar", scroll: false, delay: 0.35 });
-    Glass.add($("#tab-indicator"), { kind: "indicator", scroll: false, manual: indicatorRect, delay: 0.4 });
-    Glass.add($("#sheet"), { kind: "sheet", scroll: false, shown: false, manual: sheetRect });
     Glass.add($("#ring"), { kind: "ring", tube: innerWidth <= 760 ? 11 : 13, shown: false });
-    Glass.add($("#toast"), { kind: "chip", scroll: false, shown: false });
-    $$(".view .glass").forEach((el) => { if (!el.closest("#days")) Glass.add(el, { kind: el.classList.contains("pill") || el.classList.contains("segment") || el.classList.contains("search") ? "chip" : "pane", shown: false }); });
+    $$(".view .glass").forEach((el) => { if (!el.closest("#days")) Glass.add(el, { kind: el.matches(".pill, .segment, .search") ? "chip" : "pane", shown: false }); });
+    liquidControl($("#tabs"), { key: "tabs", items: () => $$(".tab"), current: () => $(`#tab-${st.tab}`), pick: (b) => go(b.id.slice(4)) });
+    liquidControl($("#filters"), { key: "filters", items: () => $$("#filters button"), current: () => (Glass.flowing ? null : $(`#filters button[aria-pressed="true"]`)), pick: (b) => setFilter(b.dataset.f), lens: { height: 0.24 } });
     wire();
+    $("#now-spent").__t = "$0.00"; // the first figure rolls in
     const h = location.hash.slice(1);
     st.tab = TABS.includes(h) ? h : "now";
     // the live feed first; the rehearsal sample only if it cannot be reached in time
@@ -2048,6 +2954,8 @@ void main() {
     syncScroll(); anchor();
     load();
     setInterval(() => { if (st.feed) { renderStatus(); tickNext(); } }, 1000);
+    // for tests: feed the page by hand
+    window.__lanceaApply = (f, live = true) => apply(f, live);
   }
   boot();
 })();

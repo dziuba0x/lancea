@@ -10,7 +10,6 @@
   <header class="topbar">
     <a class="brand" href="#now" aria-label="Lancea Watch, the agent on a leash"><b>Lancea</b><span class="label">Agent on a leash · DELICTI</span></a>
     <nav class="tabs glass" id="tabs" role="tablist" aria-label="Views">
-      <span id="tab-indicator" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none"></span>
       <button class="tab" role="tab" id="tab-now" aria-controls="view-now" aria-selected="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.8 13.9 10.1 21.2 12 13.9 13.9 12 21.2 10.1 13.9 2.8 12 10.1 10.1Z"/></svg><span>Now</span></button>
       <button class="tab" role="tab" id="tab-timeline" aria-controls="view-timeline" aria-selected="false" tabindex="-1">
@@ -22,7 +21,10 @@
       <button class="tab" role="tab" id="tab-how" aria-controls="view-how" aria-selected="false" tabindex="-1">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9.2" cy="12" r="5.6"/><circle cx="14.8" cy="12" r="5.6"/></svg><span>How it works</span></button>
     </nav>
-    <div class="status glass" id="status" role="status"><i class="dot"></i><span class="label on" id="status-text">Loading</span><span class="label net">XRPL testnet × Flare Coston2</span></div>
+    <div class="status glass" id="status" role="button" tabindex="0" aria-live="polite" aria-label="The feed: tap for details">
+      <span class="isl isl-compact" id="island-compact"><i class="dot"></i><span class="label on" id="status-text">Loading</span><span class="label net">XRPL testnet × Flare Coston2</span></span>
+      <span class="isl isl-wide" id="island-wide" aria-hidden="true"></span>
+    </div>
   </header>
 
   <main class="scroller" id="scroller">
@@ -36,6 +38,15 @@
             <p class="sub rise" id="now-sub"></p>
             <div class="figure rise"><b id="now-spent">$0.00</b><span id="now-of"></span></div>
             <div class="facts rise" id="now-facts"></div>
+            <div class="replay rise" id="rp">
+              <span class="label">Replay</span>
+              <div class="rp-track" id="rp-track">
+                <div class="rp-line"><i class="rp-fill"></i></div>
+                <div class="rp-ticks" id="rp-ticks" aria-hidden="true"></div>
+                <span class="rp-knob glass" id="rp-knob" role="slider" tabindex="0" aria-label="Replay the agent's history" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-valuetext="Now"></span>
+              </div>
+              <span class="label on rp-time" id="rp-time">Now</span>
+            </div>
           </div>
           <div class="orbit rise" id="orbit">
             <div class="ring glass" id="ring" aria-hidden="true"></div>
@@ -68,14 +79,14 @@
       </section>
 
       <section class="view" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline" hidden>
-        <div class="span-12 toolbar rise">
-          <div class="segment glass" id="filters" role="group" aria-label="Show">
+        <div class="span-12 toolbar">
+          <div class="segment glass rise" id="filters" role="group" aria-label="Show">
             <button data-f="all" aria-pressed="true">All <small></small></button>
             <button data-f="signed" aria-pressed="false">Co-signed <small></small></button>
             <button data-f="refused" aria-pressed="false">Refused <small></small></button>
             <button data-f="notes" aria-pressed="false">Notes <small></small></button>
           </div>
-          <label class="search glass" for="q"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.6"/><path d="m10.6 10.6 3.4 3.4"/></svg><input id="q" type="search" placeholder="Search reasons, amounts, hashes" autocomplete="off" aria-label="Search the timeline"></label>
+          <label class="search glass rise" for="q"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.6"/><path d="m10.6 10.6 3.4 3.4"/></svg><input id="q" type="search" placeholder="Search reasons, amounts, hashes" autocomplete="off" aria-label="Search the timeline"><kbd aria-hidden="true">/</kbd></label>
         </div>
         <div class="span-12" id="days" style="display:grid;gap:20px"></div>
       </section>
@@ -108,9 +119,9 @@
           <div class="pane-head"><h2>Who can move the money</h2><span class="label">Quorum 2 · master key disabled</span></div>
           <p style="margin:0 0 18px;color:var(--ink-2);max-width:62ch">The account on the XRP Ledger needs signatures worth 2. Choose who signs and see what can happen.</p>
           <div class="signers">
-            <button class="signer" data-k="owner" aria-pressed="false"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i></i></span><b>The owner</b><small>Weight 2 · your key, on your computer</small></button>
-            <button class="signer" data-k="agent" aria-pressed="true"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i class="off"></i></span><b>The agent</b><small>Weight 1 · proposes and signs first</small></button>
-            <button class="signer" data-k="guard" aria-pressed="true"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i class="off"></i></span><b>The guard</b><small>Weight 1 · co-signs inside your rules</small></button>
+            <button class="signer" data-k="owner" aria-pressed="false"><span class="switch" aria-hidden="true"><i></i></span><span class="weight"><i></i><i></i></span><b>The owner</b><small>Weight 2 · your key, on your computer</small></button>
+            <button class="signer" data-k="agent" aria-pressed="true"><span class="switch" aria-hidden="true"><i></i></span><span class="weight"><i></i><i class="off"></i></span><b>The agent</b><small>Weight 1 · proposes and signs first</small></button>
+            <button class="signer" data-k="guard" aria-pressed="true"><span class="switch" aria-hidden="true"><i></i></span><span class="weight"><i></i><i class="off"></i></span><b>The guard</b><small>Weight 1 · co-signs inside your rules</small></button>
           </div>
           <div class="quorum"><div class="q" aria-hidden="true"><i></i><i></i></div><p class="verdict-line" id="k-verdict" aria-live="polite"></p></div>
         </div>
@@ -180,6 +191,7 @@
   </aside>
   <div class="startip" id="startip" role="tooltip"></div>
   <div class="toast glass" id="toast" role="status" aria-live="polite"><span></span></div>
+  <div class="menu" id="menu" role="menu" aria-label="Decision" hidden></div>
 </div>
 <script type="application/json" id="sample">{{SAMPLE_JSON}}</script>
 <script>
