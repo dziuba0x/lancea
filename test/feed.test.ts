@@ -27,6 +27,7 @@ const chain = {
   account: { xrpDrops: "77999950", fxrp: "0", shares: "0" },
   umbrella: { budgetUsd6: "500000000", spentUsd6: "30451685", tripwire: "1", strikes: "0", tripped: false },
   owner: sample.keys.owner,
+  fuel: { guardWei: "2734164300000000000", agentWei: "438704350000000000" },
 };
 
 test("the feed carries the journals and the chains' state, and no secret", () => {
@@ -35,6 +36,7 @@ test("the feed carries the journals and the chains' state, and no secret", () =>
   assert.equal(feed.umbrella.budgetUsd6, "500000000");
   assert.equal(feed.keys.owner, sample.keys.owner);
   assert.equal(feed.keys.guard, sample.keys.guard);
+  assert.equal(feed.fuel.guardWei, "2734164300000000000"); // the guard's gas, so the dashboard can warn before it runs dry
   assert.equal(feed.guard.length, sample.guard.length);
   const text = JSON.stringify(feed);
   assert.doesNotMatch(text, /seed|privateKey|flareKey|xrplSeed|evmKey|token/i);

@@ -118,6 +118,8 @@
   .w2 .label { color: var(--amber); }
   .said { color: var(--ink); }
   .by { color: var(--ink-3); font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; margin-left: 6px; }
+  .gas { display: block; margin-top: 3px; color: var(--ink-3); font: 500 11px/1.4 var(--mono); }
+  .gas.low { color: var(--coral); }
   .does { color: var(--ink); }
   .does em { font-style: normal; color: var(--coral); }
   .verdict { color: var(--ink-2); font-size: 14px; }
@@ -305,7 +307,7 @@
     ].filter(Boolean).join("");
     return `<li class="ev"><div class="when">${when(item.at)}</div><div class="card${struck ? " struck" : ""}">
       <div class="card-top">${pill}${times}${d.usd6 ? `<span class="usd">${usd(d.usd6)}</span>` : ""}</div>
-      <div class="witness w1"><span class="label">Agent said</span><span class="said">${c.why ? esc(c.why) : "<span style='color:var(--ink-3)'>no reason given</span>"}${c.by ? `<span class="by">by ${esc(c.by)}</span>` : ""}</span></div>
+      <div class="witness w1"><span class="label">Agent said</span><span class="said">${c.why ? esc(c.why) : "<span style='color:var(--ink-3)'>no reason given</span>"}${c.by ? `<span class="by">${c.by === "drill" ? "drill · a staged hijack" : `by ${esc(c.by)}`}</span>` : ""}</span></div>
       <div class="witness w2"><span class="label">Transaction does</span><span class="does">${does(e.tx ?? {}, feed)}</span></div>
       <div class="verdict">${verdict}</div>
       ${links ? `<div class="links">${links}</div>` : ""}
@@ -344,12 +346,21 @@
     return out;
   }
 
+  /** The guard pays gas for each decision's record on Flare (about 0.13 C2FLR); below 0.5 it needs a top-up. */
+  function gas(wei) {
+    if (wei == null) return "";
+    const c2flr = Number(BigInt(wei) / 10n ** 16n) / 100, low = c2flr < 0.5;
+    return `<span class="gas${low ? " low" : ""}" title="Gas for each decision's record on Flare, about 0.13 C2FLR each">${c2flr.toFixed(2)} C2FLR for gas${low ? " · low: top it up from the Coston2 faucet" : ` · about ${Math.floor(c2flr / 0.13)} decisions`}</span>`;
+  }
+
   function stateOf(feed, away) {
     const u = feed.umbrella, last = (feed.autopilot ?? []).find((e) => ["holding", "paused", "idle", "verdict", "settled", "timeout", "start", "stop"].includes(e.kind));
     const lastStrike = (feed.guard ?? []).find((e) => e.kind === "decision" && e.decision?.struck);
     if (u.tripped) return {
       tone: "coral", pill: "Paused · tripped", head: "The leash held.",
-      sub: lastStrike
+      sub: lastStrike?.claim?.by === "drill"
+        ? `In a drill, the agent was fed a planted note${lastStrike.claim.why ? ": “" + esc(lastStrike.claim.why) + "”" : ""}. It asked the guard to act on it. The guard refused, and wrote a strike on Flare. Every rail stays shut until you re-arm the umbrella.`
+        : lastStrike
         ? `The agent asked to ${lastStrike.claim?.why ? "act on “" + esc(lastStrike.claim.why) + "”" : "act outside its rules"}. The guard refused, and wrote a strike on Flare. Every rail stays shut until you re-arm the umbrella.`
         : "A strike tripped the umbrella. Every rail stays shut until you re-arm it.",
     };
@@ -395,8 +406,8 @@
       ["XRPL account", "xrplAccount", acct.address],
       ["Personal account on Flare", "flareAddress", acct.personalAccount],
       [`Umbrella #${esc(u.id)} on SummaMeter`, "flareAddress", u.meter],
-      ["The guard's Flare key", "flareAddress", k.guardFlare],
-    ].map(([t, kind, a]) => `<div><dt class="label">${t}</dt><dd title="${esc(a)}">${link(kind, a, feed, cut(a, 12, 8))}</dd></div>`).join("");
+      ["The guard's Flare key", "flareAddress", k.guardFlare, gas(feed.fuel?.guardWei)],
+    ].map(([t, kind, a, extra]) => `<div><dt class="label">${t}</dt><dd title="${esc(a)}">${link(kind, a, feed, cut(a, 12, 8))}${extra ?? ""}</dd></div>`).join("");
 
     const src = $("src");
     src.className = `chip ${live ? (away ? "away" : "live") : "sample"}`;

@@ -35,6 +35,11 @@ export const meterAbi = parseAbi([
   "function tripwire(uint256) view returns (uint256)",
   "function strikes(uint256) view returns (uint256)",
   "function tripped(uint256 umbrellaId) view returns (bool)",
+  "error NotPrincipal()",
+  "error NotEffector()",
+  "error ZeroEffector()",
+  "error NotLive()",
+  "error Unpriced()",
 ]);
 
 /** Flare Smart Accounts and FAssets, as the autopilot sees them. */

@@ -23,6 +23,8 @@ export interface ChainSnapshot {
   umbrella: { budgetUsd6: string; spentUsd6: string; tripwire: string; strikes: string; tripped: boolean };
   /** The SignerList's weight-2 entry. */
   owner?: string;
+  /** C2FLR (wei) on the Flare keys that pay gas: the guard, for each decision's record; the agent. */
+  fuel?: { guardWei?: string; agentWei?: string };
 }
 
 export function buildFeed(c: LanceaConfig, chain: ChainSnapshot, guard: Entry[], autopilot: Entry[], now = new Date()) {
@@ -34,6 +36,7 @@ export function buildFeed(c: LanceaConfig, chain: ChainSnapshot, guard: Entry[],
     account: { address: c.account, personalAccount: c.smartAccounts.personalAccount, vaultName: c.smartAccounts.vaultName ?? "Firelight", ...chain.account },
     keys: { owner: chain.owner, agent: c.keys?.agentXrpl, guard: c.keys?.guardXrpl, guardFlare: c.keys?.guardFlare, agentEvm: c.agentEvm },
     umbrella: { id: c.umbrella.id, meter: c.umbrella.meter, ...chain.umbrella },
+    fuel: chain.fuel ?? {},
     guard,
     autopilot,
   };
@@ -46,13 +49,15 @@ export async function readChain(c: LanceaConfig, xrpl: XrplHttp, pc: PublicClien
     pc.readContract({ address: c.umbrella.meter, abi: meterAbi, functionName, args: [id] });
   const balance = (token: `0x${string}`) =>
     pc.readContract({ address: token, abi: smartAccountsAbi, functionName: "balanceOf", args: [c.smartAccounts.personalAccount] }) as Promise<bigint>;
-  const [m, spent, tripwire, strikes, tripped, info, objects, fxrp, shares] = await Promise.all([
+  const wei = (a?: string) => (a ? pc.getBalance({ address: a as `0x${string}` }).then(String) : Promise.resolve(undefined));
+  const [m, spent, tripwire, strikes, tripped, info, objects, fxrp, shares, guardWei, agentWei] = await Promise.all([
     pc.readContract({ address: c.umbrella.registry, abi: registryReadAbi, functionName: "get", args: [id] }),
     meter("spentUsd6"), meter("tripwire"), meter("strikes"), meter("tripped"),
     xrpl.rpc("account_info", { account: c.account, ledger_index: "validated" }),
     xrpl.rpc("account_objects", { account: c.account, type: "signer_list", ledger_index: "validated" }),
     balance(c.smartAccounts.fxrp),
     balance(c.smartAccounts.vault),
+    wei(c.keys?.guardFlare), wei(c.agentEvm),
   ]);
   const spendable = BigInt(info.account_data.Balance) - LEDGER_RESERVE_DROPS;
   const entries: { SignerEntry: { Account: string; SignerWeight: number } }[] = objects.account_objects?.[0]?.SignerEntries ?? [];
@@ -60,5 +65,6 @@ export async function readChain(c: LanceaConfig, xrpl: XrplHttp, pc: PublicClien
     account: { xrpDrops: (spendable > 0n ? spendable : 0n).toString(), fxrp: fxrp.toString(), shares: shares.toString() },
     umbrella: { budgetUsd6: (m as { budget: bigint }).budget.toString(), spentUsd6: String(spent), tripwire: String(tripwire), strikes: String(strikes), tripped: Boolean(tripped) },
     owner: entries.find((e) => e.SignerEntry.SignerWeight >= 2)?.SignerEntry.Account,
+    fuel: { guardWei, agentWei },
   };
 }

@@ -223,7 +223,25 @@ sudo cp lancea.config.json /etc/lancea/config.json && sudo systemctl enable --no
 - the account's XRP, FXRP and vault shares;
 - every decision, each with two witnesses. **Agent said** (cyan) is the agent's own words. **The transaction does** (amber) is read by the guard from the signed transaction. A white star marks a co-signature, and coral marks a refusal or a strike.
 
-Every hash links to the public explorer. Where the feed cannot be reached, the page shows the sample from the rehearsal of 2026-09-27 (`dashboard/sample-feed.json`) and says so.
+Every hash links to the public explorer. Where the feed cannot be reached, the page shows the sample from the rehearsal of 2026-09-27 (`dashboard/sample-feed.json`) and says so. When the demo machine has published nothing for 30 minutes, the page says it is offline and shows its last state. Under the guard's Flare key it shows the C2FLR left for gas, and says when it runs low.
+
+## The drill: a staged hijack, and the re-arm
+
+`scripts/drill.ts` does what a hijacked or prompt-injected agent would. It uses the agent's own key and the services' token to ask the running guard to co-sign a 5 XRP mint, and gives a planted note as its reason. The memo of that mint names a stranger as the recipient. The expected outcome:
+
+1. The guard reads the memo itself and refuses.
+2. It writes a strike on Flare, which trips the umbrella (tripwire 1).
+3. The autopilot pauses on its next tick.
+4. The dashboard reads "The leash held." and says it was a drill.
+
+Nothing can move either way: the agent's signature alone is weight 1 of the 2 the account needs.
+
+`scripts/rearm.ts` is the principal's re-arm. It needs the key that committed the umbrella; any other key reads `NotPrincipal`. The autopilot resumes by itself.
+
+```bash
+LANCEA_CONFIG=~/.config/lancea/config.json LANCEA_KEYS=~/.config/lancea/keys npx tsx scripts/drill.ts
+set -a; . ./.env; set +a; LANCEA_CONFIG=~/.config/lancea/config.json npx tsx scripts/rearm.ts
+```
 
 ## Status: MVP
 
