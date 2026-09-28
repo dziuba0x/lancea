@@ -31,6 +31,7 @@ import { createPublicClient, createWalletClient, createTestClient, defineChain, 
   toHex, stringToHex, pad, parseAbi, type Hex, type Address } from "viem";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { XrplHttp } from "../src/xrpl-http.js";
 import { Guard, short, type Decision } from "../src/guard.js";
 import { plan, toPayment, type State, type Strategy, type Venue } from "../src/autopilot.js";
@@ -90,7 +91,7 @@ if (process.argv[2] === "--sweep") {
   process.exit(0);
 }
 
-const OUT = process.env.DELICTI_OUT ?? new URL("../../delicti/out/", import.meta.url).pathname;
+const OUT = process.env.DELICTI_OUT ?? fileURLToPath(new URL("../../delicti/out/", import.meta.url));
 const art = (f: string, c: string) => JSON.parse(readFileSync(`${OUT}${f}/${c}.json`, "utf8"));
 const meterArt = art("SummaMeter.sol", "SummaMeter");
 if (!meterArt.abi.some((x: { name?: string }) => x.name === "setTripwire")) throw new Error("SummaMeter in out/ has no tripwire: forge build the v0.16 delicti source (its ABI)");
@@ -119,7 +120,7 @@ const principal = createWalletClient({ account: privateKeyToAccount(process.env.
 const agentEvmKey = generatePrivateKey(), guardKey = generatePrivateKey();
 const agentEvm = createWalletClient({ account: privateKeyToAccount(agentEvmKey), chain, transport: http(RPC) });
 const guardEvm = privateKeyToAccount(guardKey).address;
-const RUN_DIR = new URL("../.run/", import.meta.url).pathname;
+const RUN_DIR = fileURLToPath(new URL("../.run/", import.meta.url));
 mkdirSync(RUN_DIR, { recursive: true, mode: 0o700 });
 const runPath = `${RUN_DIR}leash-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
 const run: RunFile = { started: new Date().toISOString(), rpc: RPC, principal: principal.account.address, agentEvmKey, guardKey };

@@ -272,6 +272,8 @@
     const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
     return s < 90 ? "just now" : s < 5400 ? `${Math.round(s / 60)} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`;
   };
+  // The machine publishes at least every 10 minutes while it runs; three missed heartbeats means it is off.
+  const AWAY_S = 1800;
 
   function link(kind, hash, feed, text) {
     const x = feed.explorers ?? {};
@@ -351,7 +353,7 @@
     return out;
   }
 
-  function stateOf(feed) {
+  function stateOf(feed, away) {
     const u = feed.umbrella, last = (feed.autopilot ?? []).find((e) => ["holding", "paused", "idle", "verdict", "settled", "timeout", "start", "stop"].includes(e.kind));
     const lastStrike = (feed.guard ?? []).find((e) => e.kind === "decision" && e.decision?.struck);
     if (u.tripped) return {
@@ -360,6 +362,7 @@
         ? `The agent asked to ${lastStrike.claim?.why ? "act on “" + esc(lastStrike.claim.why) + "”" : "act outside its rules"}. The guard refused, and wrote a strike on Flare. Every rail stays shut until you re-arm the umbrella.`
         : "A strike tripped the umbrella. Every rail stays shut until you re-arm it.",
     };
+    if (away) return { tone: "grey", pill: "Offline", head: "Offline, and still on its leash.", sub: "The demo machine is off right now, so the agent proposes nothing until it is back. What you see is its last published state." };
     if (last?.kind === "holding") return { tone: "grey", pill: "Holding", head: "At the edge of its budget.", sub: "The next step would cross the umbrella's budget, so the agent keeps it to itself instead of asking." };
     if (last?.kind === "stop") return { tone: "grey", pill: "Stopped", head: "The agent is not running.", sub: "Its service was stopped. The account and the umbrella stay as they are." };
     return { tone: "star", pill: "Working", head: "Working inside its leash.", sub: "Every step it proposes is priced against your budget and checked against your rules before the guard adds a signature." };
@@ -367,7 +370,8 @@
 
   function render(feed, live) {
     const u = feed.umbrella, acct = feed.account;
-    const s = stateOf(feed);
+    const away = live && (Date.now() - Date.parse(feed.generatedAt)) / 1000 > AWAY_S;
+    const s = stateOf(feed, away);
     $("pill").className = `pill ${s.tone}`; $("pill").textContent = s.pill;
     $("head").textContent = s.head; $("sub").innerHTML = s.sub;
 
@@ -404,10 +408,12 @@
     ].map(([t, kind, a]) => `<div><dt class="label">${t}</dt><dd title="${esc(a)}">${link(kind, a, feed, cut(a, 12, 8))}</dd></div>`).join("");
 
     const src = $("src");
-    src.className = `chip ${live ? "live" : "sample"}`;
-    src.querySelector("span").textContent = live ? `Live · ${ago(feed.generatedAt)}` : "Sample data";
+    src.className = `chip ${live ? (away ? "away" : "live") : "sample"}`;
+    src.querySelector("span").textContent = live ? `${away ? "Offline · last seen" : "Live ·"} ${ago(feed.generatedAt)}` : "Sample data";
     $("source").textContent = live
-      ? `Published by the demo machine ${ago(feed.generatedAt)}. Every hash links to a public explorer.`
+      ? away
+        ? `The demo machine was last seen ${ago(feed.generatedAt)}: this is its last state. Every hash links to a public explorer.`
+        : `Published by the demo machine ${ago(feed.generatedAt)}. Every hash links to a public explorer.`
       : feed.note ?? "Sample data.";
   }
 

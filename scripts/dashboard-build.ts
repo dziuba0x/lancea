@@ -4,8 +4,9 @@
  *   npx tsx scripts/dashboard-build.ts
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("../", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../", import.meta.url));
 const page = readFileSync(`${root}dashboard/page.html`, "utf8");
 const sample = JSON.stringify(JSON.parse(readFileSync(`${root}dashboard/sample-feed.json`, "utf8"))).replace(/<\//g, "<\\/");
 const fragment = page.replace("{{SAMPLE_JSON}}", sample);

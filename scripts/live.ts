@@ -16,10 +16,11 @@ import { XrplHttp } from "../src/xrpl-http.js";
 import { createPublicClient, createWalletClient, defineChain, http, parseEther, keccak256, toHex, stringToHex, pad, type Hex, type Address } from "viem";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { Guard } from "../src/guard.js";
 
-const OUT = process.env.DELICTI_OUT ?? new URL("../../delicti/out/", import.meta.url).pathname;
+const OUT = process.env.DELICTI_OUT ?? fileURLToPath(new URL("../../delicti/out/", import.meta.url));
 const abi = (f: string, c: string) => JSON.parse(readFileSync(`${OUT}${f}/${c}.json`, "utf8")).abi;
 const RPC = process.env.COSTON2_RPC ?? "https://coston2-api.flare.network/ext/C/rpc";
 const A = {
