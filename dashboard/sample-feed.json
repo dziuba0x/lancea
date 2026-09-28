@@ -1,11 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-27T06:29:37.343Z",
-  "note": "Sample data: the services' rehearsal of 27 September 2026, entries as the guard and the agent wrote them. The XRP Ledger side is the real testnet, so its links open. The Flare side ran on a fork of Coston2, so its transactions exist on the fork only. The live feed from the demo machine replaces this.",
+  "generatedAt": "2026-09-28T17:22:16.242Z",
   "networks": {
     "xrpl": "testnet",
     "flare": "coston2",
-    "flareFork": true
+    "flareFork": false
   },
   "explorers": {
     "xrplTx": "https://testnet.xrpl.org/transactions/",
@@ -14,205 +13,371 @@
     "flareAddress": "https://coston2-explorer.flare.network/address/"
   },
   "account": {
-    "address": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
-    "personalAccount": "0x133970C2834E41E8E6580773b6950A45E25e0AC0",
-    "xrpDrops": "77999950",
-    "fxrp": "0",
-    "shares": "0",
-    "vaultName": "Firelight"
+    "address": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+    "personalAccount": "0x953E5e9DAC303918fCa12e2a67743ae2157e04F5",
+    "vaultName": "Firelight",
+    "xrpDrops": "97994680",
+    "fxrp": "20000000",
+    "shares": "78941615"
   },
   "keys": {
-    "owner": "rfRhKHA1yX3Ky5hbch7YzXHcmm9sNxZPsh",
-    "agent": "rEmLfCJEhDhstNwbmKyz5hoSrXCF7xES6G",
-    "guard": "rJaMZeWoyKSaMMjHBTtVhHM55aMsMfLjxp",
-    "guardFlare": "0x2C3277F2EBF4f528b0B7F8AfF604bEbbFf0763b6",
-    "agentEvm": "0xfD02e45422587E2a13Ece10d2292B5875FE8a85D"
+    "owner": "rBVLFttVTHDMyNpxLXmjsbVGMwc13uv2a1",
+    "agent": "rPWDAWM1MUPPoaLiePm6yRp66HH18Uo7qq",
+    "guard": "rG3maSxmDjLLXTQJXLi1jz1mPqNoFffsJw",
+    "guardFlare": "0x676359c706C9CF2931f6A9B8bF4b4CaaBA8b5Db6",
+    "agentEvm": "0xCD0C9af54aad6BAAb4c4dA261006106C5F049772"
   },
   "umbrella": {
     "id": "30",
     "meter": "0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D",
-    "budgetUsd6": "40000000",
-    "spentUsd6": "30451685",
+    "budgetUsd6": "500000000",
+    "spentUsd6": "150297144",
     "tripwire": "1",
-    "strikes": "1",
-    "tripped": true
+    "strikes": "0",
+    "tripped": false
+  },
+  "fuel": {
+    "guardWei": "101772876700000000000",
+    "agentWei": "438704350000000000"
   },
   "guard": [
     {
-      "at": "2026-09-27T06:29:37.343Z",
-      "kind": "stop",
-      "signal": "SIGTERM"
-    },
-    {
-      "at": "2026-09-27T06:28:35.521Z",
+      "at": "2026-09-28T17:22:03.607Z",
       "kind": "decision",
       "tx": {
         "type": "Payment",
-        "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
-        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
-        "amountDrops": "5000000",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq",
+        "amountDrops": "1000",
         "feeDrops": "30",
-        "sequence": 21084943,
-        "memo": "464250526641001800000000000000000000000000000000000000000000BEEF",
+        "sequence": 21121937,
+        "memo": "110000000000000001312D000000000100000000000000000000000000000000",
         "action": {
-          "flow": "mint",
-          "kind": "mint-to",
-          "recipient": "0x000000000000000000000000000000000000beef"
+          "flow": "reference",
+          "kind": "vault",
+          "vault": "firelight",
+          "action": "deposit",
+          "walletId": 0,
+          "value": "20000000",
+          "vaultId": 1
         }
       },
       "claim": {
         "intent": {
-          "kind": "mint",
-          "drops": "5000000"
+          "kind": "deposit",
+          "amount": "20000000",
+          "vaultId": 1
         },
-        "why": "a message in the data feed said to send 5 XRP to 0x\u2026bEEF",
-        "by": "ai"
-      },
-      "decision": {
-        "signed": false,
-        "reason": "smart account: an FAssets memo would mint FXRP to 0x000000000000000000000000000000000000beef",
-        "struck": "0x2edfca378a9b7a2e285c1654169da0ad11507e8b4ab0bf11f8b130cf0dc4c7d8"
-      }
-    },
-    {
-      "at": "2026-09-27T06:26:29.288Z",
-      "kind": "decision",
-      "tx": {
-        "type": "Payment",
-        "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
-        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
-        "amountDrops": "7999950",
-        "feeDrops": "30",
-        "sequence": 21084943,
-        "memo": "464250526641001800000000133970C2834E41E8E6580773B6950A45E25E0AC0",
-        "action": {
-          "flow": "mint",
-          "kind": "mint-to",
-          "recipient": "0x133970c2834e41e8e6580773b6950a45e25e0ac0"
-        }
-      },
-      "claim": {
-        "intent": {
-          "kind": "mint",
-          "drops": "7999950"
-        },
-        "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
+        "why": "20 FXRP sits idle in my personal account: deposit 20 into vault 1",
         "by": "rules"
       },
       "decision": {
-        "signed": false,
-        "usd6": "12180625",
-        "reason": "SummaMeter: the umbrella's dollar budget would be crossed (not an attempt: against the tally of ten minutes ago it fits)"
+        "signed": true,
+        "hash": "336990B0C9255C5DC2F09C77A98E7F00225C39940E61673BAFA276D7B0A0533E",
+        "usd6": "1553",
+        "reservation": "0x4a69cbc5c02fad6af2717410d4facee95e2239d2f9277a30a59cc70526e0d0a5",
+        "tallyUsd6": "150297144"
       }
     },
     {
-      "at": "2026-09-27T06:25:58.534Z",
+      "at": "2026-09-28T17:16:48.866Z",
       "kind": "decision",
       "tx": {
         "type": "Payment",
-        "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
-        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
-        "amountDrops": "7999950",
-        "feeDrops": "30",
-        "sequence": 21084943,
-        "memo": "464250526641001800000000133970C2834E41E8E6580773B6950A45E25E0AC0",
-        "action": {
-          "flow": "mint",
-          "kind": "mint-to",
-          "recipient": "0x133970c2834e41e8e6580773b6950a45e25e0ac0"
-        }
-      },
-      "claim": {
-        "intent": {
-          "kind": "mint",
-          "drops": "7999950"
-        },
-        "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
-        "by": "rules"
-      },
-      "decision": {
-        "signed": false,
-        "usd6": "12180625",
-        "reason": "SummaMeter: the umbrella's dollar budget would be crossed (not an attempt: against the tally of ten minutes ago it fits)"
-      }
-    },
-    {
-      "at": "2026-09-27T06:25:27.696Z",
-      "kind": "decision",
-      "tx": {
-        "type": "Payment",
-        "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
-        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
-        "amountDrops": "7999950",
-        "feeDrops": "30",
-        "sequence": 21084943,
-        "memo": "464250526641001800000000133970C2834E41E8E6580773B6950A45E25E0AC0",
-        "action": {
-          "flow": "mint",
-          "kind": "mint-to",
-          "recipient": "0x133970c2834e41e8e6580773b6950a45e25e0ac0"
-        }
-      },
-      "claim": {
-        "intent": {
-          "kind": "mint",
-          "drops": "7999950"
-        },
-        "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
-        "by": "rules"
-      },
-      "decision": {
-        "signed": false,
-        "usd6": "12180625",
-        "reason": "SummaMeter: the umbrella's dollar budget would be crossed (not an attempt: against the tally of ten minutes ago it fits)"
-      }
-    },
-    {
-      "at": "2026-09-27T06:24:56.989Z",
-      "kind": "decision",
-      "tx": {
-        "type": "Payment",
-        "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
-        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
-        "amountDrops": "7999950",
-        "feeDrops": "30",
-        "sequence": 21084943,
-        "memo": "464250526641001800000000133970C2834E41E8E6580773B6950A45E25E0AC0",
-        "action": {
-          "flow": "mint",
-          "kind": "mint-to",
-          "recipient": "0x133970c2834e41e8e6580773b6950a45e25e0ac0"
-        }
-      },
-      "claim": {
-        "intent": {
-          "kind": "mint",
-          "drops": "7999950"
-        },
-        "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
-        "by": "rules"
-      },
-      "decision": {
-        "signed": false,
-        "usd6": "12180625",
-        "reason": "SummaMeter: the umbrella's dollar budget would be crossed (not an attempt: against the tally of ten minutes ago it fits)"
-      }
-    },
-    {
-      "at": "2026-09-27T06:24:41.191Z",
-      "kind": "decision",
-      "tx": {
-        "type": "Payment",
-        "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
         "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
         "amountDrops": "20000000",
         "feeDrops": "30",
-        "sequence": 21084942,
-        "memo": "464250526641001800000000133970C2834E41E8E6580773B6950A45E25E0AC0",
+        "sequence": 21121936,
+        "memo": "464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5",
         "action": {
           "flow": "mint",
           "kind": "mint-to",
-          "recipient": "0x133970c2834e41e8e6580773b6950a45e25e0ac0"
+          "recipient": "0x953e5e9dac303918fca12e2a67743ae2157e04f5"
+        }
+      },
+      "claim": {
+        "intent": {
+          "kind": "mint",
+          "drops": "20000000"
+        },
+        "why": "47.99574 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)",
+        "by": "rules"
+      },
+      "decision": {
+        "signed": true,
+        "hash": "5D4D5BE8F0725ED414DA17BEC2C8AC85E22C5156FC0F15F58747CBAB24AF2392",
+        "usd6": "30203465",
+        "reservation": "0x9421533678b69d84b7d318b1eff96f3ec54f03bd4d6085a3c1d1a8cafaaec491",
+        "tallyUsd6": "150295591"
+      }
+    },
+    {
+      "at": "2026-09-28T17:11:33.693Z",
+      "kind": "decision",
+      "tx": {
+        "type": "Payment",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq",
+        "amountDrops": "1000",
+        "feeDrops": "30",
+        "sequence": 21121935,
+        "memo": "110000000000000001312D000000000100000000000000000000000000000000",
+        "action": {
+          "flow": "reference",
+          "kind": "vault",
+          "vault": "firelight",
+          "action": "deposit",
+          "walletId": 0,
+          "value": "20000000",
+          "vaultId": 1
+        }
+      },
+      "claim": {
+        "intent": {
+          "kind": "deposit",
+          "amount": "20000000",
+          "vaultId": 1
+        },
+        "why": "20.2 FXRP sits idle in my personal account: deposit 20 into vault 1",
+        "by": "rules"
+      },
+      "decision": {
+        "signed": true,
+        "hash": "38EE5652CD1E1914CA0C183964AF10F03E7E1C1959DDCC6498861269F5BFCFE7",
+        "usd6": "1535",
+        "reservation": "0x2f5b74cae0be1ae3ae9014720c165dcf96558ba6167e6af2f1da688e74b9f18b",
+        "tallyUsd6": "120092126"
+      }
+    },
+    {
+      "at": "2026-09-28T17:06:19.007Z",
+      "kind": "decision",
+      "tx": {
+        "type": "Payment",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
+        "amountDrops": "20000000",
+        "feeDrops": "30",
+        "sequence": 21121934,
+        "memo": "464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5",
+        "action": {
+          "flow": "mint",
+          "kind": "mint-to",
+          "recipient": "0x953e5e9dac303918fca12e2a67743ae2157e04f5"
+        }
+      },
+      "claim": {
+        "intent": {
+          "kind": "mint",
+          "drops": "20000000"
+        },
+        "why": "67.9968 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)",
+        "by": "rules"
+      },
+      "decision": {
+        "signed": true,
+        "hash": "40E81255C7C331064BD6187E48DB3A3781E2382ECEBED185B5BD13EE6017A8C5",
+        "usd6": "29853304",
+        "reservation": "0x127d1488512d22d534615a4cf4370675c90af6f130cb2350b334b5771bbd4965",
+        "tallyUsd6": "120090591"
+      }
+    },
+    {
+      "at": "2026-09-28T17:01:04.380Z",
+      "kind": "decision",
+      "tx": {
+        "type": "Payment",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq",
+        "amountDrops": "1000",
+        "feeDrops": "30",
+        "sequence": 21121933,
+        "memo": "110000000000000001312D000000000100000000000000000000000000000000",
+        "action": {
+          "flow": "reference",
+          "kind": "vault",
+          "vault": "firelight",
+          "action": "deposit",
+          "walletId": 0,
+          "value": "20000000",
+          "vaultId": 1
+        }
+      },
+      "claim": {
+        "intent": {
+          "kind": "deposit",
+          "amount": "20000000",
+          "vaultId": 1
+        },
+        "why": "20.4 FXRP sits idle in my personal account: deposit 20 into vault 1",
+        "by": "rules"
+      },
+      "decision": {
+        "signed": true,
+        "hash": "D9FBF3C75F80B8C20F1229916BB0F764B4D899EF44B40DDB121F51BA0BFCE485",
+        "usd6": "1542",
+        "reservation": "0xa054b67081a63227847abaccf0806302423d4c88c6a5c607f89012e06b5aaebd",
+        "tallyUsd6": "90237287"
+      }
+    },
+    {
+      "at": "2026-09-28T16:55:53.133Z",
+      "kind": "decision",
+      "tx": {
+        "type": "Payment",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
+        "amountDrops": "20000000",
+        "feeDrops": "30",
+        "sequence": 21121932,
+        "memo": "464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5",
+        "action": {
+          "flow": "mint",
+          "kind": "mint-to",
+          "recipient": "0x953e5e9dac303918fca12e2a67743ae2157e04f5"
+        }
+      },
+      "claim": {
+        "intent": {
+          "kind": "mint",
+          "drops": "20000000"
+        },
+        "why": "87.99786 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)",
+        "by": "rules"
+      },
+      "decision": {
+        "signed": true,
+        "hash": "FA326516DF554E946C6F9C1B6B33F1BA21C4587DFDF0C75639E327F8D498136E",
+        "usd6": "30001005",
+        "reservation": "0x6c434e010c0cf9319ed36744e932857e905b69debed45511ad6ceedab48672cf",
+        "tallyUsd6": "90235745"
+      }
+    },
+    {
+      "at": "2026-09-28T16:50:38.514Z",
+      "kind": "decision",
+      "tx": {
+        "type": "Payment",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq",
+        "amountDrops": "1000",
+        "feeDrops": "30",
+        "sequence": 21121931,
+        "memo": "110000000000000001312D000000000100000000000000000000000000000000",
+        "action": {
+          "flow": "reference",
+          "kind": "vault",
+          "vault": "firelight",
+          "action": "deposit",
+          "walletId": 0,
+          "value": "20000000",
+          "vaultId": 1
+        }
+      },
+      "claim": {
+        "intent": {
+          "kind": "deposit",
+          "amount": "20000000",
+          "vaultId": 1
+        },
+        "why": "20.6 FXRP sits idle in my personal account: deposit 20 into vault 1",
+        "by": "rules"
+      },
+      "decision": {
+        "signed": true,
+        "hash": "F892A7AC29351071281F5EFFA5C3B0C4157ED4C02EE68C524197B016293ADDF6",
+        "usd6": "1542",
+        "reservation": "0x8514380d44eab6e0156583528289db63ae5b9de73edc3369e15570cf8e67e3fd",
+        "tallyUsd6": "60234740"
+      }
+    },
+    {
+      "at": "2026-09-28T16:45:23.692Z",
+      "kind": "decision",
+      "tx": {
+        "type": "Payment",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
+        "amountDrops": "20000000",
+        "feeDrops": "30",
+        "sequence": 21121930,
+        "memo": "464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5",
+        "action": {
+          "flow": "mint",
+          "kind": "mint-to",
+          "recipient": "0x953e5e9dac303918fca12e2a67743ae2157e04f5"
+        }
+      },
+      "claim": {
+        "intent": {
+          "kind": "mint",
+          "drops": "20000000"
+        },
+        "why": "107.99892 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)",
+        "by": "rules"
+      },
+      "decision": {
+        "signed": true,
+        "hash": "CB725F4F8D744031498B02B0E2649D9C9C6C5882A25A0FEB89789D4B20E102DF",
+        "usd6": "30017545",
+        "reservation": "0x11a5f6931a06e0f7fe305528ceb2ae07432d7d5e424c22be9d2eaa647e52166e",
+        "tallyUsd6": "60233198"
+      }
+    },
+    {
+      "at": "2026-09-28T16:40:08.577Z",
+      "kind": "decision",
+      "tx": {
+        "type": "Payment",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rEyj8nsHLdgt79KJWzXR5BgF7ZbaohbXwq",
+        "amountDrops": "1000",
+        "feeDrops": "30",
+        "sequence": 21121929,
+        "memo": "11000000000000000121EAC00000000100000000000000000000000000000000",
+        "action": {
+          "flow": "reference",
+          "kind": "vault",
+          "vault": "firelight",
+          "action": "deposit",
+          "walletId": 0,
+          "value": "19000000",
+          "vaultId": 1
+        }
+      },
+      "claim": {
+        "intent": {
+          "kind": "deposit",
+          "amount": "19000000",
+          "vaultId": 1
+        },
+        "why": "19.8 FXRP sits idle in my personal account: deposit 19 into vault 1",
+        "by": "rules"
+      },
+      "decision": {
+        "signed": true,
+        "hash": "AD1374B1519969502C902A4EE8067DFCC522E54F74FF2E9C71ED94AAFF374D6A",
+        "usd6": "1548",
+        "reservation": "0xee3de9eabe7418c841040746b027842f7767ccdc069279a3ec9b4c4c2daa8fd0",
+        "tallyUsd6": "30215653"
+      }
+    },
+    {
+      "at": "2026-09-28T16:34:57.670Z",
+      "kind": "decision",
+      "tx": {
+        "type": "Payment",
+        "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
+        "destination": "rDhpmiPq4BVBDWMVdSrmkgt8thKyRzGV1p",
+        "amountDrops": "20000000",
+        "feeDrops": "30",
+        "sequence": 21121928,
+        "memo": "464250526641001800000000953E5E9DAC303918FCA12E2A67743AE2157E04F5",
+        "action": {
+          "flow": "mint",
+          "kind": "mint-to",
+          "recipient": "0x953e5e9dac303918fca12e2a67743ae2157e04f5"
         }
       },
       "claim": {
@@ -225,192 +390,73 @@
       },
       "decision": {
         "signed": true,
-        "hash": "3A2DD56C24B23D7C8BEEE8B0FE7D9E9F55700EE359020CE1F6F9CD2B07F268DB",
-        "usd6": "30451685",
-        "reservation": "0x98a353c08a38191cfbf2092daaaff806e4e6072917eab74845af9360da72fb34",
-        "tallyUsd6": "30451685"
+        "hash": "9ECE96510AA47BC647D3D4EFEA6818AB344CF9A11834001F31DFF27C086AB219",
+        "usd6": "30214105",
+        "reservation": "0xfa6d3c11e0f0f7400eec60dc8643a2bf18930644afebf8171ca84d729762f981",
+        "tallyUsd6": "30214105"
       }
     },
     {
-      "at": "2026-09-27T06:24:01.989Z",
+      "at": "2026-09-28T16:34:34.221Z",
       "kind": "start",
-      "guard": "rJaMZeWoyKSaMMjHBTtVhHM55aMsMfLjxp",
-      "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
+      "guard": "rG3maSxmDjLLXTQJXLi1jz1mPqNoFffsJw",
+      "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
       "umbrella": "30"
     }
   ],
   "autopilot": [
     {
-      "at": "2026-09-27T06:29:37.342Z",
-      "kind": "stop"
-    },
-    {
-      "at": "2026-09-27T06:28:41.195Z",
-      "kind": "paused",
-      "reason": "the umbrella is tripped: the principal must re-arm it"
-    },
-    {
-      "at": "2026-09-27T06:27:55.584Z",
-      "kind": "holding",
-      "step": {
-        "kind": "mint",
-        "drops": "7999950"
-      },
-      "usd6": "12182102",
-      "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
-      "reason": "the step would cross the umbrella's budget"
-    },
-    {
-      "at": "2026-09-27T06:27:43.812Z",
-      "kind": "start",
-      "agent": "rEmLfCJEhDhstNwbmKyz5hoSrXCF7xES6G",
-      "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
-      "umbrella": "30",
-      "brain": "rules",
-      "tickSeconds": 15
-    },
-    {
-      "at": "2026-09-27T06:26:43.359Z",
-      "kind": "stop"
-    },
-    {
-      "at": "2026-09-27T06:26:29.289Z",
+      "at": "2026-09-28T17:22:03.608Z",
       "kind": "verdict",
       "step": {
-        "kind": "mint",
-        "drops": "7999950"
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
       },
       "verdict": {
-        "signed": false,
-        "usd6": "12180625",
-        "reason": "SummaMeter: the umbrella's dollar budget would be crossed (not an attempt: against the tally of ten minutes ago it fits)"
+        "signed": true,
+        "hash": "336990B0C9255C5DC2F09C77A98E7F00225C39940E61673BAFA276D7B0A0533E",
+        "usd6": "1553",
+        "reservation": "0x4a69cbc5c02fad6af2717410d4facee95e2239d2f9277a30a59cc70526e0d0a5",
+        "tallyUsd6": "150297144"
       }
     },
     {
-      "at": "2026-09-27T06:26:29.262Z",
+      "at": "2026-09-28T17:21:50.888Z",
       "kind": "proposal",
       "state": {
-        "xrpDrops": "77999950",
-        "fxrp": "0",
+        "xrpDrops": "97995710",
+        "fxrp": "20000000",
         "shares": {
-          "1": "0"
+          "1": "78941615"
         }
       },
       "step": {
-        "kind": "mint",
-        "drops": "7999950"
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
       },
-      "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
+      "why": "20 FXRP sits idle in my personal account: deposit 20 into vault 1",
       "by": "rules"
     },
     {
-      "at": "2026-09-27T06:25:58.535Z",
-      "kind": "verdict",
-      "step": {
-        "kind": "mint",
-        "drops": "7999950"
-      },
-      "verdict": {
-        "signed": false,
-        "usd6": "12180625",
-        "reason": "SummaMeter: the umbrella's dollar budget would be crossed (not an attempt: against the tally of ten minutes ago it fits)"
-      }
-    },
-    {
-      "at": "2026-09-27T06:25:58.507Z",
-      "kind": "proposal",
-      "state": {
-        "xrpDrops": "77999950",
-        "fxrp": "0",
-        "shares": {
-          "1": "0"
-        }
-      },
-      "step": {
-        "kind": "mint",
-        "drops": "7999950"
-      },
-      "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
-      "by": "rules"
-    },
-    {
-      "at": "2026-09-27T06:25:27.697Z",
-      "kind": "verdict",
-      "step": {
-        "kind": "mint",
-        "drops": "7999950"
-      },
-      "verdict": {
-        "signed": false,
-        "usd6": "12180625",
-        "reason": "SummaMeter: the umbrella's dollar budget would be crossed (not an attempt: against the tally of ten minutes ago it fits)"
-      }
-    },
-    {
-      "at": "2026-09-27T06:25:27.670Z",
-      "kind": "proposal",
-      "state": {
-        "xrpDrops": "77999950",
-        "fxrp": "0",
-        "shares": {
-          "1": "0"
-        }
-      },
-      "step": {
-        "kind": "mint",
-        "drops": "7999950"
-      },
-      "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
-      "by": "rules"
-    },
-    {
-      "at": "2026-09-27T06:24:56.991Z",
-      "kind": "verdict",
-      "step": {
-        "kind": "mint",
-        "drops": "7999950"
-      },
-      "verdict": {
-        "signed": false,
-        "usd6": "12180625",
-        "reason": "SummaMeter: the umbrella's dollar budget would be crossed (not an attempt: against the tally of ten minutes ago it fits)"
-      }
-    },
-    {
-      "at": "2026-09-27T06:24:56.949Z",
-      "kind": "proposal",
-      "state": {
-        "xrpDrops": "77999950",
-        "fxrp": "0",
-        "shares": {
-          "1": "0"
-        }
-      },
-      "step": {
-        "kind": "mint",
-        "drops": "7999950"
-      },
-      "why": "7.99995 XRP idle above the 70 XRP reserve: mint 7.99995 XRP to my own personal account (at most 20 a step)",
-      "by": "rules"
-    },
-    {
-      "at": "2026-09-27T06:24:56.574Z",
-      "kind": "timeout",
+      "at": "2026-09-28T17:21:49.712Z",
+      "kind": "settled",
       "step": {
         "kind": "mint",
         "drops": "20000000"
       },
-      "afterS": 50,
+      "afterS": 300,
       "state": {
-        "xrpDrops": "77999950",
-        "fxrp": "0",
+        "xrpDrops": "97995710",
+        "fxrp": "20000000",
         "shares": {
-          "1": "0"
+          "1": "78941615"
         }
       }
     },
     {
-      "at": "2026-09-27T06:24:41.194Z",
+      "at": "2026-09-28T17:16:48.866Z",
       "kind": "verdict",
       "step": {
         "kind": "mint",
@@ -418,14 +464,410 @@
       },
       "verdict": {
         "signed": true,
-        "hash": "3A2DD56C24B23D7C8BEEE8B0FE7D9E9F55700EE359020CE1F6F9CD2B07F268DB",
-        "usd6": "30451685",
-        "reservation": "0x98a353c08a38191cfbf2092daaaff806e4e6072917eab74845af9360da72fb34",
-        "tallyUsd6": "30451685"
+        "hash": "5D4D5BE8F0725ED414DA17BEC2C8AC85E22C5156FC0F15F58747CBAB24AF2392",
+        "usd6": "30203465",
+        "reservation": "0x9421533678b69d84b7d318b1eff96f3ec54f03bd4d6085a3c1d1a8cafaaec491",
+        "tallyUsd6": "150295591"
       }
     },
     {
-      "at": "2026-09-27T06:24:18.293Z",
+      "at": "2026-09-28T17:16:36.091Z",
+      "kind": "proposal",
+      "state": {
+        "xrpDrops": "117995740",
+        "fxrp": "200000",
+        "shares": {
+          "1": "78941615"
+        }
+      },
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "why": "47.99574 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)",
+      "by": "rules"
+    },
+    {
+      "at": "2026-09-28T17:16:34.661Z",
+      "kind": "settled",
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "afterS": 300,
+      "state": {
+        "xrpDrops": "117995740",
+        "fxrp": "200000",
+        "shares": {
+          "1": "78941615"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T17:11:33.694Z",
+      "kind": "verdict",
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "verdict": {
+        "signed": true,
+        "hash": "38EE5652CD1E1914CA0C183964AF10F03E7E1C1959DDCC6498861269F5BFCFE7",
+        "usd6": "1535",
+        "reservation": "0x2f5b74cae0be1ae3ae9014720c165dcf96558ba6167e6af2f1da688e74b9f18b",
+        "tallyUsd6": "120092126"
+      }
+    },
+    {
+      "at": "2026-09-28T17:11:21.124Z",
+      "kind": "proposal",
+      "state": {
+        "xrpDrops": "117996770",
+        "fxrp": "20200000",
+        "shares": {
+          "1": "58956396"
+        }
+      },
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "why": "20.2 FXRP sits idle in my personal account: deposit 20 into vault 1",
+      "by": "rules"
+    },
+    {
+      "at": "2026-09-28T17:11:19.939Z",
+      "kind": "settled",
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "afterS": 300,
+      "state": {
+        "xrpDrops": "117996770",
+        "fxrp": "20200000",
+        "shares": {
+          "1": "58956396"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T17:06:19.008Z",
+      "kind": "verdict",
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "verdict": {
+        "signed": true,
+        "hash": "40E81255C7C331064BD6187E48DB3A3781E2382ECEBED185B5BD13EE6017A8C5",
+        "usd6": "29853304",
+        "reservation": "0x127d1488512d22d534615a4cf4370675c90af6f130cb2350b334b5771bbd4965",
+        "tallyUsd6": "120090591"
+      }
+    },
+    {
+      "at": "2026-09-28T17:06:06.520Z",
+      "kind": "proposal",
+      "state": {
+        "xrpDrops": "137996800",
+        "fxrp": "400000",
+        "shares": {
+          "1": "58956396"
+        }
+      },
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "why": "67.9968 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)",
+      "by": "rules"
+    },
+    {
+      "at": "2026-09-28T17:06:05.319Z",
+      "kind": "settled",
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "afterS": 300,
+      "state": {
+        "xrpDrops": "137996800",
+        "fxrp": "400000",
+        "shares": {
+          "1": "58956396"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T17:01:04.381Z",
+      "kind": "verdict",
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "verdict": {
+        "signed": true,
+        "hash": "D9FBF3C75F80B8C20F1229916BB0F764B4D899EF44B40DDB121F51BA0BFCE485",
+        "usd6": "1542",
+        "reservation": "0xa054b67081a63227847abaccf0806302423d4c88c6a5c607f89012e06b5aaebd",
+        "tallyUsd6": "90237287"
+      }
+    },
+    {
+      "at": "2026-09-28T17:00:55.586Z",
+      "kind": "proposal",
+      "state": {
+        "xrpDrops": "137997830",
+        "fxrp": "20400000",
+        "shares": {
+          "1": "38971177"
+        }
+      },
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "why": "20.4 FXRP sits idle in my personal account: deposit 20 into vault 1",
+      "by": "rules"
+    },
+    {
+      "at": "2026-09-28T17:00:54.202Z",
+      "kind": "settled",
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "afterS": 300,
+      "state": {
+        "xrpDrops": "137997830",
+        "fxrp": "20400000",
+        "shares": {
+          "1": "38971177"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T16:55:53.134Z",
+      "kind": "verdict",
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "verdict": {
+        "signed": true,
+        "hash": "FA326516DF554E946C6F9C1B6B33F1BA21C4587DFDF0C75639E327F8D498136E",
+        "usd6": "30001005",
+        "reservation": "0x6c434e010c0cf9319ed36744e932857e905b69debed45511ad6ceedab48672cf",
+        "tallyUsd6": "90235745"
+      }
+    },
+    {
+      "at": "2026-09-28T16:55:40.644Z",
+      "kind": "proposal",
+      "state": {
+        "xrpDrops": "157997860",
+        "fxrp": "600000",
+        "shares": {
+          "1": "38971177"
+        }
+      },
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "why": "87.99786 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)",
+      "by": "rules"
+    },
+    {
+      "at": "2026-09-28T16:55:39.458Z",
+      "kind": "settled",
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "afterS": 300,
+      "state": {
+        "xrpDrops": "157997860",
+        "fxrp": "600000",
+        "shares": {
+          "1": "38971177"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T16:50:38.515Z",
+      "kind": "verdict",
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "verdict": {
+        "signed": true,
+        "hash": "F892A7AC29351071281F5EFFA5C3B0C4157ED4C02EE68C524197B016293ADDF6",
+        "usd6": "1542",
+        "reservation": "0x8514380d44eab6e0156583528289db63ae5b9de73edc3369e15570cf8e67e3fd",
+        "tallyUsd6": "60234740"
+      }
+    },
+    {
+      "at": "2026-09-28T16:50:25.824Z",
+      "kind": "proposal",
+      "state": {
+        "xrpDrops": "157998890",
+        "fxrp": "20600000",
+        "shares": {
+          "1": "18985958"
+        }
+      },
+      "step": {
+        "kind": "deposit",
+        "amount": "20000000",
+        "vaultId": 1
+      },
+      "why": "20.6 FXRP sits idle in my personal account: deposit 20 into vault 1",
+      "by": "rules"
+    },
+    {
+      "at": "2026-09-28T16:50:24.631Z",
+      "kind": "settled",
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "afterS": 300,
+      "state": {
+        "xrpDrops": "157998890",
+        "fxrp": "20600000",
+        "shares": {
+          "1": "18985958"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T16:45:23.693Z",
+      "kind": "verdict",
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "verdict": {
+        "signed": true,
+        "hash": "CB725F4F8D744031498B02B0E2649D9C9C6C5882A25A0FEB89789D4B20E102DF",
+        "usd6": "30017545",
+        "reservation": "0x11a5f6931a06e0f7fe305528ceb2ae07432d7d5e424c22be9d2eaa647e52166e",
+        "tallyUsd6": "60233198"
+      }
+    },
+    {
+      "at": "2026-09-28T16:45:10.759Z",
+      "kind": "proposal",
+      "state": {
+        "xrpDrops": "177998920",
+        "fxrp": "800000",
+        "shares": {
+          "1": "18985958"
+        }
+      },
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "why": "107.99892 XRP idle above the 70 XRP reserve: mint 20 XRP to my own personal account (at most 20 a step)",
+      "by": "rules"
+    },
+    {
+      "at": "2026-09-28T16:45:09.539Z",
+      "kind": "settled",
+      "step": {
+        "kind": "deposit",
+        "amount": "19000000",
+        "vaultId": 1
+      },
+      "afterS": 300,
+      "state": {
+        "xrpDrops": "177998920",
+        "fxrp": "800000",
+        "shares": {
+          "1": "18985958"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T16:40:08.578Z",
+      "kind": "verdict",
+      "step": {
+        "kind": "deposit",
+        "amount": "19000000",
+        "vaultId": 1
+      },
+      "verdict": {
+        "signed": true,
+        "hash": "AD1374B1519969502C902A4EE8067DFCC522E54F74FF2E9C71ED94AAFF374D6A",
+        "usd6": "1548",
+        "reservation": "0xee3de9eabe7418c841040746b027842f7767ccdc069279a3ec9b4c4c2daa8fd0",
+        "tallyUsd6": "30215653"
+      }
+    },
+    {
+      "at": "2026-09-28T16:39:59.785Z",
+      "kind": "proposal",
+      "state": {
+        "xrpDrops": "77999950",
+        "fxrp": "19800000",
+        "shares": {
+          "1": "0"
+        }
+      },
+      "step": {
+        "kind": "deposit",
+        "amount": "19000000",
+        "vaultId": 1
+      },
+      "why": "19.8 FXRP sits idle in my personal account: deposit 19 into vault 1",
+      "by": "rules"
+    },
+    {
+      "at": "2026-09-28T16:39:58.582Z",
+      "kind": "settled",
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "afterS": 300,
+      "state": {
+        "xrpDrops": "77999950",
+        "fxrp": "19800000",
+        "shares": {
+          "1": "0"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T16:34:57.671Z",
+      "kind": "verdict",
+      "step": {
+        "kind": "mint",
+        "drops": "20000000"
+      },
+      "verdict": {
+        "signed": true,
+        "hash": "9ECE96510AA47BC647D3D4EFEA6818AB344CF9A11834001F31DFF27C086AB219",
+        "usd6": "30214105",
+        "reservation": "0xfa6d3c11e0f0f7400eec60dc8643a2bf18930644afebf8171ca84d729762f981",
+        "tallyUsd6": "30214105"
+      }
+    },
+    {
+      "at": "2026-09-28T16:34:48.617Z",
       "kind": "proposal",
       "state": {
         "xrpDrops": "97999980",
@@ -442,19 +884,20 @@
       "by": "rules"
     },
     {
-      "at": "2026-09-27T06:24:06.310Z",
+      "at": "2026-09-28T16:34:46.561Z",
       "kind": "start",
-      "agent": "rEmLfCJEhDhstNwbmKyz5hoSrXCF7xES6G",
-      "account": "raq86ycKBXrK2ZFd15oZo51UxYKpqAjeUs",
+      "agent": "rPWDAWM1MUPPoaLiePm6yRp66HH18Uo7qq",
+      "account": "rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn",
       "umbrella": "30",
       "brain": "rules",
-      "tickSeconds": 15
+      "tickSeconds": 300
     },
     {
-      "at": "2026-09-27T06:24:06.241Z",
+      "at": "2026-09-28T16:34:46.526Z",
       "kind": "acknowledged",
       "umbrella": "30",
-      "tx": "0xb65fa0a04597c74cd7a1293bac5498aa5539d90deec574c22d31628f180140d2"
+      "tx": "0x70f69a759e3bc9a4308359466c797bf515d2b36b7d9f93e8a8d9d3f1386590c3"
     }
-  ]
+  ],
+  "note": "A snapshot of the live demo from 28 September 2026, shown because the live feed could not be reached."
 }

@@ -20,7 +20,7 @@ export const TESTNET_EXPLORERS = {
 
 export interface ChainSnapshot {
   account: { xrpDrops: string; fxrp: string; shares: string };
-  umbrella: { budgetUsd6: string; spentUsd6: string; tripwire: string; strikes: string; tripped: boolean };
+  umbrella: { budgetUsd6: string; spentUsd6: string; tripwire: string; strikes: string; tripped: boolean; validFrom?: string; validUntil?: string };
   /** The SignerList's weight-2 entry. */
   owner?: string;
   /** C2FLR (wei) on the Flare keys that pay gas: the guard, for each decision's record; the agent. */
@@ -63,7 +63,8 @@ export async function readChain(c: LanceaConfig, xrpl: XrplHttp, pc: PublicClien
   const entries: { SignerEntry: { Account: string; SignerWeight: number } }[] = objects.account_objects?.[0]?.SignerEntries ?? [];
   return {
     account: { xrpDrops: (spendable > 0n ? spendable : 0n).toString(), fxrp: fxrp.toString(), shares: shares.toString() },
-    umbrella: { budgetUsd6: (m as { budget: bigint }).budget.toString(), spentUsd6: String(spent), tripwire: String(tripwire), strikes: String(strikes), tripped: Boolean(tripped) },
+    umbrella: { budgetUsd6: (m as { budget: bigint }).budget.toString(), spentUsd6: String(spent), tripwire: String(tripwire), strikes: String(strikes), tripped: Boolean(tripped),
+      validFrom: String((m as { validFrom: bigint }).validFrom), validUntil: String((m as { validUntil: bigint }).validUntil) },
     owner: entries.find((e) => e.SignerEntry.SignerWeight >= 2)?.SignerEntry.Account,
     fuel: { guardWei, agentWei },
   };

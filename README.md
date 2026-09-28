@@ -218,12 +218,36 @@ sudo cp lancea.config.json /etc/lancea/config.json && sudo systemctl enable --no
 
 ## The dashboard
 
-`docs/index.html`, served by GitHub Pages, is built from `dashboard/page.html` by `scripts/dashboard-build.ts`. It reads the live `feed.json` and shows:
-- the umbrella's budget and tripwire;
-- the account's XRP, FXRP and vault shares;
-- every decision, each with two witnesses. **Agent said** (cyan) is the agent's own words. **The transaction does** (amber) is read by the guard from the signed transaction. A white star marks a co-signature, and coral marks a refusal or a strike.
+[dziuba0x.github.io/lancea](https://dziuba0x.github.io/lancea/) is the demo, live. It reads `feed.json` from the demo machine every minute. When the feed cannot be reached, it shows a dated snapshot and says so. When the machine has published nothing for 30 minutes, it says it is offline.
 
-Every hash links to the public explorer. Where the feed cannot be reached, the page shows the sample from the rehearsal of 2026-09-27 (`dashboard/sample-feed.json`) and says so. When the demo machine has published nothing for 30 minutes, the page says it is offline and shows its last state. Under the guard's Flare key it shows the C2FLR left for gas, and says when it runs low.
+Five views:
+
+- **Now:** the state in one sentence, and the budget as a glass ring. Its amber liquid is the dollar budget spent across every rail. Inside the ring, every co-signed step is a white star, arranged in a spiral around the point where the two witnesses meet. The view also has the balances with their history, the latest decisions, and a countdown to the agent's next look.
+- **Timeline:** every decision and note, by day, with filters and search. A decision opens in a sheet with the decoded transaction, the price and each hash on its explorer.
+- **Budget:** spend over time against the budget, a table view, the pace, what the budget paid for, and XRP as FTSO priced each mint.
+- **Keys:** who can move the money. Choose signers and see what can happen. It also shows each key, its explorer link and the guard's gas.
+- **How it works:** the flow from the agent's claim to the guard's verdict, for a first-time visitor.
+
+Every decision has two witnesses:
+
+- **Agent said** (cyan): the agent's own words.
+- **Transaction does** (amber): read by the guard from the signed transaction.
+
+White marks a co-signature. Coral marks a refusal or a strike.
+
+The page is one file, built by `scripts/dashboard-build.ts` into `docs/index.html` from `dashboard/`:
+
+- `page.html` holds the markup;
+- `style.css` holds the styles;
+- `app.js` holds the views;
+- `glass.js` draws the sky and the glass.
+
+`glass.js` is a WebGL2 renderer in two passes, the recipe of the DELICTI hero, running live:
+
+1. **The sky, drawn into a texture with mipmaps.** It has a nebula lit by the two witnesses, three layers of stars, a few JWST spikes, meteors, a satellite, a pulsar, a far galaxy and the decisions. When a new co-signature arrives, cyan and amber light meet at the white star, and a new star is born there.
+2. **The glass, drawn from the page's own geometry.** Its shape is a squircle bevel. It refracts each colour channel separately (IOR 1.44 / 1.50 / 1.57) and has a weak Fresnel term. A light that moves travels around each rim, and the pointer is a second light. The soft shadow shows through the glass too. Glass appears by gaining its lensing, not by fading. Drops merge with Apple's neck.
+
+It respects reduced motion (a still sky) and reduced transparency (solid panes). Without WebGL2 it falls back to CSS glass.
 
 ## The drill: a staged hijack, and the re-arm
 

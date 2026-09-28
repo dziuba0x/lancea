@@ -3,457 +3,185 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
 <style>
-  /* One world, on purpose: deep space, two lights. Cyan is what the agent says; amber is what the
-     transaction does, read from the transaction itself; white is where they meet and the guard signs. */
-  :root {
-    color-scheme: dark;
-    --space: #05060c;
-    --space-2: #0a0c16;
-    --ink: #f5f5f7;
-    --ink-2: #a1a1a6;
-    --ink-3: #6e6e73;
-    --hair: rgba(245, 245, 247, 0.09);
-    --hair-2: rgba(245, 245, 247, 0.16);
-    --cyan: #35cfff;
-    --amber: #ffae45;
-    --star: #ffffff;
-    --coral: #ff6b6b;
-    --dim: rgba(3, 4, 9, 0.42);
-    --sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    --r: 22px;
-  }
-  html { background: var(--space); }
-  body {
-    background: var(--space);
-    color: var(--ink);
-    font: 400 15px/1.55 var(--sans);
-    padding-inline: max(16px, 4vw);
-    padding-block: 28px 44px;
-    -webkit-font-smoothing: antialiased;
-  }
-  #sky { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
-  .nebula {
-    position: fixed; inset: 0; z-index: 0; pointer-events: none;
-    background:
-      radial-gradient(46vw 34vw at 6% 8%, rgba(53, 207, 255, 0.10), transparent 70%),
-      radial-gradient(46vw 34vw at 96% 4%, rgba(255, 174, 69, 0.085), transparent 70%),
-      radial-gradient(60vw 40vw at 50% 110%, rgba(40, 46, 90, 0.35), transparent 70%);
-  }
-  .wrap { position: relative; z-index: 1; max-width: 1120px; margin-inline: auto; display: grid; gap: 30px; }
-  a { color: inherit; text-decoration-color: var(--hair-2); text-underline-offset: 3px; }
-  a:hover { text-decoration-color: currentColor; }
-  a:focus-visible, button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 6px; }
-  .label { font: 500 11px/1.2 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
-  .num { font-variant-numeric: tabular-nums; }
-  code { font: 400 0.88em/1 var(--mono); color: var(--ink); }
-
-  /* header */
-  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; }
-  .brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-  .word { font: 700 30px/1 var(--sans); letter-spacing: -0.03em; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 8px; padding: 6px 11px; border-radius: 999px;
-    border: 1px solid var(--hair-2); font: 500 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2);
-  }
-  .chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); display: inline-block; }
-  .chip.live i { background: var(--star); box-shadow: 0 0 10px rgba(255, 255, 255, 0.8); }
-  .chip.sample i { background: var(--amber); }
-
-  /* the one glass element: clear, never milky; a dimming layer under it for legibility */
-  .state {
-    position: relative; border-radius: var(--r); padding: clamp(22px, 3.2vw, 36px);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)), var(--dim);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -1px 0 rgba(255, 255, 255, 0.04), 0 22px 70px rgba(0, 0, 0, 0.5);
-    display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(22px, 4vw, 48px);
-  }
-  .state::before {
-    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
-    background: linear-gradient(100deg, rgba(53, 207, 255, 0.55), rgba(255, 255, 255, 0.18) 45%, rgba(255, 174, 69, 0.5));
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
-  }
-  .pill {
-    display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px;
-    font: 500 11px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase;
-  }
-  .pill.coral { color: var(--coral); background: rgba(255, 107, 107, 0.12); box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.35); }
-  .pill.star { color: var(--ink); background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28); }
-  .pill.grey { color: var(--ink-2); background: rgba(161, 161, 166, 0.10); box-shadow: inset 0 0 0 1px rgba(161, 161, 166, 0.28); }
-  h1 { margin: 16px 0 10px; font: 700 clamp(30px, 4.6vw, 46px)/1.04 var(--sans); letter-spacing: -0.035em; text-wrap: balance; }
-  .sub { margin: 0; max-width: 58ch; color: var(--ink-2); font-size: 16px; }
-  .meter { display: grid; gap: 22px; align-content: center; }
-  .budget-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 8px; }
-  .budget-top b { font: 600 clamp(26px, 3.4vw, 34px)/1 var(--sans); letter-spacing: -0.02em; }
-  .budget-top span { color: var(--ink-2); }
-  .bar { position: relative; height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px var(--hair); overflow: hidden; margin-top: 12px; }
-  .bar > i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, rgba(53, 207, 255, 0.9), rgba(255, 255, 255, 0.95) 60%, rgba(255, 174, 69, 0.95)); }
-  .bar-note { margin-top: 8px; color: var(--ink-3); font-size: 13px; }
-  .trip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 18px; border-top: 1px solid var(--hair); }
-  .dots { display: flex; gap: 6px; }
-  .dots i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--hair-2); }
-  .dots i.on { background: var(--coral); box-shadow: 0 0 12px rgba(255, 107, 107, 0.6); }
-
-  /* numbers row: hairlines, not cards */
-  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
-  .stat { padding: 18px 18px 18px 0; display: grid; gap: 8px; }
-  .stat + .stat { padding-left: 18px; border-left: 1px solid var(--hair); }
-  .stat b { font: 600 22px/1.1 var(--sans); letter-spacing: -0.01em; }
-  .stat small { color: var(--ink-3); font-size: 13px; }
-
-  /* timeline and side */
-  .main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 36px; align-items: start; }
-  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-  .section-head h2 { margin: 0; font: 600 20px/1.2 var(--sans); letter-spacing: -0.015em; }
-  ol.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
-  .ev { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 16px; }
-  .when { padding-top: 3px; color: var(--ink-3); font: 400 12px/1.4 var(--mono); }
-  .card { border-radius: 16px; padding: 16px 18px; background: rgba(255, 255, 255, 0.025); box-shadow: inset 0 0 0 1px var(--hair); display: grid; gap: 12px; }
-  .card.struck { box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.35); background: rgba(255, 107, 107, 0.045); }
-  .card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
-  .usd { margin-left: auto; color: var(--ink-2); font: 500 13px/1 var(--mono); }
-  .witness { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 4px 14px; }
-  .witness .label { padding-top: 3px; }
-  .w1 .label { color: var(--cyan); }
-  .w2 .label { color: var(--amber); }
-  .said { color: var(--ink); }
-  .by { color: var(--ink-3); font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; margin-left: 6px; }
-  .gas { display: block; margin-top: 3px; color: var(--ink-3); font: 500 11px/1.4 var(--mono); }
-  .gas.low { color: var(--coral); }
-  .does { color: var(--ink); }
-  .does em { font-style: normal; color: var(--coral); }
-  .verdict { color: var(--ink-2); font-size: 14px; }
-  .links { display: flex; flex-wrap: wrap; gap: 6px 16px; font: 400 12px/1.4 var(--mono); color: var(--ink-3); }
-  .links a { color: var(--ink-2); }
-  .note { display: flex; gap: 12px; align-items: baseline; padding: 4px 2px; color: var(--ink-2); }
-  .note::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); transform: translateY(-1px); }
-  .note.coral::before { background: var(--coral); }
-  .note.star::before { background: var(--star); }
-  .note b { color: var(--ink); font-weight: 500; }
-
-  aside { display: grid; gap: 30px; }
-  aside h3 { margin: 0 0 12px; }
-  .keys { display: grid; gap: 10px; }
-  .key { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding-bottom: 10px; border-bottom: 1px solid var(--hair); }
-  .key b { font-weight: 500; }
-  .key code { grid-column: 1 / -1; font: 400 12px/1.3 var(--mono); color: var(--ink-3); overflow-wrap: anywhere; }
-  .weight { display: flex; gap: 4px; align-items: center; }
-  .weight i { width: 9px; height: 9px; border-radius: 2px; background: var(--ink); }
-  .weight i.off { background: transparent; box-shadow: inset 0 0 0 1px var(--hair-2); }
-  .quorum { color: var(--ink-2); font-size: 14px; margin: 12px 0 0; }
-  dl.chain { margin: 0; display: grid; gap: 12px; }
-  dl.chain dt { margin-bottom: 3px; }
-  dl.chain dd { margin: 0; font: 400 13px/1.35 var(--mono); color: var(--ink-2); overflow-wrap: anywhere; }
-  .legend { display: grid; gap: 10px; color: var(--ink-2); font-size: 14px; }
-  .legend div { display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: baseline; }
-  .sw { width: 10px; height: 10px; border-radius: 50%; transform: translateY(1px); }
-  .source { color: var(--ink-3); font-size: 13px; border-top: 1px solid var(--hair); padding-top: 18px; }
-  footer { color: var(--ink-3); font-size: 13px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; }
-  svg.star { width: 11px; height: 11px; flex: none; }
-
-  @media (max-width: 900px) {
-    .main { grid-template-columns: minmax(0, 1fr); }
-    .state { grid-template-columns: minmax(0, 1fr); }
-  }
-  @media (max-width: 640px) {
-    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .stat:nth-child(3) { padding-left: 0; border-left: 0; }
-    .stat:nth-child(n + 3) { border-top: 1px solid var(--hair); }
-    .ev { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-    .witness { grid-template-columns: minmax(0, 1fr); }
-  }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+{{STYLE}}
 </style>
-
 <canvas id="sky" aria-hidden="true"></canvas>
-<div class="nebula" aria-hidden="true"></div>
-<div class="wrap">
-  <header>
-    <div class="brand">
-      <span class="word">Lancea</span>
-      <span class="label">Agent on a leash · DELICTI</span>
-    </div>
-    <div class="chips">
-      <span class="chip" id="net">XRPL testnet × Flare Coston2</span>
-      <span class="chip" id="src"><i></i><span>Loading</span></span>
-    </div>
+<div id="app">
+  <header class="topbar">
+    <a class="brand" href="#now" aria-label="Lancea Watch, the agent on a leash"><b>Lancea</b><span class="label">Agent on a leash · DELICTI</span></a>
+    <nav class="tabs glass" id="tabs" role="tablist" aria-label="Views">
+      <span id="tab-indicator" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none"></span>
+      <button class="tab" role="tab" id="tab-now" aria-controls="view-now" aria-selected="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.8 13.9 10.1 21.2 12 13.9 13.9 12 21.2 10.1 13.9 2.8 12 10.1 10.1Z"/></svg><span>Now</span></button>
+      <button class="tab" role="tab" id="tab-timeline" aria-controls="view-timeline" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="17.5" r="1.3" fill="currentColor" stroke="none"/></svg><span>Timeline</span></button>
+      <button class="tab" role="tab" id="tab-budget" aria-controls="view-budget" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4.2 16.5a8.4 8.4 0 1 1 15.6 0"/><path d="M12 13.2 15.6 9.4"/><circle cx="12" cy="13.6" r="1.2" fill="currentColor" stroke="none"/></svg><span>Budget</span></button>
+      <button class="tab" role="tab" id="tab-keys" aria-controls="view-keys" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="3.8"/><path d="M11.8 12H21M17.2 12v3.4M20.2 12v2.2"/></svg><span>Keys</span></button>
+      <button class="tab" role="tab" id="tab-how" aria-controls="view-how" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9.2" cy="12" r="5.6"/><circle cx="14.8" cy="12" r="5.6"/></svg><span>How it works</span></button>
+    </nav>
+    <div class="status glass" id="status" role="status"><i class="dot"></i><span class="label on" id="status-text">Loading</span><span class="label net">XRPL testnet × Flare Coston2</span></div>
   </header>
 
-  <section class="state" aria-live="polite">
-    <div>
-      <span class="pill grey" id="pill">…</span>
-      <h1 id="head">Reading the leash</h1>
-      <p class="sub" id="sub"></p>
-    </div>
-    <div class="meter">
-      <div>
-        <div class="label">Umbrella budget</div>
-        <div class="budget-top"><b class="num" id="spent">–</b><span class="num" id="budget"></span></div>
-        <div class="bar" role="img" id="bar" aria-label=""><i id="fill" style="width:0"></i></div>
-        <div class="bar-note" id="barnote"></div>
-      </div>
-      <div class="trip">
-        <div>
-          <div class="label">Tripwire</div>
-          <div id="tripnote" style="margin-top:6px;color:var(--ink-2)"></div>
+  <main class="scroller" id="scroller">
+    <div class="shell">
+
+      <section class="view" id="view-now" role="tabpanel" aria-labelledby="tab-now">
+        <div class="span-12 hero">
+          <div class="hero-text">
+            <span class="pill glass rise" id="now-pill"><i></i><span>Working</span></span>
+            <h1 class="headline rise" id="now-head">Working inside its leash.</h1>
+            <p class="sub rise" id="now-sub"></p>
+            <div class="figure rise"><b id="now-spent">$0.00</b><span id="now-of"></span></div>
+            <div class="facts rise" id="now-facts"></div>
+          </div>
+          <div class="orbit rise" id="orbit">
+            <div class="ring glass" id="ring" aria-hidden="true"></div>
+            <div class="orbit-hit" id="orbit-hit" aria-hidden="true"></div>
+            <div class="orbit-cap label">Every white star is a co-signed step</div>
+          </div>
         </div>
-        <div class="dots" id="dots"></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="stats" aria-label="The account now">
-    <div class="stat"><span class="label">XRP spendable</span><b class="num" id="xrp">–</b><small>on the XRP Ledger</small></div>
-    <div class="stat"><span class="label">FXRP</span><b class="num" id="fxrp">–</b><small>in the personal account on Flare</small></div>
-    <div class="stat"><span class="label">Vault shares</span><b class="num" id="shares">–</b><small id="vaultname">in the vault</small></div>
-    <div class="stat"><span class="label">Guard decisions</span><b class="num" id="counts">–</b><small id="countsnote"></small></div>
-  </section>
-
-  <div class="main">
-    <section aria-labelledby="t-h">
-      <div class="section-head"><h2 id="t-h">What happened</h2><span class="label" id="t-range"></span></div>
-      <ol class="timeline" id="timeline"></ol>
-    </section>
-    <aside>
-      <section>
-        <h3 class="label">Who holds the keys</h3>
-        <div class="keys" id="keys"></div>
-        <p class="quorum">Quorum 2. The agent alone moves nothing. With the guard it moves only what the guard co-signs. You alone can do anything.</p>
-      </section>
-      <section>
-        <h3 class="label">On-chain</h3>
-        <dl class="chain" id="chain"></dl>
-      </section>
-      <section>
-        <h3 class="label">How to read this page</h3>
-        <div class="legend">
-          <div><span class="sw" style="background:var(--cyan)"></span><span><b style="color:var(--cyan);font-weight:500">Agent said</b>: the agent's own words, as it sent them with the request.</span></div>
-          <div><span class="sw" style="background:var(--amber)"></span><span><b style="color:var(--amber);font-weight:500">The transaction does</b>: read by the guard from the signed transaction itself, never from the agent's words.</span></div>
-          <div><span class="sw" style="background:var(--star);box-shadow:0 0 8px #fff"></span><span><b style="color:var(--ink);font-weight:500">Co-signed</b>: inside your budget and your rules, so the guard added the second signature.</span></div>
-          <div><span class="sw" style="background:var(--coral)"></span><span><b style="color:var(--coral);font-weight:500">Refused, struck</b>: no signature. A strike is written on Flare and trips every rail.</span></div>
+        <div class="span-3 glass pane stat rise" id="stat-xrp"></div>
+        <div class="span-3 glass pane stat rise" id="stat-fxrp"></div>
+        <div class="span-3 glass pane stat rise" id="stat-shares"></div>
+        <div class="span-3 glass pane stat rise" id="stat-gas"></div>
+        <div class="span-8 glass pane rise">
+          <div class="pane-head"><h2>Latest decisions</h2><button class="linkbtn" data-go="timeline">All decisions</button></div>
+          <ul class="decisions" id="now-list"></ul>
+        </div>
+        <div class="span-4 glass pane rise">
+          <div class="pane-head"><h2>Next</h2><span class="label">It looks every 5 min</span></div>
+          <div class="next-ring">
+            <svg viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="32" fill="none" stroke="rgba(245,245,247,.1)" stroke-width="4"/><circle id="next-arc" cx="38" cy="38" r="32" fill="none" stroke="#f5f5f7" stroke-width="4" stroke-linecap="round" transform="rotate(-90 38 38)" stroke-dasharray="0 201"/></svg>
+            <div><b id="next-time">—</b><span class="label" id="next-cap">until it looks again</span></div>
+          </div>
+          <p class="plan" id="now-plan"></p>
+          <div class="keysline">
+            <div><span>The owner</span><span class="weight"><i></i><i></i></span></div>
+            <div><span>The agent</span><span class="weight"><i></i><i class="off"></i></span></div>
+            <div><span>The guard</span><span class="weight"><i></i><i class="off"></i></span></div>
+          </div>
+          <button class="linkbtn" data-go="keys" style="margin-top:12px">Who can move the money</button>
         </div>
       </section>
-      <p class="source" id="source"></p>
-    </aside>
-  </div>
 
-  <footer>
-    <span>DELICTI · Lancea. A testnet demo: nothing on this page is money.</span>
-    <span>Built in Warsaw, Poland.</span>
-  </footer>
+      <section class="view" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline" hidden>
+        <div class="span-12 toolbar rise">
+          <div class="segment glass" id="filters" role="group" aria-label="Show">
+            <button data-f="all" aria-pressed="true">All <small></small></button>
+            <button data-f="signed" aria-pressed="false">Co-signed <small></small></button>
+            <button data-f="refused" aria-pressed="false">Refused <small></small></button>
+            <button data-f="notes" aria-pressed="false">Notes <small></small></button>
+          </div>
+          <label class="search glass" for="q"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.6"/><path d="m10.6 10.6 3.4 3.4"/></svg><input id="q" type="search" placeholder="Search reasons, amounts, hashes" autocomplete="off" aria-label="Search the timeline"></label>
+        </div>
+        <div class="span-12" id="days" style="display:grid;gap:20px"></div>
+      </section>
+
+      <section class="view" id="view-budget" role="tabpanel" aria-labelledby="tab-budget" hidden>
+        <div class="span-4 glass pane rise">
+          <span class="label">Umbrella · spent across every rail</span>
+          <div class="figure" style="margin-top:14px"><b id="b-spent">$0</b></div>
+          <div style="color:var(--ink-2);margin-top:6px" id="b-of"></div>
+          <div class="meter"><i id="b-meter" style="transform:scaleX(0)"></i></div>
+          <dl class="kv" id="b-kv"></dl>
+        </div>
+        <div class="span-8 glass pane chart rise">
+          <div class="pane-head"><h2>Spent over time</h2><button class="linkbtn" id="b-tabletoggle">Table</button></div>
+          <div id="b-chartbox"></div>
+          <div class="tablewrap" id="b-table" hidden></div>
+        </div>
+        <div class="span-6 glass pane rise">
+          <div class="pane-head"><h2>By action</h2><span class="label">What the budget paid for</span></div>
+          <div class="bars" id="b-actions"></div>
+        </div>
+        <div class="span-6 glass pane rise">
+          <div class="pane-head"><h2>The price witness</h2><span class="label">FTSO · XRP/USD</span></div>
+          <div id="b-price"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-keys" role="tabpanel" aria-labelledby="tab-keys" hidden>
+        <div class="span-12 glass pane rise">
+          <div class="pane-head"><h2>Who can move the money</h2><span class="label">Quorum 2 · master key disabled</span></div>
+          <p style="margin:0 0 18px;color:var(--ink-2);max-width:62ch">The account on the XRP Ledger needs signatures worth 2. Choose who signs and see what can happen.</p>
+          <div class="signers">
+            <button class="signer" data-k="owner" aria-pressed="false"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i></i></span><b>The owner</b><small>Weight 2 · your key, on your computer</small></button>
+            <button class="signer" data-k="agent" aria-pressed="true"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i class="off"></i></span><b>The agent</b><small>Weight 1 · proposes and signs first</small></button>
+            <button class="signer" data-k="guard" aria-pressed="true"><span class="check"><svg viewBox="0 0 12 12"><path d="M2.5 6.3 5 8.6 9.6 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="weight"><i></i><i class="off"></i></span><b>The guard</b><small>Weight 1 · co-signs inside your rules</small></button>
+          </div>
+          <div class="quorum"><div class="q" aria-hidden="true"><i></i><i></i></div><p class="verdict-line" id="k-verdict" aria-live="polite"></p></div>
+        </div>
+        <div class="span-4 glass pane rise" id="k-owner"></div>
+        <div class="span-4 glass pane rise" id="k-agent"></div>
+        <div class="span-4 glass pane rise" id="k-guard"></div>
+        <div class="span-12 glass pane rise" id="k-chain"></div>
+      </section>
+
+      <section class="view" id="view-how" role="tabpanel" aria-labelledby="tab-how" hidden>
+        <div class="span-12 intro rise" style="padding:8px 0 10px">
+          <span class="label">How it works</span>
+          <h1>An AI agent that cannot move money alone.</h1>
+          <p>Lancea gives an agent real work on real rails, and a leash it cannot slip: a second key, a dollar budget priced by Flare, and a tripwire. Every step leaves two witnesses you can check yourself.</p>
+        </div>
+        <div class="span-12 glass pane flow rise">
+          <svg viewBox="0 0 1100 300" role="img" aria-label="The agent proposes, the guard reads the transaction and prices it on Flare, then co-signs or refuses">
+            <defs>
+              <linearGradient id="gc" x1="0" x2="1"><stop offset="0" stop-color="#35cfff" stop-opacity="0"/><stop offset="1" stop-color="#35cfff" stop-opacity=".9"/></linearGradient>
+              <linearGradient id="ga" x1="0" x2="1"><stop offset="0" stop-color="#ffae45" stop-opacity=".9"/><stop offset="1" stop-color="#ffae45" stop-opacity="0"/></linearGradient>
+            </defs>
+            <g font-family="Geist, sans-serif" fill="#f5f5f7">
+              <g transform="translate(40 110)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">The agent</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">PROPOSES · WEIGHT 1</text></g>
+              <g transform="translate(430 110)"><rect width="240" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.35)"/><text x="120" y="38" text-anchor="middle" font-size="17" font-weight="600">The guard</text><text x="120" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">READS · PRICES · SIGNS</text></g>
+              <g transform="translate(860 40)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">XRP Ledger</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">2 OF 2 · IT MOVES</text></g>
+              <g transform="translate(860 180)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(255,107,107,.45)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">Strike on Flare</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#ff6b6b" font-family="Geist Mono, monospace" letter-spacing="1.5">REFUSED · TRIPWIRE</text></g>
+              <g transform="translate(450 14)"><rect width="200" height="56" rx="18" fill="rgba(3,4,9,.35)" stroke="rgba(255,174,69,.4)"/><text x="100" y="34" text-anchor="middle" font-size="14" font-weight="500">SummaMeter · FTSO</text></g>
+            </g>
+            <path id="p1" d="M240 140 H430" stroke="rgba(53,207,255,.35)" stroke-width="1.5" fill="none"/>
+            <path id="p1b" d="M240 164 H430" stroke="rgba(255,174,69,.35)" stroke-width="1.5" fill="none"/>
+            <path id="p2" d="M670 140 C 760 140 770 82 860 82" stroke="rgba(245,245,247,.4)" stroke-width="1.5" fill="none"/>
+            <path id="p3" d="M670 164 C 760 164 770 222 860 222" stroke="rgba(255,107,107,.4)" stroke-width="1.5" fill="none"/>
+            <path id="p4" d="M550 110 V70" stroke="rgba(255,174,69,.4)" stroke-width="1.5" fill="none"/>
+            <text x="335" y="130" text-anchor="middle" font-family="Geist Mono, monospace" font-size="11" letter-spacing="1.4" fill="#35cfff">WHAT IT SAYS</text>
+            <text x="335" y="186" text-anchor="middle" font-family="Geist Mono, monospace" font-size="11" letter-spacing="1.4" fill="#ffae45">WHAT IT DOES</text>
+            <circle r="5" fill="#35cfff"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.45;1" calcMode="linear"><mpath href="#p1"/></animateMotion></circle>
+            <circle r="5" fill="#ffae45"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.45;1" calcMode="linear"><mpath href="#p1b"/></animateMotion></circle>
+            <g><path d="M0 -8 1.5 -1.5 8 0 1.5 1.5 0 8 -1.5 1.5 -8 0 -1.5 -1.5Z" fill="#fff"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;0;1" keyTimes="0;.5;1" calcMode="linear"><mpath href="#p2"/></animateMotion></path></g>
+            <circle r="4" fill="#ffae45"><animateMotion dur="1.6s" repeatCount="indefinite"><mpath href="#p4"/></animateMotion></circle>
+          </svg>
+        </div>
+        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--cyan)"></i>01 · The claim</span><h3>The agent proposes</h3><p>It signs a transaction with its own key and says, in words, what it is doing and why. Its key is only weight 1, so the transaction cannot move yet.</p></div>
+        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--amber)"></i>02 · The reading</span><h3>The guard reads it itself</h3><p>The guard ignores the words and decodes the transaction: who receives it, how much, and what any memo tells Flare to do.</p></div>
+        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--amber)"></i>03 · The price</span><h3>One dollar budget</h3><p>Flare's FTSO prices the step. SummaMeter adds it to one budget that covers every rail, and refuses what would cross it.</p></div>
+        <div class="span-3 glass pane step rise"><span class="label"><i style="background:#fff"></i>04 · The verdict</span><h3>A second signature, or a strike</h3><p>Inside your budget and rules, the guard adds the second signature and the ledger accepts it. Outside, it refuses and writes a strike on Flare that trips every rail.</p></div>
+        <div class="span-12 glass pane faq rise">
+          <div class="pane-head"><h2>Questions</h2></div>
+          <details><summary>Why two witnesses?</summary><p>What the agent says is its claim. What the transaction does is the fact, read by the guard from the signed transaction. When the two agree, the guard signs: agreement is evidence. When they do not, the difference is the finding.</p></details>
+          <details><summary>What is a drill?</summary><p>A fire drill for the leash. We hand the agent a planted note that tells it to send money to a stranger, the way a prompt injection would. The guard refuses and writes a strike on Flare, and the page marks the moment as a drill.</p></details>
+          <details><summary>Why Flare?</summary><p>Flare prices every asset with its own oracle (FTSO), confirms events on other chains with its data connector (FDC), and gives XRP Ledger accounts a smart account on Flare. The leash needs all three, built into one network.</p></details>
+          <details><summary>What happens at the edge of the budget?</summary><p>The agent checks the budget before it asks. When the next step would cross it, the agent keeps that step to itself and waits. If it asked anyway, the guard would refuse.</p></details>
+          <details><summary>Is this real money?</summary><p>No. This demo runs on the XRP Ledger testnet and Flare's Coston2 testnet. Every transaction is real on those networks and opens in their public explorers.</p></details>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <span id="foot-source">Loading the live feed.</span>
+        <span>A testnet demo: nothing on this page is money. Lancea runs on <a href="https://github.com/dziuba0x/delicti" target="_blank" rel="noopener">DELICTI</a> · <a href="https://github.com/dziuba0x/lancea" target="_blank" rel="noopener">source</a> · Built in Warsaw, Poland</span>
+      </footer>
+    </div>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="sheet glass" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden="true">
+    <button class="close" aria-label="Close"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="#f5f5f7" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+    <div id="sheet-body"></div>
+  </aside>
+  <div class="startip" id="startip" role="tooltip"></div>
+  <div class="toast glass" id="toast" role="status" aria-live="polite"><span></span></div>
 </div>
-
 <script type="application/json" id="sample">{{SAMPLE_JSON}}</script>
 <script>
-  // The live feed, published by the demo machine every minute (src/service/feed-publisher.ts).
-  // Where it cannot be reached (or has not started), the page shows the embedded sample, and says so.
-  const FEED_URL = "https://raw.githubusercontent.com/dziuba0x/lancea-feed/main/feed.json";
-
-  const $ = (id) => document.getElementById(id);
-  const big = (v) => { try { return BigInt(v ?? 0); } catch { return 0n; } };
-  const units = (v) => Number(big(v)) / 1e6;
-  const xrp = (drops) => units(drops).toLocaleString("en-US", { maximumFractionDigits: 6 });
-  const usd = (u6) => "$" + units(u6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const cut = (s, a = 6, b = 4) => (s && s.length > a + b + 1 ? `${s.slice(0, a)}…${s.slice(-b)}` : s ?? "");
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  const star = '<svg class="star" viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M6 0 7.1 4.9 12 6 7.1 7.1 6 12 4.9 7.1 0 6 4.9 4.9Z"/></svg>';
-  const when = (iso) => {
-    const d = new Date(iso);
-    return `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}<br>${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-  };
-  const ago = (iso) => {
-    const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-    return s < 90 ? "just now" : s < 5400 ? `${Math.round(s / 60)} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`;
-  };
-  // The machine publishes at least every 10 minutes while it runs; three missed heartbeats means it is off.
-  const AWAY_S = 1800;
-
-  function link(kind, hash, feed, text) {
-    const x = feed.explorers ?? {};
-    if (!hash) return "";
-    if (kind === "flare" && feed.networks?.flareFork) return `<span title="On the rehearsal fork only: not on the public explorer">${esc(text ?? cut(hash, 10, 6))} (fork)</span>`;
-    const base = kind === "xrpl" ? x.xrplTx : kind === "flare" ? x.flareTx : kind === "xrplAccount" ? x.xrplAccount : x.flareAddress;
-    return base ? `<a href="${base}${esc(hash)}" target="_blank" rel="noopener">${esc(text ?? cut(hash, 10, 6))}</a>` : esc(text ?? hash);
-  }
-
-  /** What the transaction does, in words, from the guard's own reading of it. */
-  function does(tx, feed) {
-    const pa = (feed.account.personalAccount ?? "").toLowerCase();
-    const a = tx.action ?? {};
-    const amount = `${xrp(tx.amountDrops)} XRP`;
-    if (a.kind === "mint-to") {
-      const own = (a.recipient ?? "").toLowerCase() === pa;
-      return own
-        ? `Mint ${amount} into FXRP for your own personal account <code>${cut(a.recipient, 6, 4)}</code>`
-        : `Mint ${amount} into FXRP for <code>${cut(a.recipient, 6, 4)}</code>: <em>not your personal account</em>`;
-    }
-    if (a.kind === "vault") return `${a.action === "deposit" ? "Deposit" : a.action === "redeem" ? "Redeem" : "Claim"} ${xrp(a.value)} ${a.action === "deposit" ? "FXRP into" : "shares from"} ${esc(a.vault)} vault ${a.vaultId} (fee ${amount})`;
-    if (a.kind === "fxrp-redeem") return `Redeem ${xrp(a.value)} FXRP back to XRP (fee ${amount})`;
-    if (a.kind === "user-op") return `Run a custom call batch from your personal account: <em>arbitrary code</em>`;
-    if (a.kind === "refused" || a.kind === "undecodable") return `An instruction the guard cannot read: <em>${esc(a.reason)}</em>`;
-    return `Pay ${amount} to <code>${cut(tx.destination, 6, 4)}</code>`;
-  }
-
-  function decisionCard(item, feed) {
-    const e = item.e, d = e.decision ?? {}, c = e.claim ?? {};
-    const struck = !!d.struck;
-    const pill = d.signed ? `<span class="pill star">${star} Co-signed</span>` : struck ? '<span class="pill coral">Refused · struck</span>' : '<span class="pill coral" style="background:none">Refused</span>';
-    const times = item.count > 1 ? `<span class="label">×${item.count} · until ${new Date(item.last).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>` : "";
-    const verdict = d.signed ? `The guard added the second signature. The XRP Ledger accepted it.` : esc(d.reason ?? "");
-    const links = [
-      d.hash ? `XRPL ${link("xrpl", d.hash, feed)}` : "",
-      d.reservation ? `reserved on Flare ${link("flare", d.reservation, feed)}` : "",
-      d.struck ? `strike ${link("flare", d.struck, feed)}` : "",
-    ].filter(Boolean).join("");
-    return `<li class="ev"><div class="when">${when(item.at)}</div><div class="card${struck ? " struck" : ""}">
-      <div class="card-top">${pill}${times}${d.usd6 ? `<span class="usd">${usd(d.usd6)}</span>` : ""}</div>
-      <div class="witness w1"><span class="label">Agent said</span><span class="said">${c.why ? esc(c.why) : "<span style='color:var(--ink-3)'>no reason given</span>"}${c.by ? `<span class="by">${c.by === "drill" ? "drill · a staged hijack" : `by ${esc(c.by)}`}</span>` : ""}</span></div>
-      <div class="witness w2"><span class="label">Transaction does</span><span class="does">${does(e.tx ?? {}, feed)}</span></div>
-      <div class="verdict">${verdict}</div>
-      ${links ? `<div class="links">${links}</div>` : ""}
-    </div></li>`;
-  }
-
-  function noteLine(item) {
-    const e = item.e;
-    const text = {
-      holding: [`<b>Holding.</b> The next ${esc(e.step?.kind ?? "step")} (${e.usd6 ? usd(e.usd6) : "?"}) would cross the umbrella's budget, so the agent does not propose it.`, ""],
-      paused: ["<b>Paused.</b> The umbrella is tripped. Nothing is proposed until the principal re-arms it.", "coral"],
-      acknowledged: [`<b>Agreed to its leash.</b> The agent acknowledged umbrella #${esc(e.umbrella)} on Flare.`, "star"],
-      settled: [`<b>Done on Flare.</b> The ${esc(e.step?.kind)} arrived after ${e.afterS} s.`, "star"],
-      timeout: [`<b>Not executed.</b> Flare did not show the ${esc(e.step?.kind)} within ${e.afterS} s, so the agent moved on.`, ""],
-      error: [`<b>Error.</b> ${esc(e.error)}`, "coral"],
-    }[e.kind] ?? [esc(e.kind), ""];
-    return `<li class="ev"><div class="when">${when(item.at)}</div><div class="note ${text[1]}"><span>${text[0]}</span></div></li>`;
-  }
-
-  /** Guard decisions and the autopilot's notes, newest first; identical refusals in a row fold into one. */
-  function timeline(feed) {
-    const items = [];
-    for (const e of feed.guard ?? []) if (e.kind === "decision") items.push({ at: e.at, type: "decision", e });
-    for (const e of feed.autopilot ?? []) if (["holding", "paused", "acknowledged", "settled", "timeout", "error"].includes(e.kind)) items.push({ at: e.at, type: "note", e });
-    items.sort((a, b) => (a.at < b.at ? 1 : -1));
-    const out = [];
-    for (const it of items) {
-      const prev = out[out.length - 1];
-      const same = prev && prev.type === "decision" && it.type === "decision" && !it.e.decision?.signed && !prev.e.decision?.signed
-        && !it.e.decision?.struck && !prev.e.decision?.struck && it.e.decision?.reason === prev.e.decision?.reason
-        && it.e.tx?.amountDrops === prev.e.tx?.amountDrops && it.e.tx?.destination === prev.e.tx?.destination;
-      if (same) { prev.count = (prev.count ?? 1) + 1; prev.at = it.at; prev.last = prev.last ?? prev.e.at; continue; }
-      out.push({ ...it });
-    }
-    for (const o of out) if (o.count > 1) o.last = o.last; // newest in the fold stays as "until"
-    return out;
-  }
-
-  /** The guard pays gas for each decision's record on Flare (about 0.13 C2FLR); below 0.5 it needs a top-up. */
-  function gas(wei) {
-    if (wei == null) return "";
-    const c2flr = Number(BigInt(wei) / 10n ** 16n) / 100, low = c2flr < 0.5;
-    return `<span class="gas${low ? " low" : ""}" title="Gas for each decision's record on Flare, about 0.13 C2FLR each">${c2flr.toFixed(2)} C2FLR for gas${low ? " · low: top it up from the Coston2 faucet" : ` · about ${Math.floor(c2flr / 0.13)} decisions`}</span>`;
-  }
-
-  function stateOf(feed, away) {
-    const u = feed.umbrella, last = (feed.autopilot ?? []).find((e) => ["holding", "paused", "idle", "verdict", "settled", "timeout", "start", "stop"].includes(e.kind));
-    const lastStrike = (feed.guard ?? []).find((e) => e.kind === "decision" && e.decision?.struck);
-    if (u.tripped) return {
-      tone: "coral", pill: "Paused · tripped", head: "The leash held.",
-      sub: lastStrike?.claim?.by === "drill"
-        ? `In a drill, the agent was fed a planted note${lastStrike.claim.why ? ": “" + esc(lastStrike.claim.why) + "”" : ""}. It asked the guard to act on it. The guard refused, and wrote a strike on Flare. Every rail stays shut until you re-arm the umbrella.`
-        : lastStrike
-        ? `The agent asked to ${lastStrike.claim?.why ? "act on “" + esc(lastStrike.claim.why) + "”" : "act outside its rules"}. The guard refused, and wrote a strike on Flare. Every rail stays shut until you re-arm the umbrella.`
-        : "A strike tripped the umbrella. Every rail stays shut until you re-arm it.",
-    };
-    if (away) return { tone: "grey", pill: "Offline", head: "Offline, and still on its leash.", sub: "The demo machine is off right now, so the agent proposes nothing until it is back. What you see is its last published state." };
-    if (last?.kind === "holding") return { tone: "grey", pill: "Holding", head: "At the edge of its budget.", sub: "The next step would cross the umbrella's budget, so the agent keeps it to itself instead of asking." };
-    if (last?.kind === "stop") return { tone: "grey", pill: "Stopped", head: "The agent is not running.", sub: "Its service was stopped. The account and the umbrella stay as they are." };
-    return { tone: "star", pill: "Working", head: "Working inside its leash.", sub: "Every step it proposes is priced against your budget and checked against your rules before the guard adds a signature." };
-  }
-
-  function render(feed, live) {
-    const u = feed.umbrella, acct = feed.account;
-    const away = live && (Date.now() - Date.parse(feed.generatedAt)) / 1000 > AWAY_S;
-    const s = stateOf(feed, away);
-    $("pill").className = `pill ${s.tone}`; $("pill").textContent = s.pill;
-    $("head").textContent = s.head; $("sub").innerHTML = s.sub;
-
-    const spent = units(u.spentUsd6), budget = units(u.budgetUsd6), pct = budget ? Math.min(100, (spent / budget) * 100) : 0;
-    $("spent").textContent = usd(u.spentUsd6); $("budget").textContent = `of ${usd(u.budgetUsd6)}`;
-    $("fill").style.width = `${pct}%`;
-    $("bar").setAttribute("aria-label", `${pct.toFixed(0)} percent of the budget used`);
-    $("barnote").textContent = `${pct.toFixed(0)}% used, across every rail of umbrella #${u.id}, priced by Flare's FTSO.`;
-    const need = Number(u.tripwire || 0), have = Number(u.strikes || 0);
-    $("dots").innerHTML = Array.from({ length: Math.max(need, 1) }, (_, i) => `<i class="${i < have ? "on" : ""}"></i>`).join("");
-    $("tripnote").textContent = u.tripped ? `${have} of ${need} strike${need === 1 ? "" : "s"}: tripped` : need ? `${have} of ${need} strike${need === 1 ? "" : "s"}: armed` : "not set";
-
-    $("xrp").textContent = xrp(acct.xrpDrops); $("fxrp").textContent = xrp(acct.fxrp); $("shares").textContent = xrp(acct.shares);
-    $("vaultname").textContent = acct.vaultName ? `in the ${acct.vaultName} vault` : "in the vault";
-    const ds = (feed.guard ?? []).filter((e) => e.kind === "decision");
-    const signed = ds.filter((e) => e.decision?.signed).length, struck = ds.filter((e) => e.decision?.struck).length;
-    $("counts").textContent = `${signed} / ${ds.length}`;
-    $("countsnote").textContent = `co-signed of all · ${ds.length - signed} refused · ${struck} struck`;
-
-    const items = timeline(feed);
-    $("timeline").innerHTML = items.map((it) => (it.type === "decision" ? decisionCard(it, feed) : noteLine(it))).join("") ||
-      '<li class="note"><span>Nothing yet: the agent has not proposed anything.</span></li>';
-    $("t-range").textContent = items.length ? `${items.length} events · newest first` : "";
-
-    const k = feed.keys ?? {};
-    const row = (who, what, w, addr) => `<div class="key"><b>${who}</b><span class="weight" title="weight ${w}">${"<i></i>".repeat(w)}${"<i class='off'></i>".repeat(2 - w)}</span><code>${esc(what)} · ${esc(addr ?? "")}</code></div>`;
-    $("keys").innerHTML = row("You, the owner", "weight 2", 2, k.owner) + row("The agent", "weight 1", 1, k.agent) + row("The guard", "weight 1", 1, k.guard);
-
-    $("chain").innerHTML = [
-      ["XRPL account", "xrplAccount", acct.address],
-      ["Personal account on Flare", "flareAddress", acct.personalAccount],
-      [`Umbrella #${esc(u.id)} on SummaMeter`, "flareAddress", u.meter],
-      ["The guard's Flare key", "flareAddress", k.guardFlare, gas(feed.fuel?.guardWei)],
-    ].map(([t, kind, a, extra]) => `<div><dt class="label">${t}</dt><dd title="${esc(a)}">${link(kind, a, feed, cut(a, 12, 8))}${extra ?? ""}</dd></div>`).join("");
-
-    const src = $("src");
-    src.className = `chip ${live ? (away ? "away" : "live") : "sample"}`;
-    src.querySelector("span").textContent = live ? `${away ? "Offline · last seen" : "Live ·"} ${ago(feed.generatedAt)}` : "Sample data";
-    $("source").textContent = live
-      ? away
-        ? `The demo machine was last seen ${ago(feed.generatedAt)}: this is its last state. Every hash links to a public explorer.`
-        : `Published by the demo machine ${ago(feed.generatedAt)}. Every hash links to a public explorer.`
-      : feed.note ?? "Sample data.";
-  }
-
-  async function load() {
-    const sample = JSON.parse($("sample").textContent);
-    try {
-      const ctl = new AbortController();
-      const t = setTimeout(() => ctl.abort(), 6000);
-      const r = await fetch(`${FEED_URL}?t=${Math.floor(Date.now() / 60000)}`, { signal: ctl.signal, cache: "no-store" });
-      clearTimeout(t);
-      if (!r.ok) throw new Error(String(r.status));
-      render(await r.json(), true);
-      setTimeout(load, 60000);
-    } catch {
-      render(sample, false);
-    }
-  }
-  load();
-
-  // A sparse sky: few stars, slow integer-frequency twinkle; still when motion is reduced.
-  (() => {
-    const c = $("sky"), g = c.getContext("2d");
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let stars = [], w = 0, h = 0;
-    const size = () => {
-      const r = devicePixelRatio || 1; w = innerWidth; h = innerHeight;
-      c.width = w * r; c.height = h * r; g.setTransform(r, 0, 0, r, 0, 0);
-      let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-      stars = Array.from({ length: Math.round((w * h) / 9000) }, () => ({ x: rnd() * w, y: rnd() * h, r: rnd() < 0.08 ? 1.3 : 0.7, a: 0.25 + rnd() * 0.55, f: 1 + Math.floor(rnd() * 3), p: rnd() * 6.283 }));
-    };
-    const draw = (t) => {
-      g.clearRect(0, 0, w, h);
-      for (const s of stars) {
-        const tw = still ? 1 : 0.65 + 0.35 * Math.sin((t / 4000) * s.f * 6.283 + s.p);
-        g.globalAlpha = s.a * tw; g.fillStyle = "#fff"; g.beginPath(); g.arc(s.x, s.y, s.r, 0, 6.283); g.fill();
-      }
-      if (!still) requestAnimationFrame(draw);
-    };
-    size(); addEventListener("resize", size); requestAnimationFrame(draw);
-  })();
+{{SCRIPT}}
 </script>
