@@ -8,3 +8,7 @@ keys/
 data/
 lancea.config.json
 keys-public.json
+
+# keys never belong in the repo
+*.key
+*.pem

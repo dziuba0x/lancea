@@ -3,6 +3,7 @@
  * nothing secret: the guard's journal keeps what a blob does and what the agent said, never the blob.
  * docs/index.html renders it; dashboard/sample-feed.json is one, from the rehearsal of 2026-09-27.
  */
+import { readQueue } from "../firelight.js";
 import type { PublicClient } from "viem";
 import { registryAbi as registryReadAbi } from "../guard.js";
 import { meterAbi, smartAccountsAbi } from "../flare.js";
@@ -19,7 +20,8 @@ export const TESTNET_EXPLORERS = {
 };
 
 export interface ChainSnapshot {
-  account: { xrpDrops: string; fxrp: string; shares: string };
+  /** `pendingFxrp`: asked back from the vault, not claimed yet (the wheel's Firelight queue). */
+  account: { xrpDrops: string; fxrp: string; shares: string; pendingFxrp?: string };
   umbrella: { budgetUsd6: string; spentUsd6: string; tripwire: string; strikes: string; tripped: boolean; validFrom?: string; validUntil?: string };
   /** The SignerList's weight-2 entry. */
   owner?: string;
@@ -50,7 +52,7 @@ export async function readChain(c: LanceaConfig, xrpl: XrplHttp, pc: PublicClien
   const balance = (token: `0x${string}`) =>
     pc.readContract({ address: token, abi: smartAccountsAbi, functionName: "balanceOf", args: [c.smartAccounts.personalAccount] }) as Promise<bigint>;
   const wei = (a?: string) => (a ? pc.getBalance({ address: a as `0x${string}` }).then(String) : Promise.resolve(undefined));
-  const [m, spent, tripwire, strikes, tripped, info, objects, fxrp, shares, guardWei, agentWei] = await Promise.all([
+  const [m, spent, tripwire, strikes, tripped, info, objects, fxrp, shares, guardWei, agentWei, queue] = await Promise.all([
     pc.readContract({ address: c.umbrella.registry, abi: registryReadAbi, functionName: "get", args: [id] }),
     meter("spentUsd6"), meter("tripwire"), meter("strikes"), meter("tripped"),
     xrpl.rpc("account_info", { account: c.account, ledger_index: "validated" }),
@@ -58,11 +60,13 @@ export async function readChain(c: LanceaConfig, xrpl: XrplHttp, pc: PublicClien
     balance(c.smartAccounts.fxrp),
     balance(c.smartAccounts.vault),
     wei(c.keys?.guardFlare), wei(c.agentEvm),
+    c.strategy.loopLots ? readQueue(pc, c.smartAccounts.vault, c.smartAccounts.personalAccount).catch(() => undefined) : Promise.resolve(undefined),
   ]);
   const spendable = BigInt(info.account_data.Balance) - LEDGER_RESERVE_DROPS;
   const entries: { SignerEntry: { Account: string; SignerWeight: number } }[] = objects.account_objects?.[0]?.SignerEntries ?? [];
   return {
-    account: { xrpDrops: (spendable > 0n ? spendable : 0n).toString(), fxrp: fxrp.toString(), shares: shares.toString() },
+    account: { xrpDrops: (spendable > 0n ? spendable : 0n).toString(), fxrp: fxrp.toString(), shares: shares.toString(),
+      ...(queue ? { pendingFxrp: queue.pending.toString() } : {}) },
     umbrella: { budgetUsd6: (m as { budget: bigint }).budget.toString(), spentUsd6: String(spent), tripwire: String(tripwire), strikes: String(strikes), tripped: Boolean(tripped),
       validFrom: String((m as { validFrom: bigint }).validFrom), validUntil: String((m as { validUntil: bigint }).validUntil) },
     owner: entries.find((e) => e.SignerEntry.SignerWeight >= 2)?.SignerEntry.Account,

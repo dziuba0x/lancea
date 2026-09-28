@@ -6,7 +6,7 @@
  *   RulesBrain   the autopilot's rules (src/autopilot.ts), with the reason spelled out
  *   (M2)         a hybrid: a model proposes where judgement helps, the rules check every proposal
  */
-import { plan, type State, type Step, type Strategy } from "./autopilot.js";
+import { plan, type State, type Step, type StepKind, type Strategy } from "./autopilot.js";
 
 export interface Proposal {
   step?: Step;
@@ -15,7 +15,8 @@ export interface Proposal {
 }
 
 export interface Brain {
-  decide(s: State, k: Strategy): Promise<Proposal>;
+  /** `skip`: step kinds resting after a timeout, not to be proposed now. */
+  decide(s: State, k: Strategy, skip?: ReadonlySet<StepKind>): Promise<Proposal>;
 }
 
 const X = (units: bigint) => (Number(units) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 6 });
@@ -28,8 +29,14 @@ export function explain(step: Step | undefined, s: State, k: Strategy): string {
       `${X(k.keepDrops)} XRP reserve (a mint needs at least ${X(k.minMintDrops)})`;
   }
   switch (step.kind) {
+    case "withdraw":
+      return k.withdrawShares
+        ? `the principal asked for liquidity: start withdrawing ${X(step.amount)} FXRP from vault ${step.vaultId}`
+        : `the wheel turns: start withdrawing ${X(step.amount)} FXRP from vault ${step.vaultId} (it unlocks when the next vault period ends)`;
+    case "claim":
+      return `the withdrawal booked for period ${step.period} has unlocked: claim ${X(step.amount)} FXRP back from vault ${step.vaultId}`;
     case "redeem":
-      return `the principal asked for liquidity: redeem ${X(step.shares)} shares from vault ${step.vaultId}`;
+      return `${X(s.fxrp)} FXRP is back in my personal account: redeem ${step.lots} lot${step.lots === 1n ? "" : "s"} (${X(step.drops)} FXRP) to XRP on the ledger`;
     case "deposit":
       return `${X(s.fxrp)} FXRP sits idle in my personal account: deposit ${X(step.amount)} into vault ${step.vaultId}`;
     case "mint":
@@ -39,8 +46,8 @@ export function explain(step: Step | undefined, s: State, k: Strategy): string {
 }
 
 export class RulesBrain implements Brain {
-  async decide(s: State, k: Strategy): Promise<Proposal> {
-    const step = plan(s, k);
+  async decide(s: State, k: Strategy, skip?: ReadonlySet<StepKind>): Promise<Proposal> {
+    const step = plan(s, k, skip);
     return { step, why: explain(step, s, k), by: "rules" };
   }
 }

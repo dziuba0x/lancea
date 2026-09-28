@@ -33,8 +33,14 @@ export interface LanceaConfig {
   keys?: { agentXrpl: string; guardXrpl: string; guardFlare: Address };
   /** Where src/service/feed-publisher.ts pushes the dashboard's feed. */
   feed?: { repo: string; branch?: string; publishSeconds?: number; heartbeatSeconds?: number };
-  strategy: { keepDrops: string; maxMintDrops: string; minMintDrops: string };
-  autopilot: { tickSeconds: number; executionTimeoutS: number; backoffS: number };
+  /** `loopLots`: turn the wheel (src/autopilot.ts), this many FAssets lots a vault period. */
+  strategy: { keepDrops: string; maxMintDrops: string; minMintDrops: string; loopLots?: number; loopMarginDrops?: string };
+  autopilot: { tickSeconds: number; executionTimeoutS: number; backoffS: number; cooldownS?: number };
+  /** Testnet only: top the account up from the XRPL faucet when everything it holds falls below `targetDrops`. */
+  keeper?: { targetDrops: string; refillDrops: string; everyS: number };
+  /** Every co-signature costs the guard gas on Flare: below `slowBelowC2flr` the agent asks at most once per
+   *  `slowEveryS`; below `restBelowC2flr` it asks nothing, so the guard keeps enough to strike. */
+  pacing?: { slowBelowC2flr: number; restBelowC2flr: number; slowEveryS: number };
   guard: { host: string; port: number; strikeOnPolicy: boolean; hourlyCapUsd6?: string; newPayeeCapUsd6?: string };
   dataDir: string;
 }
@@ -57,12 +63,15 @@ export function loadConfig(path = process.env.LANCEA_CONFIG ?? "lancea.config.js
   return c;
 }
 
-export const strategyOf = (c: LanceaConfig): Strategy => ({
-  vaultId: c.smartAccounts.vaultId,
-  keepDrops: BigInt(c.strategy.keepDrops),
-  maxMintDrops: BigInt(c.strategy.maxMintDrops),
-  minMintDrops: BigInt(c.strategy.minMintDrops),
-});
+/** `lotDrops`: AssetManager.lotSize(), read on start (the wheel redeems in whole lots). */
+export const strategyOf = (c: LanceaConfig, lotDrops = 10_000_000n): Strategy => {
+  const s = c.strategy;
+  const maxMint = BigInt(s.maxMintDrops);
+  const loop = s.loopLots && s.loopLots > 0 ? { lotDrops, lots: s.loopLots, marginDrops: BigInt(s.loopMarginDrops ?? "10000") } : undefined;
+  // with the wheel on, a mint must stay below a lot: FXRP of a lot or more is taken for a claim and redeemed
+  if (loop && maxMint >= lotDrops) throw new Error(`lancea config: strategy.maxMintDrops must stay below a lot (${lotDrops}) when loopLots is set`);
+  return { vaultId: c.smartAccounts.vaultId, keepDrops: BigInt(s.keepDrops), maxMintDrops: maxMint, minMintDrops: BigInt(s.minMintDrops), loop };
+};
 
 export const venueOf = (c: LanceaConfig): Venue => ({
   account: c.account,

@@ -8,19 +8,25 @@
  *               passes: a deposit the operator has not executed yet must not be proposed twice
  *   back-off    after a refusal, no proposal for `backoffS`
  *   paused      a tripped umbrella: nothing is proposed until the principal re-arms it
+ *   rest        a step of the wheel that timed out is not proposed again for `cooldownS`
+ *   pacing      every co-signature costs the guard gas on Flare: short of gas, the agent asks less
+ *               often, then not at all, so the guard always keeps enough to strike
+ *   keeper      testnet only: when everything the account holds falls below a target, the XRPL faucet
+ *               tops it up. An inflow needs no signature, so the guard is not asked
  *
  * Run:  LANCEA_CONFIG=… LANCEA_KEYS=… npx tsx src/service/autopilot-daemon.ts
  */
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Wallet, type Payment } from "xrpl";
-import { createPublicClient, createWalletClient, http, type Hex } from "viem";
+import { createPublicClient, createWalletClient, formatEther, http, parseAbi, parseEther, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { toPayment, type State, type Step, type Strategy, type Venue } from "../autopilot.js";
+import { toPayment, type State, type Step, type StepKind, type Strategy, type Venue } from "../autopilot.js";
+import { readQueue } from "../firelight.js";
 import { RulesBrain, type Brain } from "../brain.js";
 import { short, summaMeterAbi } from "../guard.js";
 import { XrplHttp } from "../xrpl-http.js";
-import { b32, coston2, meterAbi, registryAbi, smartAccountsAbi } from "../flare.js";
+import { b32, coston2, COSTON2, meterAbi, registryAbi, smartAccountsAbi } from "../flare.js";
 import { Journal, toJson } from "./journal.js";
 import { loadAgentKeys, loadConfig, loadToken, strategyOf, venueOf, type LanceaConfig } from "./config.js";
 
@@ -31,19 +37,28 @@ export interface Observer {
   state(): Promise<State>;
   /** undefined when the meter cannot say (a meter from before the tripwire, or unreachable). */
   tripped(): Promise<boolean | undefined>;
+  /** The guard's gas on Flare, in wei; undefined when unknown. */
+  fuel?(): Promise<bigint | undefined>;
 }
 export interface Verdict { signed: boolean; reason?: string; hash?: string; struck?: string; usd6?: string | bigint }
 export interface GuardClient { cosign(r: { blob: string; intent: Step; why: string; by: string }): Promise<Verdict> }
 
 /** Has the chain shown the step's effect? */
-export function settled(kind: Step["kind"], before: State, now: State, vaultId: number): boolean {
+export function settled(kind: StepKind, before: State, now: State, vaultId: number): boolean {
   const shares = (s: State) => s.shares[vaultId] ?? 0n;
   switch (kind) {
-    case "mint": return now.fxrp > before.fxrp;
+    case "mint": case "claim": return now.fxrp > before.fxrp;
     case "deposit": return now.fxrp < before.fxrp || shares(now) > shares(before);
-    case "redeem": return shares(now) < shares(before);
+    case "withdraw": return shares(now) < shares(before); // Firelight burns the shares when it books the withdrawal
+    case "redeem": return now.fxrp < before.fxrp; // FAssets burns the FXRP; the XRP follows from its agents
   }
 }
+
+/** The wheel's own steps: one that timed out rests instead of being proposed every half hour. */
+const RESTING: ReadonlySet<StepKind> = new Set(["withdraw", "claim", "redeem"]);
+
+export interface Pacing { slowBelowWei: bigint; restBelowWei: bigint; slowEveryS: number }
+export interface Keeper { targetDrops: bigint; refillDrops: bigint; everyS: number; faucet: (drops: bigint) => Promise<string> }
 
 export interface AutopilotOptions {
   brain: Brain;
@@ -59,6 +74,10 @@ export interface AutopilotOptions {
   journal: Journal;
   executionTimeoutS: number;
   backoffS: number;
+  /** How long a step of the wheel rests after a timeout (default 6 h). */
+  cooldownS?: number;
+  pacing?: Pacing;
+  keeper?: Keeper;
   now?: () => number;
 }
 
@@ -66,6 +85,10 @@ export class Autopilot {
   private inflight?: { step: Step; since: number; before: State };
   private backoffUntil = 0;
   private last = ""; // the last repeating note written (idle, paused), so a quiet day is one line, not 288
+  private readonly resting = new Map<StepKind, number>(); // kind → until (s)
+  private lastAsk = -Infinity;
+  private lastRefill = -Infinity;
+  private pace: "full" | "slow" | "rest" = "full";
 
   constructor(private readonly o: AutopilotOptions) {}
 
@@ -97,9 +120,14 @@ export class Autopilot {
       } else {
         journal.append("timeout", { step: f.step, afterS: Math.round(t - f.since), state: s });
         this.inflight = undefined;
+        if (RESTING.has(f.step.kind)) this.resting.set(f.step.kind, t + (this.o.cooldownS ?? 21_600));
       }
     }
-    const p = await this.o.brain.decide(s, strategy);
+    await this.keep(s, t);
+    const held = await this.paced(t);
+    if (held) return held;
+    const skip = new Set([...this.resting].filter(([, until]) => until > t).map(([kind]) => kind));
+    const p = await this.o.brain.decide(s, strategy, skip);
     if (!p.step) {
       this.once("idle", { state: s, why: p.why, by: p.by }, `idle ${toJson(s)}`);
       return `idle: ${p.why}`;
@@ -119,6 +147,7 @@ export class Autopilot {
       }
     }
     this.last = "";
+    this.lastAsk = t;
     const blob = await this.o.sign(pay);
     journal.append("proposal", { state: s, step: p.step, why: p.why, by: p.by });
     let v: Verdict;
@@ -135,22 +164,62 @@ export class Autopilot {
     this.backoffUntil = t + this.o.backoffS;
     return `refused ${p.step.kind}: ${v.reason}`;
   }
+
+  /** The keeper: an inflow from the testnet faucet when the account holds less than its target, at most every `everyS`. */
+  private async keep(s: State, t: number): Promise<void> {
+    const k = this.o.keeper;
+    if (!k || t - this.lastRefill < k.everyS) return;
+    const heldDrops = s.xrpDrops + s.fxrp + (s.shares[this.o.strategy.vaultId] ?? 0n) + (s.vault?.pending ?? 0n);
+    if (heldDrops >= k.targetDrops) return;
+    this.lastRefill = t;
+    try {
+      const tx = await k.faucet(k.refillDrops);
+      this.o.journal.append("topped-up", { drops: k.refillDrops, tx, heldDrops });
+    } catch (e) {
+      this.lastRefill = t - k.everyS + 1_800; // the faucet refused: again in half an hour
+      this.o.journal.append("error", { error: `faucet: ${short(e)}` });
+    }
+  }
+
+  /** Pacing by the guard's gas. A line for the log when the agent holds back this tick, else undefined. */
+  private async paced(t: number): Promise<string | undefined> {
+    const p = this.o.pacing;
+    if (!p || !this.o.observer.fuel) return undefined;
+    const wei = await this.o.observer.fuel().catch(() => undefined);
+    if (wei === undefined) return undefined;
+    const mode = wei < p.restBelowWei ? "rest" : wei < p.slowBelowWei ? "slow" : "full";
+    if (mode !== this.pace) {
+      this.pace = mode;
+      this.o.journal.append("pacing", { mode, fuelWei: wei, everyS: p.slowEveryS });
+    }
+    const gas = Number(formatEther(wei)).toFixed(2);
+    if (mode === "rest") return `resting: the guard has ${gas} C2FLR, kept for a strike`;
+    if (mode === "slow" && t - this.lastAsk < p.slowEveryS) return `slowing: the guard has ${gas} C2FLR, one step every ${Math.round(p.slowEveryS / 60)} min`;
+    return undefined;
+  }
 }
 
 /** The account as the chains show it: spendable XRP on the ledger, FXRP and vault shares on Flare. */
 export class ChainObserver implements Observer {
-  constructor(private readonly c: LanceaConfig, private readonly xrpl: XrplHttp, private readonly pc: ReturnType<typeof createPublicClient>) {}
+  /** `queue`: also read the vault's withdrawal queue (the wheel needs it). */
+  constructor(private readonly c: LanceaConfig, private readonly xrpl: XrplHttp, private readonly pc: ReturnType<typeof createPublicClient>, private readonly queue = false) {}
 
   async state(): Promise<State> {
     const sa = this.c.smartAccounts;
     const read = (address: Hex) => this.pc.readContract({ address, abi: smartAccountsAbi, functionName: "balanceOf", args: [sa.personalAccount] }) as Promise<bigint>;
-    const [info, fxrp, shares] = await Promise.all([
+    const [info, fxrp, shares, vault] = await Promise.all([
       this.xrpl.rpc("account_info", { account: this.c.account, ledger_index: "validated" }),
       read(sa.fxrp),
       read(sa.vault),
+      this.queue ? readQueue(this.pc as any, sa.vault, sa.personalAccount) : Promise.resolve(undefined),
     ]);
     const spendable = BigInt(info.account_data.Balance) - LEDGER_RESERVE_DROPS;
-    return { xrpDrops: spendable > 0n ? spendable : 0n, fxrp, shares: { [sa.vaultId]: shares } };
+    return { xrpDrops: spendable > 0n ? spendable : 0n, fxrp, shares: { [sa.vaultId]: shares }, ...(vault ? { vault } : {}) };
+  }
+
+  fuel(): Promise<bigint | undefined> {
+    const guard = this.c.keys?.guardFlare;
+    return guard ? this.pc.getBalance({ address: guard }).catch(() => undefined) : Promise.resolve(undefined);
   }
 
   tripped(): Promise<boolean | undefined> {
@@ -170,6 +239,17 @@ export const httpGuard = (url: string, token: string): GuardClient => ({
     return res.ok ? body : { signed: false, reason: `guard answered ${res.status}: ${body.error ?? "?"}` };
   },
 });
+
+/** The XRPL testnet faucet sends `drops` to an existing account; returns the funding transaction's hash. */
+export async function testnetFaucet(url: string, destination: string, drops: bigint): Promise<string> {
+  const res = await fetch(url, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ destination, xrpAmount: String(drops / 1_000_000n) }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { transactionHash?: string; error?: string };
+  if (!res.ok || !body.transactionHash) throw new Error(`the faucet answered ${res.status}${body.error ? `: ${body.error}` : ""}`);
+  return body.transactionHash;
+}
 
 /** The umbrella names its agent; the agent's consent is on-chain before anything is bonded against it. */
 async function acknowledge(c: LanceaConfig, evmKey: Hex, journal: Journal): Promise<void> {
@@ -196,9 +276,17 @@ async function main() {
   const xrpl = new XrplHttp(c.network.xrplRpc);
   const pc = createPublicClient({ chain: coston2(c.network.rpcUrl), transport: http(c.network.rpcUrl) });
   const agent = Wallet.fromSeed(keys.xrplSeed);
+  const lot = await pc.readContract({ address: COSTON2.assetManagerFxrp, abi: parseAbi(["function lotSize() view returns (uint256)"]), functionName: "lotSize" })
+    .then((l) => l as bigint, () => 10_000_000n);
+  const strategy = strategyOf(c, lot);
+  const pace = c.pacing ?? { slowBelowC2flr: 25, restBelowC2flr: 5, slowEveryS: 900 };
+  const keeper = c.keeper && c.network.xrplSource === "testXRP" ? {
+    targetDrops: BigInt(c.keeper.targetDrops), refillDrops: BigInt(c.keeper.refillDrops), everyS: c.keeper.everyS,
+    faucet: (drops: bigint) => testnetFaucet(xrpl.faucet, c.account, drops),
+  } : undefined;
   const pilot = new Autopilot({
-    brain: new RulesBrain(), strategy: strategyOf(c), venue: venueOf(c),
-    observer: new ChainObserver(c, xrpl, pc), guard: httpGuard(`http://${c.guard.host}:${c.guard.port}`, token),
+    brain: new RulesBrain(), strategy, venue: venueOf(c),
+    observer: new ChainObserver(c, xrpl, pc, !!strategy.loop), guard: httpGuard(`http://${c.guard.host}:${c.guard.port}`, token),
     sign: async (tx) => agent.sign(await xrpl.autofill<Payment>(tx, 2), true).tx_blob,
     budget: async (tx) => {
       const drops = BigInt(tx.Amount as string) + 1_000n; // + more than a multisig fee: the guard counts the fee as outflow too
@@ -209,10 +297,14 @@ async function main() {
       const [stop, usd6] = result as readonly [boolean, bigint];
       return { stop, usd6 };
     },
-    journal, executionTimeoutS: c.autopilot.executionTimeoutS, backoffS: c.autopilot.backoffS,
+    journal, executionTimeoutS: c.autopilot.executionTimeoutS, backoffS: c.autopilot.backoffS, cooldownS: c.autopilot.cooldownS,
+    pacing: { slowBelowWei: parseEther(String(pace.slowBelowC2flr)), restBelowWei: parseEther(String(pace.restBelowC2flr)), slowEveryS: pace.slowEveryS },
+    keeper,
   });
-  journal.append("start", { agent: agent.address, account: c.account, umbrella: c.umbrella.id, brain: "rules", tickSeconds: c.autopilot.tickSeconds });
-  console.log(`lancea autopilot ${agent.address} | account ${c.account} | a tick every ${c.autopilot.tickSeconds} s`);
+  journal.append("start", { agent: agent.address, account: c.account, umbrella: c.umbrella.id, brain: "rules", tickSeconds: c.autopilot.tickSeconds,
+    wheel: strategy.loop ? { lots: strategy.loop.lots, lotDrops: strategy.loop.lotDrops } : undefined, keeper: keeper ? { targetDrops: keeper.targetDrops, refillDrops: keeper.refillDrops } : undefined });
+  console.log(`lancea autopilot ${agent.address} | account ${c.account} | a tick every ${c.autopilot.tickSeconds} s` +
+    (strategy.loop ? ` | the wheel: ${strategy.loop.lots} lots a period` : "") + (keeper ? ` | keeper: to ${Number(keeper.targetDrops) / 1e6} XRP` : ""));
 
   let stopping = false;
   let wake: () => void = () => {};

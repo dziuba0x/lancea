@@ -2146,8 +2146,13 @@ void main() {
       return own ? `Mints ${amount} into FXRP for your own personal account <code>${cut(a.recipient, 6, 4)}</code>`
         : `Mints ${amount} into FXRP for <code>${cut(a.recipient, 6, 4)}</code>: <em>not your personal account</em>`;
     }
-    if (a.kind === "vault") return `${a.action === "deposit" ? "Deposits" : a.action === "redeem" ? "Redeems" : "Claims"} ${xrp(a.value)} ${a.action === "deposit" ? "FXRP into" : "shares from"} ${esc(cap(a.vault))} vault ${a.vaultId}, for a fee of ${amount}`;
-    if (a.kind === "fxrp-redeem") return `Redeems ${xrp(a.value)} FXRP back to XRP, for a fee of ${amount}`;
+    if (a.kind === "vault") {
+      const v = `${esc(cap(a.vault))} vault ${a.vaultId}`;
+      if (a.action === "deposit") return `Deposits ${xrp(a.value)} FXRP into ${v}, for a fee of ${amount}`;
+      if (a.action === "redeem") return `Starts withdrawing ${xrp(a.value)} FXRP from ${v}, for a fee of ${amount}`;
+      return `Claims the withdrawal booked for period ${esc(a.value)} from ${v}, for a fee of ${amount}`;
+    }
+    if (a.kind === "fxrp-redeem") return `Redeems ${esc(a.value)} lot${a.value === "1" ? "" : "s"} of FXRP back to XRP on the ledger, for a fee of ${amount}`;
     if (a.kind === "user-op") return `Runs a custom batch of calls from your personal account: <em>arbitrary code</em>`;
     if (a.kind === "refused" || a.kind === "undecodable") return `An instruction the guard cannot read: <em>${esc(a.reason)}</em>`;
     return `Pays ${amount} to <code>${cut(tx.destination, 6, 4)}</code>`;
@@ -2156,8 +2161,8 @@ void main() {
   function doesShort(tx) {
     const a = tx.action ?? {};
     if (a.kind === "mint-to") return `Mints ${num(u6(tx.amountDrops), 2)} XRP into FXRP`;
-    if (a.kind === "vault") return `${a.action === "deposit" ? "Deposits" : a.action === "redeem" ? "Redeems" : "Claims"} ${num(u6(a.value), 2)} ${a.action === "deposit" ? "FXRP" : "shares"}`;
-    if (a.kind === "fxrp-redeem") return `Redeems ${num(u6(a.value), 2)} FXRP`;
+    if (a.kind === "vault") return a.action === "deposit" ? `Deposits ${num(u6(a.value), 2)} FXRP` : a.action === "redeem" ? `Withdraws ${num(u6(a.value), 2)} FXRP` : `Claims period ${esc(a.value)}`;
+    if (a.kind === "fxrp-redeem") return `Redeems ${esc(a.value)} lot${a.value === "1" ? "" : "s"} to XRP`;
     return `Pays ${num(u6(tx.amountDrops), 2)} XRP`;
   }
   const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
@@ -2173,13 +2178,16 @@ void main() {
         rail: act.kind === "mint-to" ? "mint" : act.kind === "vault" ? "vault" : "other",
       };
     });
-    const notes = (feed.autopilot ?? []).filter((e) => ["holding", "paused", "settled", "timeout", "acknowledged", "start", "stop", "error", "idle"].includes(e.kind)).slice().reverse();
+    const notes = (feed.autopilot ?? []).filter((e) => ["holding", "paused", "settled", "timeout", "acknowledged", "start", "stop", "error", "idle", "topped-up", "pacing"].includes(e.kind)).slice().reverse();
     const proposals = (feed.autopilot ?? []).filter((e) => e.kind === "proposal" && e.state).slice().reverse();
     const start = (feed.autopilot ?? []).find((e) => e.kind === "start");
     const lastAuto = (feed.autopilot ?? [])[0];
     const mints = decisions.filter((d) => d.kind === 0 && d.rail === "mint" && d.usd6 && Number(d.tx.amountDrops) > 0);
     const price = mints.map((d) => ({ at: d.at, p: u6(d.usd6) / u6(d.tx.amountDrops) }));
-    const series = decisions.filter((d) => d.kind === 0 && d.tally != null).map((d) => ({ at: d.at, v: u6(d.tally), d }));
+    // the tally belongs to one umbrella: chart it from the guard's first start under the current one
+    let since = null;
+    for (const e of (feed.guard ?? []).filter((x) => x.kind === "start").slice().reverse()) since = String(e.umbrella) === String(u.id) ? since ?? e.at : null;
+    const series = decisions.filter((d) => d.kind === 0 && d.tally != null && (!since || d.at >= since)).map((d) => ({ at: d.at, v: u6(d.tally), d }));
     const spent = u6(u.spentUsd6), budget = u6(u.budgetUsd6);
     const from = u.validFrom ? Number(u.validFrom) * 1000 : series[0] ? Date.parse(series[0].at) : null;
     const until = u.validUntil ? Number(u.validUntil) * 1000 : null;
@@ -2197,7 +2205,7 @@ void main() {
   function stateOf() {
     const m = st.m, u = m.u;
     const lastStrike = m.decisions.slice().reverse().find((d) => d.kind === 2);
-    const last = st.feed.autopilot?.find((e) => ["holding", "paused", "idle", "verdict", "settled", "timeout", "start", "stop"].includes(e.kind));
+    const last = st.feed.autopilot?.find((e) => ["holding", "paused", "idle", "verdict", "settled", "timeout", "start", "stop", "pacing"].includes(e.kind));
     if (u.tripped) {
       const why = lastStrike?.why ? `<q>${esc(lastStrike.why)}</q>` : "";
       return { tone: "coral", pill: "Paused · tripped", head: "The leash held.",
@@ -2207,8 +2215,9 @@ void main() {
     }
     if (st.away) return { tone: "grey", pill: "Offline", head: "Offline, and still on its leash.", sub: "The demo machine is off right now, so the agent proposes nothing until it is back. What you see is its last published state." };
     if (last?.kind === "holding") return { tone: "grey", pill: "Holding", head: "At the edge of its budget.", sub: "The next step would cross the umbrella's budget, so the agent keeps it to itself instead of asking." };
+    if (last?.kind === "pacing" && last.mode === "rest") return { tone: "grey", pill: "Resting", head: "Saving the guard's gas.", sub: "Every co-signature costs the guard gas on Flare. It is down to the reserve it keeps for a strike, so the agent proposes nothing until the guard is topped up." };
     if (last?.kind === "stop") return { tone: "grey", pill: "Stopped", head: "The agent is not running.", sub: "Its service was stopped. The account and the umbrella stay as they are." };
-    return { tone: "star", pill: "Working", head: "Working inside its leash.", sub: "An AI agent puts idle XRP to work in a Flare vault. It cannot move a coin alone: every step it proposes is priced against your budget and checked against your rules before the guard adds the second signature." };
+    return { tone: "star", pill: "Working", head: "Working inside its leash.", sub: "An AI agent runs XRP through a Flare vault and back, around the clock: mint, deposit, withdraw, claim, redeem. It cannot move a coin alone: every step it proposes is priced against your budget and checked against your rules before the guard adds the second signature." };
   }
 
   // ─── Rendering: shared pieces ─────────────────────────────────────────────
@@ -2233,7 +2242,11 @@ void main() {
       timeout: [`<b>Not executed.</b> Flare did not show the ${esc(e.step?.kind)} within ${e.afterS} s, so the agent moved on.`, ""],
       start: ["<b>Started.</b> The service came up and looks every " + Math.round((e.tickSeconds ?? 300) / 60) + " min.", ""],
       stop: ["<b>Stopped.</b> The service was stopped.", ""],
-      idle: ["<b>Nothing to do.</b> No idle XRP above the reserve.", ""],
+      idle: ["<b>Nothing to do right now.</b> No XRP above the reserve, and nothing to claim yet.", ""],
+      "topped-up": [`<b>Topped up.</b> The XRPL testnet faucet sent ${xrp(e.drops)} XRP to the account.`, ""],
+      pacing: [e.mode === "rest" ? `<b>Resting.</b> The guard is down to ${num(c2flr(e.fuelWei), 2)} C2FLR, kept for a strike: nothing is proposed until it is topped up.`
+        : e.mode === "slow" ? `<b>Slowing down.</b> The guard has ${num(c2flr(e.fuelWei), 2)} C2FLR of gas left, so the agent asks at most every ${Math.round((e.everyS ?? 900) / 60)} min.`
+        : `<b>Full speed.</b> The guard's gas is topped up (${num(c2flr(e.fuelWei), 2)} C2FLR).`, e.mode === "rest" ? "coral" : ""],
       error: [`<b>Error.</b> ${esc(e.error)}`, "coral"],
     }[e.kind] ?? [esc(e.kind), ""];
     return `<li class="note ${t[1]}"><div class="when" style="font:400 12px/1.35 var(--mono);color:var(--ink-3)">${clock(e.at)}</div><div>${t[0]}</div></li>`;
@@ -2268,9 +2281,10 @@ void main() {
     const xrpNow = u6(m.a.xrpDrops), fx = u6(m.a.fxrp), sh = u6(m.a.shares);
     stat("#stat-xrp", "XRP on the ledger", `${num(xrpNow, 2)}`, "spendable, above the 2 XRP reserve", spark([...hist((x) => u6(x.xrpDrops)), xrpNow], "#f5f5f7"));
     stat("#stat-fxrp", "FXRP on Flare", `${num(fx, 2)}`, "in your personal account", spark([...hist((x) => u6(x.fxrp)), fx], "#f5f5f7"));
-    stat("#stat-shares", `${cap(m.a.vaultName ?? "Firelight")} shares`, `${num(sh, 2)}`, "the vault's receipt for deposits", spark([...hist((x) => u6(x.shares?.["1"] ?? x.shares)), sh], "#f5f5f7"));
-    const low = m.gasGuard != null && m.gasGuard < 0.5;
-    stat("#stat-gas", "The guard's gas", m.gasGuard != null ? `${num(m.gasGuard, 2)}` : "?", m.gasGuard != null ? (low ? "C2FLR · low: top it up from the Coston2 faucet" : `C2FLR · about ${Math.floor(m.gasGuard / 0.13)} decisions`) : "C2FLR · not in this feed", "");
+    const out = u6(m.a.pendingFxrp ?? 0);
+    stat("#stat-shares", `${cap(m.a.vaultName ?? "Firelight")} shares`, `${num(sh, 2)}`, out > 0 ? `+ ${num(out, 2)} FXRP on its way out of the vault` : "the vault's receipt for deposits", spark([...hist((x) => u6(x.shares?.["1"] ?? x.shares)), sh], "#f5f5f7"));
+    const low = m.gasGuard != null && m.gasGuard < 25;
+    stat("#stat-gas", "The guard's gas", m.gasGuard != null ? `${num(m.gasGuard, 2)}` : "?", m.gasGuard != null ? (low ? `C2FLR · low: about ${Math.floor(m.gasGuard / 0.12)} decisions, top it up` : `C2FLR · about ${Math.floor(m.gasGuard / 0.12)} decisions`) : "C2FLR · not in this feed", "");
     $("#stat-gas").classList.toggle("low", low);
     const list = ds.slice(-4).reverse();
     $("#now-list").innerHTML = list.length ? list.map((d) => decisionRow(d, false)).join("") : `<li class="empty">No decisions yet. The agent looks every ${Math.round(m.tick / 60)} minutes.</li>`;

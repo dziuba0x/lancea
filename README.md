@@ -97,7 +97,18 @@ The decoder and policy have 6 offline tests, built from the vectors in Flare's d
 
 An agent that puts idle XRP to work, one step at a time, and never holds the keys alone. It only **proposes** XRPL payments. The guard reads each one, prices it against the umbrella's dollar budget, and co-signs or refuses. The guard needs no autopilot-specific code.
 
-The order of steps: first any withdrawal the principal asked for (redeem vault shares), then deposit whole FXRP into the target vault, then mint idle XRP above the reserve. Each mint is capped per step.
+The order of steps: first any withdrawal the principal asked for, then deposit whole FXRP into the target vault, then mint idle XRP above the reserve. Each mint is capped per step.
+
+**The wheel** (`strategy.loopLots`). With it on, the same coins go round, so the account stays busy on a small float:
+
+1. Once each vault period, the agent starts withdrawing `loopLots` FAssets lots' worth of FXRP from Firelight (`0x12`). Firelight burns the shares and books the FXRP under the next period.
+2. When that period has ended, the agent claims it back into the personal account (`0x13`, value = the period).
+3. A lot or more of FXRP is redeemed to XRP on the ledger (`0x02`, value = lots). FAssets agents pay the XRP out.
+4. That XRP is minted again and deposited again.
+
+Mints stay below a lot, so FXRP from a mint goes to the vault and FXRP from a claim goes home. On Coston2 a period is 4 hours and a lot is 10 FXRP.
+
+Every step is still an XRPL payment the guard prices and co-signs. A step of the wheel that Flare does not execute in time rests for `autopilot.cooldownS` (default 6 h) instead of being proposed again.
 
 `scripts/leash-live.ts` runs it live with the dollar budget and the tripwire:
 1. It opens a $40 umbrella in DELICTI's VaultSumma v0.16, on the deployed `SummaMeter` v1.2 (override with `SUMMA_METER`), with tripwire 1.
@@ -192,8 +203,20 @@ Two processes, two sets of keys, one machine (`src/service/`):
   - A step its own budget would refuse is held, not proposed. An agent that keeps proposing what the budget refuses would, ten minutes on, be struck for an attempt and trip its own umbrella.
   - A refusal backs off.
   - A tripped umbrella pauses it until the principal re-arms it.
+  - **Pacing.** Every co-signature costs the guard gas on Flare, about 0.12 C2FLR for the reservation (`note`). Below 25 C2FLR the agent asks at most once every 15 minutes. Below 5 C2FLR it asks nothing, so the guard always keeps enough to strike. The thresholds are in `pacing`.
+  - **Keeper** (testnet only). When everything the account holds falls below `keeper.targetDrops` (XRP, FXRP, shares, withdrawals on their way), the XRPL testnet faucet tops it up with `keeper.refillDrops`, at most once every `keeper.everyS`. An inflow needs no signature, so the guard is not asked.
 - **Journals.** Both processes append to journals (`guard.jsonl`, `autopilot.jsonl`). The guard's entry puts what the agent *said* it was doing next to what the transaction *does*, and the verdict.
 - **`lancea-feed`** holds no signing key. Every minute it builds `feed.json` from the journals and the chains' state, and pushes it to a GitHub repo ([`dziuba0x/lancea-feed`](https://github.com/dziuba0x/lancea-feed)). Its deploy key can write to that one repo only. The machine opens no port.
+
+**The live demo** runs on an Oracle Cloud Always Free ARM machine (Ubuntu 24.04) as user services, and publishes to the dashboard every minute.
+
+**Watching it.** A GitHub Actions workflow (`.github/workflows/watch.yml`, `scripts/watch.mjs`) reads the public feed every half hour and fails, so GitHub emails the owner, when any of these holds:
+- the feed is older than 30 minutes;
+- the guard has less than 10 C2FLR;
+- the umbrella tripped;
+- 90% of the budget is spent, or fewer than 5 days of its window are left.
+
+**A bigger leash.** An umbrella's budget is fixed when it is committed. `scripts/umbrella.ts` has the principal open a new umbrella for the running account: same account, agent and guard; new budget and window. It then updates the config in place.
 
 Setup, on a fresh Debian 12 machine (a Google Cloud e2-micro is enough) and on the principal's own machine:
 

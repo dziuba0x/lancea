@@ -322,10 +322,10 @@ try {
     await propose("4. mint 5 XRP to 0x…bEEF", toPayment({ kind: "mint", drops: 5_000_000n }, { ...venue, personalAccount: "0x000000000000000000000000000000000000bEEF" }), "refused");
   });
   // The guard does not read balances, so without shares (a fork) the same proposal is judged the same way.
-  let redeem: ReturnType<typeof plan> = { kind: "redeem", shares: 1_000_000n, vaultId };
+  let redeem: ReturnType<typeof plan> = { kind: "withdraw", amount: 1_000_000n, vaultId };
   await stage("5. autopilot: redeem 1 share", async () => {
     const planned = plan(await state(), { ...strategy, withdrawShares: 1_000_000n });
-    if (planned?.kind === "redeem") redeem = planned;
+    if (planned?.kind === "withdraw") redeem = planned;
     await propose("5. redeem 1 share (tripped)", toPayment(redeem!, venue), "refused");
   });
   await stage("6. the principal re-arms; the same redeem", async () => {

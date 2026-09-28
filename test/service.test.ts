@@ -119,21 +119,27 @@ test("settled: the chain shows the step", () => {
   assert.equal(settled("mint", before, { ...before, fxrp: 1n }, 1), true);
   assert.equal(settled("mint", before, before, 1), false);
   assert.equal(settled("deposit", { ...before, fxrp: 19n * XRP }, { ...before, fxrp: 0n }, 1), true);
-  assert.equal(settled("redeem", { ...before, shares: { 1: 5n } }, { ...before, shares: { 1: 4n } }, 1), true);
+  assert.equal(settled("withdraw", { ...before, shares: { 1: 5n } }, { ...before, shares: { 1: 4n } }, 1), true);
+  assert.equal(settled("claim", before, { ...before, fxrp: 50n * XRP }, 1), true);
+  assert.equal(settled("redeem", { ...before, fxrp: 50n * XRP }, { ...before, fxrp: 10_000n }, 1), true);
+  assert.equal(settled("redeem", { ...before, fxrp: 50n * XRP }, { ...before, fxrp: 50n * XRP }, 1), false);
 });
 
-function pilot(states: State[], verdicts: (Verdict | Error)[], trippedAt: boolean[] = [], budget?: () => Promise<{ stop: boolean; usd6: bigint }>) {
+function pilot(states: State[], verdicts: (Verdict | Error)[], trippedAt: boolean[] = [], budget?: () => Promise<{ stop: boolean; usd6: bigint }>,
+  extra: Partial<ConstructorParameters<typeof Autopilot>[0]> & { fuel?: () => bigint | undefined } = {}) {
   let t = 0, i = 0, asked = 0, looked = 0;
   const journal = new Journal(join(tmp(), "autopilot.jsonl"));
+  const { fuel, ...opts } = extra;
   const observer: Observer = {
     state: async () => states[Math.min(i++, states.length - 1)],
     tripped: async () => trippedAt[looked++] ?? false,
+    ...(fuel ? { fuel: async () => fuel() } : {}),
   };
   const p = new Autopilot({
     brain: new RulesBrain(), strategy, venue, observer, journal, executionTimeoutS: 1800, backoffS: 600, now: () => t * 1000,
     guard: { cosign: async () => { const v = verdicts[asked++]; if (v instanceof Error) throw v; return v; } },
     sign: async (tx) => agentBlob(tx),
-    budget,
+    budget, ...opts,
   });
   return { p, journal, advance: (s: number) => { t += s; }, asked: () => asked };
 }
@@ -195,6 +201,64 @@ test("the autopilot: a tripped umbrella pauses it, noted once; a quiet account i
   assert.match(await p.tick(), /idle/);
   assert.equal(asked(), 0);
   assert.deepEqual(journal.tail(10).map((e) => e.kind).reverse(), ["paused", "idle"]);
+});
+
+test("the wheel: a step that timed out rests for the cooldown, and the rest of the wheel goes on", async () => {
+  const lot = 10n * XRP;
+  const wheel: Strategy = { ...strategy, keepDrops: 20n * XRP, maxMintDrops: 5n * XRP, loop: { lotDrops: lot, lots: 5, marginDrops: 10_000n } };
+  const home: State = { xrpDrops: 20n * XRP, fxrp: 50_010_000n, shares: { 1: 0n }, vault: { period: 9n, requested: 50n * XRP, claimable: [], pending: 50n * XRP } };
+  const { p, journal, advance } = pilot([home], [{ signed: true, hash: "R" }, { signed: true, hash: "D" }], [], undefined, { strategy: wheel, cooldownS: 21_600 });
+  assert.match(await p.tick(), /co-signed redeem: R/);
+  advance(1801); // FAssets never burned the FXRP: the redeem is let go, and rests
+  assert.match(await p.tick(), /co-signed deposit: D/);
+  assert.deepEqual(journal.tail(10).map((e) => e.kind).reverse(), ["proposal", "verdict", "timeout", "proposal", "verdict"]);
+});
+
+test("pacing: short of gas the agent asks less often, then rests, and says so once per change", async () => {
+  const idle: State = { xrpDrops: 98n * XRP, fxrp: 0n, shares: { 1: 0n } };
+  let gas = 100n * 10n ** 18n;
+  const { p, journal, advance, asked } = pilot([idle], Array(9).fill({ signed: true, hash: "M" }), [], undefined, {
+    fuel: () => gas, executionTimeoutS: 1, pacing: { slowBelowWei: 25n * 10n ** 18n, restBelowWei: 5n * 10n ** 18n, slowEveryS: 900 },
+  });
+  assert.match(await p.tick(), /co-signed mint/);
+  gas = 20n * 10n ** 18n;
+  advance(300);
+  assert.match(await p.tick(), /slowing: the guard has 20.00 C2FLR, one step every 15 min/);
+  advance(300);
+  assert.match(await p.tick(), /slowing/);
+  advance(300);
+  assert.match(await p.tick(), /co-signed mint/); // 900 s since the last ask
+  gas = 4n * 10n ** 18n;
+  advance(300);
+  assert.match(await p.tick(), /resting: the guard has 4.00 C2FLR, kept for a strike/);
+  assert.equal(asked(), 2);
+  gas = 100n * 10n ** 18n;
+  advance(300);
+  assert.match(await p.tick(), /co-signed mint/);
+  const modes = journal.tail(20).filter((e) => e.kind === "pacing").map((e) => e.mode).reverse();
+  assert.deepEqual(modes, ["slow", "rest", "full"]);
+});
+
+test("the keeper: below the target the testnet faucet tops the account up, at most once per period; a refusal retries later", async () => {
+  const low: State = { xrpDrops: 30n * XRP, fxrp: 0n, shares: { 1: 100n * XRP } };
+  const asks: bigint[] = [];
+  let fail = true;
+  const keeper = { targetDrops: 220n * XRP, refillDrops: 100n * XRP, everyS: 21_600,
+    faucet: async (drops: bigint) => { asks.push(drops); if (fail) throw new Error("the faucet answered 503"); return "F00D"; } };
+  const { p, journal, advance } = pilot([low], [], [], undefined, { keeper, strategy: { ...strategy, keepDrops: 30n * XRP } });
+  await p.tick();
+  advance(1_000);
+  await p.tick(); // the retry waits half an hour
+  assert.equal(asks.length, 1);
+  fail = false;
+  advance(900);
+  await p.tick();
+  advance(300);
+  await p.tick(); // topped up: not again for six hours
+  assert.deepEqual(asks, [100n * XRP, 100n * XRP]);
+  const notes = journal.tail(20).filter((e) => e.kind === "topped-up" || e.kind === "error").reverse();
+  assert.deepEqual(notes.map((e) => e.kind), ["error", "topped-up"]);
+  assert.equal(notes[1].tx, "F00D");
 });
 
 test("a key file others can read stops the service", () => {
