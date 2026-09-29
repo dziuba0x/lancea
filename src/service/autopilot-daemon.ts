@@ -23,6 +23,7 @@ import { createPublicClient, createWalletClient, formatEther, http, parseAbi, pa
 import { privateKeyToAccount } from "viem/accounts";
 import { toPayment, type State, type Step, type StepKind, type Strategy, type Venue } from "../autopilot.js";
 import { readQueue } from "../firelight.js";
+import { dayStart, overDailyCap } from "../policy.js";
 import { RulesBrain, type Brain } from "../brain.js";
 import { short, summaMeterAbi } from "../guard.js";
 import { XrplHttp } from "../xrpl-http.js";
@@ -70,7 +71,7 @@ export interface AutopilotOptions {
   sign: (tx: Payment) => Promise<string>;
   /** Would this payment cross the umbrella's budget? Asked before the guard is: an agent that proposes what
    *  its budget refuses would, ten minutes on, be struck for an attempt and trip its own umbrella. */
-  budget?: (tx: Payment) => Promise<{ stop: boolean; usd6: bigint }>;
+  budget?: (tx: Payment) => Promise<{ stop: boolean; usd6: bigint; reason?: string }>;
   journal: Journal;
   executionTimeoutS: number;
   backoffS: number;
@@ -134,7 +135,7 @@ export class Autopilot {
     }
     const pay = toPayment(p.step, this.o.venue);
     if (this.o.budget) {
-      let b: { stop: boolean; usd6: bigint };
+      let b: { stop: boolean; usd6: bigint; reason?: string };
       try {
         b = await this.o.budget(pay);
       } catch (e) {
@@ -142,8 +143,9 @@ export class Autopilot {
         return `holding: the budget is unreadable (${short(e)})`;
       }
       if (b.stop) {
-        this.once("holding", { step: p.step, usd6: b.usd6, why: p.why, reason: "the step would cross the umbrella's budget" }, `holding ${toJson(p.step)}`);
-        return `holding: the ${p.step.kind} ($${Number(b.usd6) / 1e6}) would cross the umbrella's budget`;
+        const edge = b.reason ?? "the umbrella's budget";
+        this.once("holding", { step: p.step, usd6: b.usd6, why: p.why, reason: `the step would cross ${edge}` }, `holding ${toJson(p.step)}`);
+        return `holding: the ${p.step.kind} ($${Number(b.usd6) / 1e6}) would cross ${edge}`;
       }
     }
     this.last = "";
@@ -295,7 +297,14 @@ async function main() {
         args: [BigInt(c.umbrella.id), b32(c.network.xrplSource), b32("XRP/outflow"), drops, 0],
       });
       const [stop, usd6] = result as readonly [boolean, bigint];
-      return { stop, usd6 };
+      if (stop || !c.guard.dailyCapUsd6) return { stop, usd6 };
+      // the principal's daily cap, counted the way the guard counts it: an agent that asks past it is only refused
+      const start = dayStart((await pc.getBlock()).timestamp), id = BigInt(c.umbrella.id);
+      const [spent, atStart] = await Promise.all([
+        pc.readContract({ address: c.umbrella.meter, abi: summaMeterAbi, functionName: "spentUsd6", args: [id] }) as Promise<bigint>,
+        pc.readContract({ address: c.umbrella.meter, abi: summaMeterAbi, functionName: "spentAt", args: [id, start] }) as Promise<bigint>,
+      ]);
+      return overDailyCap(spent, atStart, usd6, BigInt(c.guard.dailyCapUsd6)) ? { stop: true, usd6, reason: "today's cap" } : { stop, usd6 };
     },
     journal, executionTimeoutS: c.autopilot.executionTimeoutS, backoffS: c.autopilot.backoffS, cooldownS: c.autopilot.cooldownS,
     pacing: { slowBelowWei: parseEther(String(pace.slowBelowC2flr)), restBelowWei: parseEther(String(pace.restBelowC2flr)), slowEveryS: pace.slowEveryS },

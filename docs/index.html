@@ -515,6 +515,92 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
 .no-gl .menu, .solid .menu { --p: 1; }
 @media (max-width: 760px) { .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); } }
 
+/* ─── The stat panes, opened (0057) ─────────────────────────────────────────── */
+.stat[data-sheet] { position: relative; cursor: pointer; }
+.stat .more { position: absolute; top: 22px; right: 22px; width: 7px; height: 12px; color: var(--ink-3); opacity: 0.8; transition: transform 0.45s var(--spring), color 0.25s var(--out); }
+.stat[data-sheet]:hover .more, .stat[data-sheet]:focus-visible .more { color: var(--ink); transform: translateX(3px); }
+.stat[data-sheet]:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px rgba(245, 245, 247, 0.45); border-radius: var(--r-pane); }
+.sheet h2.big { display: flex; align-items: baseline; gap: 10px; margin: 14px 0 8px; }
+.sheet h2.big b { font: 600 44px/1 var(--sans); letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.sheet h2.big span { color: var(--ink-2); font: 500 15px/1 var(--mono); letter-spacing: 0.1em; }
+.sheet .lede { margin: 0 0 4px; color: var(--ink-2); font-size: 14.5px; line-height: 1.55; text-wrap: pretty; }
+.sheet .sheet-h { margin: 26px 0 10px; font: 500 11px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+.fields dd .copy { margin-left: 6px; vertical-align: -3px; }
+.moves { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.moves li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto 18px; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 14px;
+  background: rgba(245, 245, 247, 0.035); font-size: 13.5px; animation: rise-in var(--d-snappy) var(--e-snappy) both; }
+.moves li:nth-child(n) { animation-delay: calc(var(--i, 0) * 40ms); }
+.moves .when { color: var(--ink-3); font: 500 12px/1 var(--mono); }
+.moves .what { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.moves .amt { font: 500 13.5px/1 var(--sans); font-variant-numeric: tabular-nums; }
+.moves li.in .amt { color: var(--cyan); }
+.moves li.out .amt { color: var(--amber); }
+.moves a { color: var(--ink-3); text-decoration: none; text-align: right; }
+.moves a:hover { color: var(--ink); }
+.moves.queue li { grid-template-columns: 52px minmax(0, 1fr) auto; }
+.moves.queue li.ready .what { color: var(--ink); }
+.moves.queue li.ready .when::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--star); box-shadow: 0 0 10px #fff; vertical-align: 1px; }
+.gauge { position: relative; height: 10px; margin: 22px 0 8px; border-radius: 5px; background: rgba(245, 245, 247, 0.08); box-shadow: inset 0 0 0 1px var(--hair); overflow: visible; }
+.gauge .fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--g) * 100%); border-radius: 5px; background: linear-gradient(90deg, var(--coral), var(--amber) 22%, #fff);
+  box-shadow: 0 0 18px rgba(255, 174, 69, 0.45); animation: gauge-in 1.1s var(--e-snappy) both; transform-origin: 0 50%; }
+.gauge .mark { position: absolute; top: -5px; bottom: -5px; width: 1.5px; background: rgba(245, 245, 247, 0.55); border-radius: 1px; }
+.gauge .mark.slow { left: calc(var(--slow) * 100%); } .gauge .mark.rest { left: calc(var(--rest) * 100%); background: var(--coral); }
+.gauge-legend { display: flex; justify-content: space-between; color: var(--ink-3); font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.sheet-actions { margin-top: 22px; display: flex; gap: 10px; flex-wrap: wrap; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px) scale(0.98); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes gauge-in { from { transform: scaleX(0.02); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .moves li, .gauge .fill { animation: none; } }
+.still .moves li, .still .gauge .fill { animation: none; }
+
+/* ─── How it works: the path a real decision takes (0057) ──────────────────── */
+.flow-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 32px; flex-wrap: wrap; margin-bottom: 4px; }
+.flow-head h2 { margin: 8px 0 0; font: 600 24px/1.15 var(--sans); letter-spacing: -0.02em; }
+.flow-note { margin: 0; max-width: 46ch; color: var(--ink-2); font-size: 14.5px; line-height: 1.5; }
+#fx .fx { opacity: 0; transform: scale(0.86); filter: blur(7px); transform-box: fill-box; transform-origin: 50% 50%;
+  transition: opacity 0.45s var(--out), transform var(--d-bouncy) var(--e-bouncy), filter 0.5s var(--out); }
+#fx .fx.on { opacity: 1; transform: none; filter: none; }
+#fx .ping { fill: none; stroke: rgba(53, 207, 255, 0.6); stroke-width: 1.5; opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+#fx:not(.playing) #n-agent .ping { animation: fx-ping 2.8s var(--out) infinite; }
+#fx .ping-go .ping { animation: fx-ping 1.3s var(--out) 1; }
+@keyframes fx-ping { 0% { opacity: 0.9; transform: scale(0.92); } 100% { opacity: 0; transform: scale(1.32); } }
+#fx .fx-edge { fill: none; stroke-width: 1.5; stroke-opacity: 0.6; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 0.75s var(--e-smooth); }
+#fx .fx-edge.on { stroke-dashoffset: 0; }
+#fx .fx-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; opacity: 0; transition: opacity 0.5s var(--out) 0.25s; }
+#fx .fx-tag.on { opacity: 1; }
+#fx .fx-hint { transition: opacity 0.4s var(--out), filter 0.4s var(--out); }
+#fx .fx-hint.off { opacity: 0; filter: blur(4px); }
+#fx .pulse { transition: opacity 0.5s var(--out); filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.7)); }
+#fx .pulse.gone { opacity: 0; }
+.try-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.try-b { display: inline-flex; align-items: center; gap: 9px; height: 38px; padding: 0 16px; border: 0; border-radius: 19px; cursor: pointer;
+  background: rgba(245, 245, 247, 0.06); box-shadow: inset 0 0 0 1px var(--hair-2); color: var(--ink); font: 500 14px/1 var(--sans);
+  transition: transform 0.5s var(--spring), background 0.25s var(--out), box-shadow 0.25s var(--out);
+  animation: rise-in var(--d-snappy) var(--e-snappy) both; animation-delay: calc(var(--i, 0) * 45ms); }
+.try-b i { width: 7px; height: 7px; border-radius: 50%; background: var(--star); box-shadow: 0 0 10px #fff; flex: none; }
+.try-b.warn i { background: var(--coral); box-shadow: 0 0 10px var(--coral); }
+.try-b:hover { background: rgba(245, 245, 247, 0.1); }
+.try-b:active { transform: scale(0.95); }
+.try-b[aria-pressed="true"] { background: rgba(245, 245, 247, 0.15); box-shadow: inset 0 0 0 1px rgba(245, 245, 247, 0.5), 0 0 26px rgba(255, 255, 255, 0.08); }
+.try-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; margin-top: 18px; padding-top: 14px;
+  border-top: 1px solid var(--hair); color: var(--ink-2); font-size: 13.5px; }
+.try-foot b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.try-foot .dot { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--star); box-shadow: 0 0 10px #fff; animation: breathe 2.4s ease-in-out infinite; vertical-align: 1px; }
+.try-links { display: inline-flex; gap: 18px; flex-wrap: wrap; }
+.step .live { display: none; }
+.step.playing > p { display: none; }
+.step.playing .live { display: block; }
+.step .live .in { animation: rise-in var(--d-snappy) var(--e-snappy) both; }
+.step .live p { margin: 0; color: var(--ink); font-size: 14.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.step .live p.q { padding-left: 12px; border-left: 2px solid var(--cyan); color: var(--ink); }
+.step .live small { display: block; margin-top: 10px; color: var(--ink-3); font-size: 12.5px; line-height: 1.45; }
+.step .live code { font-size: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  #fx .fx, #fx .fx-edge, #fx .fx-tag { transition: none; }
+  #fx .ping { animation: none !important; }
+  .try-b, .step .live .in { animation: none; }
+}
+.fields dd .copy { display: inline-grid; }
+
 </style>
 </head>
 <body>
@@ -651,36 +737,37 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
           <h1>An AI agent that cannot move money alone.</h1>
           <p>Lancea gives an agent real work on real rails, and a leash it cannot slip: a second key, a dollar budget priced by Flare, and a tripwire. Every step leaves two witnesses you can check yourself.</p>
         </div>
-        <div class="span-12 glass pane flow rise">
-          <svg viewBox="0 0 1100 300" role="img" aria-label="The agent proposes, the guard reads the transaction and prices it on Flare, then co-signs or refuses">
-            <defs>
-              <linearGradient id="gc" x1="0" x2="1"><stop offset="0" stop-color="#35cfff" stop-opacity="0"/><stop offset="1" stop-color="#35cfff" stop-opacity=".9"/></linearGradient>
-              <linearGradient id="ga" x1="0" x2="1"><stop offset="0" stop-color="#ffae45" stop-opacity=".9"/><stop offset="1" stop-color="#ffae45" stop-opacity="0"/></linearGradient>
-            </defs>
+        <div class="span-12 glass pane flow rise" id="flow">
+          <div class="flow-head">
+            <div><span class="label">Try it</span><h2>Pick what the agent asks for.</h2></div>
+            <p class="flow-note">Each one plays a real decision from the chains, step by step, with its proofs.</p>
+          </div>
+          <svg id="fx" viewBox="0 0 1100 300" role="img" aria-label="The agent proposes; the guard reads the transaction, prices it on Flare, then co-signs or refuses">
             <g font-family="Geist, sans-serif" fill="#f5f5f7">
-              <g transform="translate(40 110)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">The agent</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">PROPOSES · WEIGHT 1</text></g>
-              <g transform="translate(430 110)"><rect width="240" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.35)"/><text x="120" y="38" text-anchor="middle" font-size="17" font-weight="600">The guard</text><text x="120" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">READS · PRICES · SIGNS</text></g>
-              <g transform="translate(860 40)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">XRP Ledger</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">2 OF 2 · IT MOVES</text></g>
-              <g transform="translate(860 180)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(255,107,107,.45)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">Strike on Flare</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#ff6b6b" font-family="Geist Mono, monospace" letter-spacing="1.5">REFUSED · TRIPWIRE</text></g>
-              <g transform="translate(450 14)"><rect width="200" height="56" rx="18" fill="rgba(3,4,9,.35)" stroke="rgba(255,174,69,.4)"/><text x="100" y="34" text-anchor="middle" font-size="14" font-weight="500">SummaMeter · FTSO</text></g>
+            <path class="fx-edge" pathLength="1" id="e-says" d="M240 140 H430" stroke="#35cfff"/>
+            <path class="fx-edge" pathLength="1" id="e-does" d="M240 164 H430" stroke="#ffae45"/>
+            <path class="fx-edge" pathLength="1" id="e-price" d="M550 110 V70" stroke="#ffae45"/>
+            <path class="fx-edge" pathLength="1" id="e-sign" d="M670 140 C 760 140 770 82 860 82" stroke="#f5f5f7"/>
+            <path class="fx-edge" pathLength="1" id="e-strike" d="M670 164 C 760 164 770 222 860 222" stroke="#ff6b6b"/>
+            <path class="fx-edge" pathLength="1" id="e-flare" d="M960 124 V180" stroke="#ffae45"/>
+            <text class="fx-tag" id="t-says" x="335" y="130" text-anchor="middle" fill="#35cfff">WHAT IT SAYS</text>
+            <text class="fx-tag" id="t-does" x="335" y="186" text-anchor="middle" fill="#ffae45">WHAT IT DOES</text>
+          <g transform="translate(40 110)"><g class="fx on" id="n-agent"><circle class="ping" cx="100" cy="42" r="48"/><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">The agent</text><text class="fsub" id="s-agent" x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">PROPOSES · WEIGHT 1</text></g></g>
+          <g transform="translate(430 110)"><g class="fx" id="n-guard"><rect width="240" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(245,245,247,.35)"/><text x="120" y="38" text-anchor="middle" font-size="17" font-weight="600">The guard</text><text class="fsub" id="s-guard" x="120" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">READS · PRICES · SIGNS</text></g></g>
+          <g transform="translate(450 14)"><g class="fx" id="n-meter"><rect width="200" height="56" rx="18" fill="rgba(3,4,9,.42)" stroke="rgba(255,174,69,.45)"/><text x="100" y="26" text-anchor="middle" font-size="14" font-weight="600">SummaMeter · FTSO</text><text class="fsub" id="s-meter" x="100" y="44" text-anchor="middle" font-size="10.5" fill="#ffae45" font-family="Geist Mono, monospace" letter-spacing="1.5">PRICES IT</text></g></g>
+          <g transform="translate(860 40)"><g class="fx" id="n-xrpl"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">XRP Ledger</text><text class="fsub" id="s-xrpl" x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">2 OF 2 · IT MOVES</text></g></g>
+          <g transform="translate(860 180)"><g class="fx" id="n-strike"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(255,107,107,.5)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">Strike on Flare</text><text class="fsub" id="s-strike" x="100" y="60" text-anchor="middle" font-size="12" fill="#ff6b6b" font-family="Geist Mono, monospace" letter-spacing="1.5">REFUSED · TRIPWIRE</text></g></g>
+          <g transform="translate(860 180)"><g class="fx" id="n-flare"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(255,174,69,.45)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">Flare executes</text><text class="fsub" id="s-flare" x="100" y="60" text-anchor="middle" font-size="12" fill="#ffae45" font-family="Geist Mono, monospace" letter-spacing="1.5">THE PERSONAL ACCOUNT</text></g></g>
+            <text class="fx-hint" id="fx-hint" x="650" y="152" text-anchor="middle" font-size="15" fill="#a1a1a6">Pick a step below: the rest of the path draws itself, from a real decision.</text>
             </g>
-            <path id="p1" d="M240 140 H430" stroke="rgba(53,207,255,.35)" stroke-width="1.5" fill="none"/>
-            <path id="p1b" d="M240 164 H430" stroke="rgba(255,174,69,.35)" stroke-width="1.5" fill="none"/>
-            <path id="p2" d="M670 140 C 760 140 770 82 860 82" stroke="rgba(245,245,247,.4)" stroke-width="1.5" fill="none"/>
-            <path id="p3" d="M670 164 C 760 164 770 222 860 222" stroke="rgba(255,107,107,.4)" stroke-width="1.5" fill="none"/>
-            <path id="p4" d="M550 110 V70" stroke="rgba(255,174,69,.4)" stroke-width="1.5" fill="none"/>
-            <text x="335" y="130" text-anchor="middle" font-family="Geist Mono, monospace" font-size="11" letter-spacing="1.4" fill="#35cfff">WHAT IT SAYS</text>
-            <text x="335" y="186" text-anchor="middle" font-family="Geist Mono, monospace" font-size="11" letter-spacing="1.4" fill="#ffae45">WHAT IT DOES</text>
-            <circle r="5" fill="#35cfff"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.45;1" calcMode="linear"><mpath href="#p1"/></animateMotion></circle>
-            <circle r="5" fill="#ffae45"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.45;1" calcMode="linear"><mpath href="#p1b"/></animateMotion></circle>
-            <g><path d="M0 -8 1.5 -1.5 8 0 1.5 1.5 0 8 -1.5 1.5 -8 0 -1.5 -1.5Z" fill="#fff"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;0;1" keyTimes="0;.5;1" calcMode="linear"><mpath href="#p2"/></animateMotion></path></g>
-            <circle r="4" fill="#ffae45"><animateMotion dur="1.6s" repeatCount="indefinite"><mpath href="#p4"/></animateMotion></circle>
           </svg>
+          <div class="try-actions" id="try-actions" role="group" aria-label="Pick what the agent asks for"></div>
+          <div class="try-foot" id="try-foot"></div>
         </div>
-        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--cyan)"></i>01 · The claim</span><h3>The agent proposes</h3><p>It signs a transaction with its own key and says, in words, what it is doing and why. Its key is only weight 1, so the transaction cannot move yet.</p></div>
-        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--amber)"></i>02 · The reading</span><h3>The guard reads it itself</h3><p>The guard ignores the words and decodes the transaction: who receives it, how much, and what any memo tells Flare to do.</p></div>
-        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--amber)"></i>03 · The price</span><h3>One dollar budget</h3><p>Flare's FTSO prices the step. SummaMeter adds it to one budget that covers every rail, and refuses what would cross it.</p></div>
-        <div class="span-3 glass pane step rise"><span class="label"><i style="background:#fff"></i>04 · The verdict</span><h3>A second signature, or a strike</h3><p>Inside your budget and rules, the guard adds the second signature and the ledger accepts it. Outside, it refuses and writes a strike on Flare that trips every rail.</p></div>
+        <div class="span-3 glass pane step rise" id="card-claim"><span class="label"><i style="background:var(--cyan)"></i>01 · The claim</span><h3>The agent proposes</h3><p>It signs a transaction with its own key and says, in words, what it is doing and why. Its key is only weight 1, so the transaction cannot move yet.</p><div class="live" aria-live="polite"></div></div>
+        <div class="span-3 glass pane step rise" id="card-read"><span class="label"><i style="background:var(--amber)"></i>02 · The reading</span><h3>The guard reads it itself</h3><p>The guard ignores the words and decodes the transaction: who receives it, how much, and what any memo tells Flare to do.</p><div class="live" aria-live="polite"></div></div>
+        <div class="span-3 glass pane step rise" id="card-price"><span class="label"><i style="background:var(--amber)"></i>03 · The price</span><h3>One dollar budget</h3><p>Flare's FTSO prices the step. SummaMeter adds it to one budget that covers every rail, and refuses what would cross it.</p><div class="live" aria-live="polite"></div></div>
+        <div class="span-3 glass pane step rise" id="card-verdict"><span class="label"><i style="background:#fff"></i>04 · The verdict</span><h3>A second signature, or a strike</h3><p>Inside your budget and rules, the guard adds the second signature and the ledger accepts it. Outside, it refuses and writes a strike on Flare that trips every rail.</p><div class="live" aria-live="polite"></div></div>
         <div class="span-12 glass pane faq rise">
           <div class="pane-head"><h2>Questions</h2></div>
           <details><summary>Why two witnesses?</summary><p>What the agent says is its claim. What the transaction does is the fact, read by the guard from the signed transaction. When the two agree, the guard signs: agreement is evidence. When they do not, the difference is the finding.</p></details>
@@ -2167,17 +2254,29 @@ void main() {
   }
   const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
 
+  /** A guard journal entry, in the words the page uses. */
+  function toDecision(e, i) {
+    const d = e.decision ?? {}, tx = e.tx ?? {}, act = tx.action ?? {};
+    const kind = d.signed ? 0 : d.struck ? 2 : 1;
+    return {
+      key: `${e.at}|${d.hash ?? d.struck ?? tx.sequence ?? i}`, at: e.at, e, tx, d, claim: e.claim ?? {}, kind,
+      usd6: d.usd6 ?? null, tally: d.tallyUsd6 ?? null, why: e.claim?.why ?? "", by: e.claim?.by ?? "",
+      rail: act.kind === "mint-to" ? "mint" : act.kind === "vault" ? "vault" : "other", settled: e.settled ?? null,
+    };
+  }
+  /** Which of the flow's examples a decision is (as the feed pins them: src/service/stats.ts). */
+  function exKind(d) {
+    const a = d.tx?.action ?? {};
+    if (d.kind === 2) return "hijack";
+    if (d.kind === 1) return "refused";
+    if (a.kind === "mint-to") return "mint";
+    if (a.kind === "vault") return a.action === "deposit" ? "deposit" : a.action === "redeem" ? "withdraw" : "claim";
+    if (a.kind === "fxrp-redeem") return "redeem";
+    return "payment";
+  }
   function build(feed) {
     const u = feed.umbrella ?? {}, a = feed.account ?? {};
-    const decisions = (feed.guard ?? []).filter((e) => e.kind === "decision").slice().reverse().map((e, i) => {
-      const d = e.decision ?? {}, tx = e.tx ?? {}, act = tx.action ?? {};
-      const kind = d.signed ? 0 : d.struck ? 2 : 1;
-      return {
-        key: `${e.at}|${d.hash ?? d.struck ?? tx.sequence ?? i}`, at: e.at, e, tx, d, claim: e.claim ?? {}, kind,
-        usd6: d.usd6 ?? null, tally: d.tallyUsd6 ?? null, why: e.claim?.why ?? "", by: e.claim?.by ?? "",
-        rail: act.kind === "mint-to" ? "mint" : act.kind === "vault" ? "vault" : "other",
-      };
-    });
+    const decisions = (feed.guard ?? []).filter((e) => e.kind === "decision").slice().reverse().map(toDecision);
     const notes = (feed.autopilot ?? []).filter((e) => ["holding", "paused", "settled", "timeout", "acknowledged", "start", "stop", "error", "idle", "topped-up", "pacing"].includes(e.kind)).slice().reverse();
     const proposals = (feed.autopilot ?? []).filter((e) => e.kind === "proposal" && e.state).slice().reverse();
     const start = (feed.autopilot ?? []).find((e) => e.kind === "start");
@@ -2189,13 +2288,17 @@ void main() {
     for (const e of (feed.guard ?? []).filter((x) => x.kind === "start").slice().reverse()) since = String(e.umbrella) === String(u.id) ? since ?? e.at : null;
     const series = decisions.filter((d) => d.kind === 0 && d.tally != null && (!since || d.at >= since)).map((d) => ({ at: d.at, v: u6(d.tally), d }));
     const spent = u6(u.spentUsd6), budget = u6(u.budgetUsd6);
+    const dailyCap = u.dailyCapUsd6 ? u6(u.dailyCapUsd6) : null, today = u.spentTodayUsd6 != null ? u6(u.spentTodayUsd6) : null;
     const from = u.validFrom ? Number(u.validFrom) * 1000 : series[0] ? Date.parse(series[0].at) : null;
     const until = u.validUntil ? Number(u.validUntil) * 1000 : null;
     const days = from ? Math.max(1 / 24, (Date.parse(feed.generatedAt) - from) / 864e5) : null;
     return {
       decisions, notes, proposals, start, lastAuto, price, series, spent, budget, from, until, days,
       signed: decisions.filter((d) => d.kind === 0).length, refused: decisions.filter((d) => d.kind > 0).length, struck: decisions.filter((d) => d.kind === 2).length,
-      frac: budget ? Math.min(1, spent / budget) : 0,
+      frac: dailyCap && today != null ? Math.min(1, today / dailyCap) : budget ? Math.min(1, spent / budget) : 0,
+      dailyCap, today, dayStart: u.dayStart ? Number(u.dayStart) * 1000 : null,
+      vault: feed.vault ?? null, ledger: feed.ledger ?? [], stats: feed.stats ?? null, exemplars: feed.exemplars ?? {},
+      xrpUsd: feed.xrpUsd6 ? u6(feed.xrpUsd6) : null, perDecision: c2flr(feed.fuel?.perDecisionWei), pacing: feed.fuel?.pacing ?? null,
       gasGuard: c2flr(feed.fuel?.guardWei), gasAgent: c2flr(feed.fuel?.agentWei),
       tick: Number(start?.tickSeconds ?? 300),
       u, a, keys: feed.keys ?? {},
@@ -2214,7 +2317,9 @@ void main() {
           : `The agent asked to act ${why ? `on ${why}` : "outside its rules"}. The guard refused and wrote a strike on Flare. Every rail stays shut until the owner re-arms the umbrella.` };
     }
     if (st.away) return { tone: "grey", pill: "Offline", head: "Offline, and still on its leash.", sub: "The demo machine is off right now, so the agent proposes nothing until it is back. What you see is its last published state." };
-    if (last?.kind === "holding") return { tone: "grey", pill: "Holding", head: "At the edge of its budget.", sub: "The next step would cross the umbrella's budget, so the agent keeps it to itself instead of asking." };
+    if (last?.kind === "holding") return String(last.reason ?? "").includes("today")
+      ? { tone: "grey", pill: "Holding", head: "At the edge of today's leash.", sub: "The next step would cross today's cap, so the agent keeps it to itself until the day turns." }
+      : { tone: "grey", pill: "Holding", head: "At the edge of its budget.", sub: "The next step would cross the umbrella's budget, so the agent keeps it to itself instead of asking." };
     if (last?.kind === "pacing" && last.mode === "rest") return { tone: "grey", pill: "Resting", head: "Saving the guard's gas.", sub: "Every co-signature costs the guard gas on Flare. It is down to the reserve it keeps for a strike, so the agent proposes nothing until the guard is topped up." };
     if (last?.kind === "stop") return { tone: "grey", pill: "Stopped", head: "The agent is not running.", sub: "Its service was stopped. The account and the umbrella stay as they are." };
     return { tone: "star", pill: "Working", head: "Working inside its leash.", sub: "An AI agent runs XRP through a Flare vault and back, around the clock: mint, deposit, withdraw, claim, redeem. It cannot move a coin alone: every step it proposes is priced against your budget and checked against your rules before the guard adds the second signature." };
@@ -2235,7 +2340,7 @@ void main() {
   }
   function noteRow(e) {
     const t = {
-      holding: [`<b>Holding.</b> The next ${esc(e.step?.kind ?? "step")} (${e.usd6 ? usd(e.usd6) : "?"}) would cross the umbrella's budget, so the agent does not ask.`, ""],
+      holding: [`<b>Holding.</b> The next ${esc(e.step?.kind ?? "step")} (${e.usd6 ? usd(e.usd6) : "?"}) would cross ${String(e.reason ?? "").includes("today") ? "today's cap" : "the umbrella's budget"}, so the agent does not ask.`, ""],
       paused: ["<b>Paused.</b> The umbrella is tripped. Nothing is proposed until the owner re-arms it.", "coral"],
       acknowledged: [`<b>Agreed to its leash.</b> The agent acknowledged umbrella #${esc(e.umbrella)} on Flare.`, ""],
       settled: [`<b>Done on Flare.</b> The ${esc(e.step?.kind)} arrived after ${e.afterS ?? "?"} s.`, ""],
@@ -2263,16 +2368,20 @@ void main() {
   // ─── Now ──────────────────────────────────────────────────────────────────
   function renderNow() {
     const m = st.m, s = stateOf(), u = m.u, ds = shownDecisions(), replay = rp.t != null;
-    const spent = replay ? spentAt(ds) : u6(u.spentUsd6), frac = m.budget ? Math.min(1, spent / m.budget) : 0;
+    const daily = m.dailyCap != null && m.today != null;
+    const spent = daily ? (replay ? daySpent(ds) : m.today) : replay ? spentAt(ds) : u6(u.spentUsd6);
+    const frac = daily ? Math.min(1, spent / m.dailyCap) : m.budget ? Math.min(1, spent / m.budget) : 0;
     const at = replay ? (ds.length ? `at ${clock(ds[ds.length - 1].at)}` : "before the first step") : "";
     const pill = $("#now-pill"); pill.classList.remove("coral", "grey", "star"); pill.classList.add(replay ? "grey" : s.tone); $("span", pill).textContent = replay ? "Replay" : s.pill;
     $("#now-head").textContent = s.head; $("#now-sub").innerHTML = s.sub;
     const prev = Number($("#now-spent").dataset.v ?? 0); $("#now-spent").dataset.v = spent;
     numText($("#now-spent"), money(spent), spent < prev ? -1 : 1);
-    $("#now-of").innerHTML = `spent of ${usd(u.budgetUsd6, 0)} across XRPL and Flare · ${Math.round(frac * 100)}%${at ? ` · ${at}` : ""}`;
+    $("#now-of").innerHTML = daily
+      ? `spent today, of a ${money(m.dailyCap).replace(".00", "")} day across XRPL and Flare · ${Math.round(frac * 100)}%${at ? ` · ${at}` : ` · a new day in <span data-until="${dayEnd()}"></span>`}`
+      : `spent of ${usd(u.budgetUsd6, 0)} across XRPL and Flare · ${Math.round(frac * 100)}%${at ? ` · ${at}` : ""}`;
     const left = m.until ? Math.max(0, Math.ceil((m.until - Date.now()) / 864e5)) : null;
     $("#now-facts").innerHTML = [
-      `<span class="label">Umbrella <b>#${esc(u.id)}</b></span>`,
+      daily ? `<span class="label">Umbrella <b>#${esc(u.id)} · ${usd(u.spentUsd6, 0)} of ${usd(u.budgetUsd6, 0)}</b></span>` : `<span class="label">Umbrella <b>#${esc(u.id)}</b></span>`,
       `<span class="label">Tripwire <b>${esc(u.strikes)} of ${esc(u.tripwire)}</b></span>`,
       left != null && !replay ? `<span class="label">Window <b>${left} days left</b></span>` : `<span class="label">Decisions <b>${ds.length}</b></span>`,
     ].join("");
@@ -2297,7 +2406,11 @@ void main() {
   /** A stat pane, built once and then updated in place, so its figure can roll. */
   function stat(sel, label, value, small, sparkSvg) {
     const el = $(sel);
-    if (!el.__built) { el.innerHTML = `<span class="label"></span><b></b><small></small><div class="sp"></div>`; el.__built = true; }
+    if (!el.__built) {
+      el.innerHTML = `<span class="label"></span><b></b><small></small><div class="sp"></div><svg class="more" viewBox="0 0 8 14" aria-hidden="true"><path d="M1.5 1.5 6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      el.__built = true; el.dataset.sheet = `stat:${sel.slice(6)}`; el.setAttribute("role", "button"); el.tabIndex = 0;
+    }
+    el.setAttribute("aria-label", `${label}: open the details`);
     $(".label", el).textContent = label; numText($("b", el), value, 1); $("small", el).innerHTML = small; $(".sp", el).innerHTML = sparkSvg;
   }
   function nextLeft() {
@@ -2323,6 +2436,16 @@ void main() {
   const rp = { i: null, t: null, drag: false };
   const shownDecisions = () => (rp.t == null ? st.m.decisions : st.m.decisions.filter((d) => Date.parse(d.at) <= rp.t));
   const spentAt = (ds) => { const last = ds.filter((d) => d.kind === 0 && d.tally != null).pop(); return last ? u6(last.tally) : 0; };
+  /** What was spent on the UTC day of the replay's moment: the tally then, less the tally when that day began. */
+  const daySpent = (ds) => {
+    const signed = ds.filter((d) => d.kind === 0 && d.tally != null), last = signed[signed.length - 1];
+    if (!last) return 0;
+    const start = Date.parse(last.at) - (Date.parse(last.at) % 864e5), before = signed.filter((d) => Date.parse(d.at) < start).pop();
+    const base = before ? u6(before.tally) : 0, now = u6(last.tally);
+    return base > now ? now : now - base; // a new umbrella that day starts its tally from zero
+  };
+  /** When the UTC day ends (ms): the daily cap starts over. */
+  const dayEnd = () => Math.floor(Date.now() / 864e5) * 864e5 + 864e5;
   function renderReplay() {
     if (!st.m) return;
     const n = st.m.decisions.length, pos = (i) => (i + 1) / (n + 1);
@@ -2338,7 +2461,8 @@ void main() {
   }
   /** The ring and the stars show what was true at the replay's moment (or now). */
   function skyNow(animate) {
-    const ds = shownDecisions(), frac = rp.t != null ? Math.min(1, spentAt(ds) / (st.m.budget || 1)) : st.m.frac;
+    const ds = shownDecisions(), m = st.m;
+    const frac = rp.t == null ? m.frac : m.dailyCap ? Math.min(1, daySpent(ds) / m.dailyCap) : Math.min(1, spentAt(ds) / (m.budget || 1));
     Glass.setFill($("#ring"), frac); $("#ring").style.setProperty("--frac", frac);
     Glass.setDecisions(ds.map((d) => ({ key: d.key, kind: d.kind, d })), animate);
   }
@@ -2509,15 +2633,13 @@ void main() {
     if (from.nodeType) { const r = from.getBoundingClientRect(); return r.width ? r : null; }
     return { left: from.x - 9, right: from.x + 9, top: from.y - 9, bottom: from.y + 9 };
   }
-  const radiusFor = (from) => (!from?.nodeType ? 9 : from.id === "status" ? from.getBoundingClientRect().height / 2 : 16);
-  /** from: the element it grows out of (a row, the island) or a point (a star). */
-  function openSheet(key, from) {
-    const d = st.m.decisions.find((x) => x.key === key); if (!d) return;
-    const again = st.sheet != null;
-    st.sheet = key;
+  const radiusFor = (from) => (!from?.nodeType ? 9 : from.id === "status" ? from.getBoundingClientRect().height / 2
+    : from.matches(".pane, .fnode") ? parseFloat(getComputedStyle(from).borderTopLeftRadius) || 16 : 16);
+  function decisionSheet(key) {
+    const d = st.m.decisions.find((x) => x.key === key) ?? (st.flowD?.key === key ? st.flowD : null); if (!d) return null;
     const tx = d.tx, dec = d.d;
     const v = d.kind === 0 ? `<span class="pill" style="height:28px;box-shadow:inset 0 0 0 1px rgba(245,245,247,.22)"><i></i><span>Co-signed</span></span>` : `<span class="pill coral" style="height:28px;box-shadow:inset 0 0 0 1px rgba(255,107,107,.4)"><i></i><span>${d.kind === 2 ? "Refused · struck" : "Refused"}</span></span>`;
-    $("#sheet-body").innerHTML = `${v}
+    return `${v}
       <h2 id="sheet-title">${d.kind === 0 ? "The guard added the second signature." : "The guard refused to sign."}</h2>
       <div class="witness said"><i></i><p>${esc(d.why || "No reason given")}${d.by ? `<span class="label"> · ${d.by === "drill" ? "drill, a staged hijack" : `by ${esc(d.by)}`}</span>` : ""}</p></div>
       <div class="witness does"><i></i><p>${does(tx)}</p></div>
@@ -2533,6 +2655,16 @@ void main() {
         ${dec.reservation ? `<dt>Reserved on Flare</dt><dd>${link("flare", dec.reservation)}</dd>` : ""}
         ${dec.struck ? `<dt>Strike on Flare</dt><dd>${link("flare", dec.struck)}</dd>` : ""}
       </dl>`;
+  }
+  /** from: the element it grows out of (a row, the island) or a point (a star). */
+  function openSheet(key, from) {
+    const html = key.startsWith("stat:") ? statSheet(key.slice(5)) : decisionSheet(key);
+    if (html == null) return;
+    const again = st.sheet != null;
+    st.sheet = key;
+    $("#sheet-body").innerHTML = html;
+    $("#sheet-body").classList.toggle("still", again); // a refresh while open does not replay its entrance
+    tickUntil();
     if (again) return;
     const sh = $("#sheet");
     sh.classList.add("open"); sh.setAttribute("aria-hidden", "false"); $("#scrim").classList.add("open");
@@ -2553,6 +2685,7 @@ void main() {
     let to = null, toR = 16;
     if (f?.pt) { const p = Glass.markPos(key); if (p) { to = { left: p.x - 8, right: p.x + 8, top: p.y - 8, bottom: p.y + 8 }; toR = 8; } }
     else if (f?.el?.id === "status") { const r = f.el.getBoundingClientRect(); to = r; toR = r.height / 2; }
+    else if (f?.el && !f.el.matches(".decision") && inView(f.el)) { to = f.el.getBoundingClientRect(); toR = radiusFor(f.el); }
     if (!to) { const row = rowOf(key); if (row) to = row.getBoundingClientRect(); }
     st.sheet = null; st.sheetFrom = null;
     sh.classList.remove("open"); sh.setAttribute("aria-hidden", "true"); $("#scrim").classList.remove("open");
@@ -2561,6 +2694,207 @@ void main() {
     Glass.overlayOut(sh, { to, toRadius: toR });
   }
 
+  // ─── How it works: pick a step, and a real decision draws its own path ───────
+  // Only the agent is there at first. A pick plays the latest real decision of that kind, from the pinned
+  // examples in the feed (src/service/stats.ts): the claim, the reading, the price, the verdict, and for a
+  // step on Flare, its execution. Each node lands as its moment comes; each card fills with that decision's
+  // own words and links. "Watch the next one live" waits for the agent's next step and plays it as it lands.
+  const FX = { mint: "Mint XRP into FXRP", deposit: "Deposit into Firelight", withdraw: "Start a withdrawal", claim: "Claim a withdrawal",
+    redeem: "Redeem FXRP to XRP", payment: "Pay someone", hijack: "Follow a planted note", refused: "Ask past the rules" };
+  const DONE = { mint: "FXRP MINTED", deposit: "DEPOSITED", withdraw: "WITHDRAWAL BOOKED", claim: "FXRP CLAIMED", redeem: "FXRP REDEEMED" };
+  const fx = { pick: null, timers: [], follow: null, sig: "", ex: {} };
+  function examples() {
+    const out = {};
+    for (const [k, e] of Object.entries(st.m.exemplars ?? {})) if (FX[k]) out[k] = toDecision(e, 0);
+    for (const d of st.m.decisions) { const k = exKind(d); if (!out[k] || (!st.m.exemplars?.[k] && Date.parse(d.at) > Date.parse(out[k].at))) out[k] = d; }
+    return out;
+  }
+  /** When Flare showed a co-signed step's effect: pinned with the example, else found in the autopilot's journal. */
+  function settledFor(d) {
+    if (d.settled) return d.settled;
+    const kind = d.claim?.intent?.kind; if (!kind || d.kind !== 0) return null;
+    const e = (st.feed.autopilot ?? []).filter((x) => x.kind === "settled" && x.step?.kind === kind && Date.parse(x.at) >= Date.parse(d.at)).pop();
+    return e ? { at: e.at, afterS: e.afterS } : null;
+  }
+  function renderHow() {
+    if (!st.m) return;
+    fx.ex = examples();
+    const kinds = Object.keys(FX).filter((k) => fx.ex[k]), sig = kinds.join(",");
+    if (sig !== fx.sig) {
+      fx.sig = sig;
+      $("#try-actions").innerHTML = kinds.map((k, i) => `<button class="try-b${k === "hijack" || k === "refused" ? " warn" : ""}" data-fx="${k}" aria-pressed="${fx.pick === k}" style="--i:${i}"><i></i>${FX[k]}</button>`).join("")
+        || `<p class="flow-note">The first decisions will appear here as the agent makes them.</p>`;
+    }
+    if (!st.flowD) foot();
+  }
+  const fxEl = (id) => document.getElementById(id);
+  function resetFlow() {
+    fx.timers.forEach(clearTimeout); fx.timers = [];
+    for (const n of $$("#fx .fx")) if (n.id !== "n-agent") n.classList.remove("on");
+    for (const e of $$("#fx .fx-edge, #fx .fx-tag")) e.classList.remove("on");
+    for (const c of $$("[id^=card-]")) { c.classList.remove("playing"); $(".live", c).innerHTML = ""; }
+    $$("#fx .pulse").forEach((p) => p.remove());
+  }
+  /** A light that runs along an edge once: a dot, or the white star of a co-signature. */
+  function pulse(edgeId, color, star) {
+    if (Glass.reduced) return;
+    const ns = "http://www.w3.org/2000/svg", g = document.createElementNS(ns, star ? "path" : "circle");
+    if (star) { g.setAttribute("d", "M0 -8 1.5 -1.5 8 0 1.5 1.5 0 8 -1.5 1.5 -8 0 -1.5 -1.5Z"); g.setAttribute("fill", "#fff"); }
+    else { g.setAttribute("r", "5"); g.setAttribute("fill", color); }
+    g.setAttribute("class", "pulse");
+    const am = document.createElementNS(ns, "animateMotion");
+    am.setAttribute("dur", "0.75s"); am.setAttribute("begin", "indefinite"); am.setAttribute("fill", "freeze"); am.setAttribute("calcMode", "spline");
+    am.setAttribute("keyTimes", "0;1"); am.setAttribute("keySplines", "0.3 0 0.2 1");
+    const mp = document.createElementNS(ns, "mpath"); mp.setAttribute("href", `#${edgeId}`); am.appendChild(mp); g.appendChild(am);
+    fxEl(edgeId).parentNode.appendChild(g);
+    try { am.beginElement(); } catch { /* no SMIL: the edge still draws */ }
+    setTimeout(() => g.classList.add("gone"), 700); setTimeout(() => g.remove(), 1300);
+  }
+  const node = (id, sub) => { if (sub != null) fxEl(`s-${id.slice(2)}`).textContent = sub; fxEl(id).classList.add("on"); };
+  const edge = (...ids) => ids.forEach((id) => fxEl(id).classList.add("on"));
+  function card(id, html) {
+    const c = fxEl(`card-${id}`), live = $(".live", c);
+    c.classList.add("playing"); live.innerHTML = `<div class="in">${html}</div>`;
+  }
+  function play(d, live) {
+    resetFlow();
+    st.flowD = d;
+    const svg = fxEl("fx"); svg.classList.add("playing"); fxEl("fx-hint").classList.add("off");
+    const at = (ms, f) => fx.timers.push(setTimeout(f, Glass.reduced ? 0 : ms));
+    const a = d.tx?.action ?? {}, onFlare = a.kind === "mint-to" || a.kind === "vault" || a.kind === "fxrp-redeem";
+    const settled = settledFor(d), step = d.claim?.intent?.kind, dec = d.d ?? {};
+    const drill = d.by === "drill";
+    at(0, () => {
+      const ag = fxEl("n-agent"); ag.classList.remove("ping-go"); void ag.getBBox(); ag.classList.add("ping-go");
+      fxEl("s-agent").textContent = drill ? "STEERED · A PLANTED NOTE" : "PROPOSES · WEIGHT 1";
+      card("claim", `<p class="q">“${esc(clip(d.why || "No reason given", 190))}”</p><small>${drill
+        ? "A drill: the agent was handed a planted note, the way a prompt injection would reach it."
+        : "Signed with the agent's own key: weight 1 of 2, so on its own it cannot move."}</small>`);
+    });
+    at(620, () => { edge("e-says", "e-does", "t-says", "t-does"); pulse("e-says", "#35cfff"); pulse("e-does", "#ffae45"); });
+    at(1180, () => {
+      node("n-guard", a.kind === "mint-to" ? "READS · A MINT" : a.kind === "vault" ? `READS · ${a.action === "redeem" ? "A WITHDRAWAL" : a.action === "claim" ? "A CLAIM" : "A DEPOSIT"}` : a.kind === "fxrp-redeem" ? "READS · A REDEMPTION" : "READS · A PAYMENT");
+      card("read", `<p>${does(d.tx)}</p><small>Read from the signed transaction itself, not from the agent's words.</small>`);
+    });
+    at(1720, () => { edge("e-price"); pulse("e-price", "#ffae45"); });
+    at(2150, () => {
+      node("n-meter", d.usd6 ? `${usd(d.usd6, u6(d.usd6) < 0.01 ? 4 : 2)} · FTSO` : "PRICED · FTSO");
+      card("price", d.kind === 0
+        ? `<p>Priced at <b>${usd(d.usd6, u6(d.usd6) < 0.01 ? 4 : 2)}</b> by the FTSO, and reserved on Flare before the signature existed: ${link("flare", dec.reservation, "the reservation ↗")}</p>${d.tally ? `<small>The umbrella's tally after it: ${usd(d.tally)}.</small>` : ""}`
+        : `<p>${esc(dec.reason ?? "Refused.")}</p>${d.usd6 ? `<small>Priced at ${usd(d.usd6)} by the FTSO.</small>` : ""}`);
+    });
+    if (d.kind === 0) {
+      at(2850, () => { edge("e-sign"); pulse("e-sign", "#fff", true); });
+      at(3400, () => {
+        node("n-xrpl", "2 OF 2 · IT MOVES");
+        card("verdict", `<p><b>Co-signed.</b> The ledger accepted it: ${link("xrpl", dec.hash, "on XRPL ↗")}</p><small class="done">${settled && onFlare ? "" : "Two signatures of two: the payment moved."}</small>`);
+      });
+      if (settled && onFlare) {
+        at(4050, () => { edge("e-flare"); pulse("e-flare", "#ffae45"); });
+        at(4500, () => {
+          node("n-flare", `${DONE[step] ?? "DONE"} · +${settled.afterS ?? "?"} S`);
+          const small = $("#card-verdict .done"); if (small) small.innerHTML = `Flare executed it ${settled.afterS ?? "?"} s later, in the account's ${link("flareAddress", st.feed.account?.personalAccount, "personal account ↗")}.`;
+        });
+      }
+    } else {
+      at(2850, () => { edge("e-strike"); pulse("e-strike", "#ff6b6b"); });
+      at(3400, () => {
+        node("n-strike", d.kind === 2 ? "STRUCK · TRIPWIRE" : "REFUSED · NOTHING SIGNED");
+        card("verdict", d.kind === 2
+          ? `<p><b>Refused, and struck on Flare:</b> ${link("flare", dec.struck, "the strike ↗")}</p><small>The tripwire shut every rail until the owner looked and re-armed it.</small>`
+          : `<p><b>Refused.</b> Nothing was signed, so nothing moved.</p><small>The agent backs off, and asks again later.</small>`);
+      });
+    }
+    $$("#try-actions [data-fx]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.fx === fx.pick)));
+    foot(d, live);
+  }
+  function foot(d, live) {
+    const el = fxEl("try-foot");
+    if (fx.follow) {
+      el.innerHTML = `<span class="label on"><i class="dot"></i>Watching</span><span>The agent looks again in <b data-until="${Date.now() + (nextLeft() ?? 0) * 1000}" data-done="a moment">…</b>. Its step reaches this page within a minute of it.</span><button class="linkbtn" data-fx-stop>Stop</button>`;
+      return tickUntil();
+    }
+    if (!d) { el.innerHTML = `<span>Nothing here is staged: the feed is the services' own journals and a fresh read of both chains.</span><button class="linkbtn" data-fx-live>Watch the next one live</button>`; return; }
+    el.innerHTML = `<span>${live ? "<b>Live.</b> The agent's step, as it landed." : `A real decision from ${dayName(d.at)} ${clock(d.at)}.`} Every link opens the chain.</span>
+      <span class="try-links"><button class="linkbtn" data-fx-open>Open it</button><button class="linkbtn" data-fx-replay>Replay</button><button class="linkbtn" data-fx-live>Watch the next one live</button></span>`;
+  }
+  function pick(kind) {
+    const d = fx.ex[kind]; if (!d) return;
+    fx.pick = kind; fx.follow = null; play(d, false);
+  }
+  /** A new decision arrived: if the page is waiting for one, play it. */
+  function followNew() {
+    if (!fx.follow || !st.m.decisions.length) return;
+    const last = st.m.decisions[st.m.decisions.length - 1];
+    if (last.key === fx.follow) return;
+    fx.follow = null; fx.pick = exKind(last); play(last, true);
+  }
+  // ─── The stat panes, opened: everything the chains say about that part of the account ──
+  const until = (ms) => `<span data-until="${ms}"></span>`;
+  const hms = (s) => { s = Math.max(0, Math.floor(s)); const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+    return d ? `${d} d ${h} h` : `${h}:${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+  /** Every live countdown on the page, once a second. */
+  function tickUntil() {
+    for (const el of $$("[data-until]")) {
+      const left = (Number(el.dataset.until) - Date.now()) / 1000;
+      el.textContent = left > 0 ? hms(left) : el.dataset.done ?? "now";
+    }
+  }
+  const dl = (pairs) => `<dl class="fields">${pairs.filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+  const head = (label, value, unit, lede) => `<span class="pill grey" style="height:28px;box-shadow:inset 0 0 0 1px rgba(245,245,247,.18)"><i></i><span>${label}</span></span>
+      <h2 id="sheet-title" class="big"><b>${value}</b> <span>${unit}</span></h2>${lede ? `<p class="lede">${lede}</p>` : ""}`;
+  const addr = (kind, a) => (a ? `${link(kind, a, cut(a, 8, 6))}<button class="copy" data-copy="${esc(a)}" aria-label="Copy the address">${COPY}</button>` : "?");
+  const steps = (k) => st.m.stats?.steps?.[k];
+  const total = (k, unit) => { const t = steps(k); return t ? `${t.count} × · ${num(u6(t.units), 2)} ${unit}` : "none yet"; };
+  function statSheet(kind) {
+    const m = st.m, a = m.a, f = st.feed, sa = f.account ?? {};
+    if (kind === "xrp") {
+      const x = u6(a.xrpDrops), rows = m.ledger.slice(0, 8);
+      const since = Date.now() - 864e5, day = m.ledger.filter((r) => Date.parse(r.at) >= since);
+      const inn = day.filter((r) => r.dir === "in").reduce((n, r) => n + u6(r.drops), 0), out = day.filter((r) => r.dir === "out").reduce((n, r) => n + u6(r.drops) + u6(r.feeDrops ?? 0), 0);
+      return head("XRP on the ledger", num(x, 2), "XRP", `Spendable on the XRP Ledger${m.xrpUsd ? `, worth ${money(x * m.xrpUsd)} at the FTSO's ${money(m.xrpUsd)} a coin` : ""}. The ledger keeps 2 XRP back for the account and its SignerList.`) +
+        dl([["Account", addr("xrplAccount", sa.address)], ["Signers", "owner 2 · agent 1 · guard 1 · quorum 2: no key moves it alone"],
+          day.length ? ["Last 24 h", [inn ? `+${num(inn, 2)} in` : "", out ? `−${num(out, 2)} out` : ""].filter(Boolean).join(" · ") + ` (${day.length} payment${day.length === 1 ? "" : "s"})`] : null,
+          m.stats?.topups?.count ? ["Topped up", `${m.stats.topups.count} × from the testnet faucet, ${num(u6(m.stats.topups.drops), 0)} XRP in all`] : null]) +
+        (rows.length ? `<h3 class="sheet-h">On the ledger lately</h3><ul class="moves">${rows.map((r, i) => `<li class="${r.dir}" style="--i:${i}">
+          <span class="when">${clock(r.at)}</span><span class="what">${esc(r.what)}</span>
+          <span class="amt">${r.dir === "in" ? "+" : "−"}${num(u6(r.drops), u6(r.drops) < 0.01 ? 6 : 2)}</span>${link("xrpl", r.hash, "↗")}</li>`).join("")}</ul>` : "");
+    }
+    if (kind === "fxrp") {
+      const x = u6(a.fxrp);
+      return head("FXRP on Flare", num(x, 2), "FXRP", "XRP on Flare, one for one, in the account's own personal account. The agent reaches it only through XRPL payments the guard co-signs.") +
+        dl([["Personal account", addr("flareAddress", sa.personalAccount)], ["Minted", total("mint", "XRP")], ["Deposited", total("deposit", "FXRP")],
+          ["Claimed back", total("claim", "FXRP")], ["Redeemed", total("redeem", "FXRP") + (steps("redeem") ? " back to XRP" : "")],
+          ["A lot", "10 FXRP: FXRP goes back to XRP in whole lots, paid out on the ledger by FAssets agents"]]);
+    }
+    if (kind === "shares") {
+      const v = m.vault, sh = u6(a.shares), price = v ? Number(v.sharePrice6) / 1e6 : null, tvl = v ? u6(v.totalAssets) : null;
+      const q = v?.queue ?? [], periodEnd = v ? Number(v.periodEnd) * 1000 : null;
+      return head(`${cap(sa.vaultName ?? "Firelight")} shares`, num(sh, 2), "shares",
+          price ? `Worth ${num(sh * price, 2)} FXRP at ${num(price, 6)} FXRP a share: the vault's yield, ${price >= 1 ? "+" : ""}${num((price - 1) * 100, 3)}% since a share was 1.` : "The vault's receipt for deposits.") +
+        dl([["Vault", v?.address ? addr("flareAddress", v.address) : `${cap(sa.vaultName ?? "Firelight")}, vault 1`],
+          tvl ? ["This account", `${num(((sh * (price ?? 1)) / tvl) * 100, 2)}% of the ${num(tvl, 0)} FXRP the vault holds`] : null,
+          v ? ["Period", `#${esc(v.period)} ends in ${until(periodEnd)} · each lasts ${Math.round(Number(v.periodSeconds) / 3600)} h`] : null,
+          ["Withdrawing", "a withdrawal is booked for the next period and can be claimed once that period ends: 4 to 8 hours"]]) +
+        `<h3 class="sheet-h">On its way out</h3>${q.length ? `<ul class="moves queue">${q.map((w, i) => `<li class="${w.claimable ? "ready" : ""}" style="--i:${i}">
+          <span class="when">#${esc(w.period)}</span><span class="what">${w.claimable ? "Unlocked: the agent claims it on its next look" : `Unlocks in ${until(Number(w.unlocksAt) * 1000)}`}</span>
+          <span class="amt">${num(u6(w.assets), 2)} FXRP</span></li>`).join("")}</ul>` : `<p class="lede">Nothing right now. Once a period, the wheel starts withdrawing five lots.</p>`}`;
+    }
+    if (kind === "gas") {
+      const g = m.gasGuard ?? 0, per = m.perDecision ?? 0.12, n24 = m.stats?.decisions?.signed24h ?? null, p = m.pacing ?? { slowBelowC2flr: 25, restBelowC2flr: 5, slowEveryS: 900 };
+      const burn = n24 != null ? n24 * per : null, days = burn ? g / burn : null, top = Math.max(100, g * 1.15);
+      const mode = g < p.restBelowC2flr ? "Resting: it keeps the rest for a strike" : g < p.slowBelowC2flr ? `Slowing: one step every ${Math.round(p.slowEveryS / 60)} min` : "Full speed";
+      return head("The guard's gas", num(g, 2), "C2FLR", "Before it co-signs, the guard writes the reservation on Flare, and that costs gas. When it runs low, the agent asks less often, and then not at all.") +
+        `<div class="gauge" style="--g:${Math.min(1, g / top)};--slow:${p.slowBelowC2flr / top};--rest:${p.restBelowC2flr / top}"><i class="fill"></i><i class="mark slow"></i><i class="mark rest"></i></div>
+        <div class="gauge-legend"><span>rests at ${p.restBelowC2flr}</span><span>slows at ${p.slowBelowC2flr}</span><span>${num(g, 1)} now</span></div>` +
+        dl([["Now", mode], ["A decision", `${num(per, 4)} C2FLR, measured on the latest reservations`],
+          n24 != null ? ["Last 24 h", `${n24} co-signatures · ${num(burn, 2)} C2FLR`] : null,
+          days ? ["Enough for", `about ${days >= 2 ? `${num(days, 1)} days` : `${num(days * 24, 0)} hours`} at today's pace, ${Math.floor(g / per)} decisions`] : null,
+          ["Guard", addr("flareAddress", st.feed.keys?.guardFlare)]]) +
+        `<div class="sheet-actions"><a class="linkbtn" href="https://faucet.flare.network/coston2" target="_blank" rel="noopener">Top it up from the Coston2 faucet ↗</a></div>`;
+    }
+    return null;
+  }
   // ─── Tabs and segments: a lens that you can press, lift and drag ───────────
   // iOS 26's tab bar: under a finger the selection lifts into a larger, clearer lens that follows it
   // between the tabs; let go and it settles on the nearest one with a bounce.
@@ -2703,7 +3037,7 @@ void main() {
     st.m = build(feed);
     const fresh = animate ? st.m.decisions.filter((d) => !st.seen.has(d.key)) : [];
     st.m.decisions.forEach((d) => st.seen.add(d.key));
-    renderStatus(); renderNow(); renderTimeline({ flow: true, keep: true }); renderBudget(); renderKeys();
+    renderStatus(); renderNow(); renderTimeline({ flow: true, keep: true }); renderBudget(); renderKeys(); renderHow(); followNew();
     Glass.ringState($("#ring"), st.m.u.tripped); $("#ring").classList.toggle("coral", !!st.m.u.tripped);
     Glass.asleep(st.away);
     if (live) Glass.sweep($("#status"));
@@ -2773,11 +3107,11 @@ void main() {
   function menuFor(key, x, y) { const d = st.m?.decisions.find((q) => q.key === key); if (d) openMenu(x, y, d); }
 
   // ─── The pointer: its drop becomes the highlight of the control beneath ───
-  const HOVER = ".tab, #filters button, .linkbtn, .copy, .close, .signer, .faq summary, .decision, #status, .menu button";
-  const LIFT = ".tab, #filters button, .copy, .close, .linkbtn";
+  const HOVER = ".tab, #filters button, .linkbtn, .copy, .close, .signer, .faq summary, .decision, #status, .menu button, .try-b";
+  const LIFT = ".tab, #filters button, .copy, .close, .linkbtn, .try-b";
   function hoverOpts(el) {
     const layer = el.closest(".sheet, .menu") ? 1 : 0;
-    if (el.matches(".tab, #filters button, #status, .copy, .close")) return { radius: "capsule", layer };
+    if (el.matches(".tab, #filters button, #status, .copy, .close, .try-b")) return { radius: "capsule", layer };
     if (el.matches(".linkbtn")) return { radius: "capsule", inset: [12, 2], layer };
     if (el.matches(".signer")) return { radius: 22, layer };
     if (el.matches(".faq summary")) return { radius: 14, inset: [12, 0], layer };
@@ -2813,6 +3147,12 @@ void main() {
       if (press?.fired) { press = null; e.preventDefault(); return; }
       const goEl = e.target.closest("[data-go]"); if (goEl) { go(goEl.dataset.go); return; }
       const row = e.target.closest(".decision[data-key]"); if (row && !e.target.closest("a")) { openSheet(row.dataset.key, row); return; }
+      const pane = e.target.closest("[data-sheet]"); if (pane && !e.target.closest("a, button")) { openSheet(pane.dataset.sheet, pane); return; }
+      const fxb = e.target.closest("[data-fx]"); if (fxb) { pick(fxb.dataset.fx); return; }
+      if (e.target.closest("[data-fx-replay]") && st.flowD) { play(st.flowD, false); return; }
+      if (e.target.closest("[data-fx-open]") && st.flowD) { openSheet(st.flowD.key, e.target.closest("[data-fx-open]")); return; }
+      if (e.target.closest("[data-fx-live]")) { fx.follow = st.m.decisions.length ? st.m.decisions[st.m.decisions.length - 1].key : "none"; foot(st.flowD); return; }
+      if (e.target.closest("[data-fx-stop]")) { fx.follow = null; foot(st.flowD); return; }
       const cp = e.target.closest("[data-copy]"); if (cp) { copy(cp.dataset.copy, cp); return; }
       const sg = e.target.closest(".signer");
       if (sg) { const k = sg.dataset.k; st.signers.has(k) ? st.signers.delete(k) : st.signers.add(k); quorum(); }
@@ -2823,6 +3163,7 @@ void main() {
       if (/^[1-5]$/.test(e.key) && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) go(TABS[Number(e.key) - 1]);
       if (e.key === "/" && !typing) { e.preventDefault(); const was = st.onScreen; go("timeline"); setTimeout(() => $("#q").focus({ preventScroll: true }), was === "timeline" ? 0 : 420); }
       if (e.key === "Enter" && e.target.matches?.(".decision[data-key]")) { st.viaKey = true; openSheet(e.target.dataset.key, e.target); }
+      if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("[data-sheet]")) { e.preventDefault(); st.viaKey = true; openSheet(e.target.dataset.sheet, e.target); }
       if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && e.target.matches?.(".decision[data-key]")) { e.preventDefault(); const r = e.target.getBoundingClientRect(); menuFor(e.target.dataset.key, r.left + 40, r.top + r.height / 2); }
     });
     $("#scrim").addEventListener("click", closeSheet);
@@ -2967,7 +3308,7 @@ void main() {
     st.booted = true;
     syncScroll(); anchor();
     load();
-    setInterval(() => { if (st.feed) { renderStatus(); tickNext(); } }, 1000);
+    setInterval(() => { if (st.feed) { renderStatus(); tickNext(); tickUntil(); } }, 1000);
     // for tests: feed the page by hand
     window.__lanceaApply = (f, live = true) => apply(f, live);
   }

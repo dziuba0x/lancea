@@ -10,7 +10,7 @@
 [![demo](https://github.com/dziuba0x/lancea/actions/workflows/watch.yml/badge.svg)](https://github.com/dziuba0x/lancea/actions/workflows/watch.yml)
 [![release](https://img.shields.io/github/v/release/dziuba0x/lancea?color=c9d1d9&label=release)](https://github.com/dziuba0x/lancea/releases)
 [![live demo](https://img.shields.io/badge/live%20demo-24%2F7-35CFFF)](https://dziuba0x.github.io/lancea/)
-![tests](https://img.shields.io/badge/tests-39-2ea44f)
+![tests](https://img.shields.io/badge/tests-42-2ea44f)
 [![DELICTI](https://img.shields.io/badge/on-DELICTI%20v0.16-8957e5)](https://github.com/dziuba0x/delicti)
 ![Coston2](https://img.shields.io/badge/live%20on-Flare%20Coston2-e62058)
 ![XRPL](https://img.shields.io/badge/XRPL-testnet-23292f)
@@ -92,7 +92,7 @@ It stays that way until the principal looks and re-arms. It works in reverse too
 3. It redeems the FXRP to XRP.
 4. It mints the XRP to FXRP again and deposits it again.
 
-Each step is an XRPL payment that the guard prices and co-signs, on a $30 000 umbrella that runs 60 days. That is about 140 decisions a day. Nothing on the page is staged. The feed is the services' own journals and a fresh read of both chains, pushed every minute. A GitHub Actions [watchman](.github/workflows/watch.yml) reads the feed every half hour and raises the alarm when the demo needs a hand.
+Each step is an XRPL payment that the guard prices and co-signs, on a $30 000 umbrella that runs 60 days, under a $1 000 daily cap. The ring on the page is today's leash: it fills through the day and starts over at 00:00 UTC. That is about 140 decisions a day. Tap any of the four panes (XRP, FXRP, Firelight, the guard's gas) for everything the chains say about it: payments with their names, the vault's withdrawal queue with live countdowns, what a decision costs the guard and how long its gas lasts. In **How it works**, pick what the agent asks for, and a real decision of that kind draws its own path (claim, reading, price, verdict, and Flare's execution) with a link for every proof. Or watch the next one land live. Nothing on the page is staged. The feed is the services' own journals and a fresh read of both chains, pushed every minute. A GitHub Actions [watchman](.github/workflows/watch.yml) reads the feed every half hour and raises the alarm when the demo needs a hand.
 
 [dziuba0x.github.io/lancea](https://dziuba0x.github.io/lancea/) is the demo, live. It reads `feed.json` from the demo machine every minute. When the feed cannot be reached, it shows a dated snapshot and says so. When the machine has published nothing for 30 minutes, it says it is offline.
 
@@ -146,6 +146,7 @@ In order, on every payment. Any failure is a refusal, and a refusal is never a c
 | a Smart Accounts payment does what the principal allows: an allowed vault, a mint to its own personal account, no destination tag | the memo, decoded (`src/smart-accounts.ts`) | refused; struck when the principal opts in |
 | the umbrella's dollar budget, across every rail, at the FTSO price | `SummaMeter.wouldExceed` on Flare | refused; struck when it was an attempt |
 | the principal's rules: an hourly cap across rails, cooling for new payees | `spentAt` history, `account_tx` | refused; struck when the principal opts in |
+| today's cap: at most so many dollars per UTC day, across every rail | `spentAt` since 00:00 UTC | refused, never struck (the agent checks it before it asks) |
 | the umbrella is not tripped | `SummaMeter.tripped` | refused |
 | the reservation lands on Flare before the signature exists | `SummaMeter.note` | nothing signed |
 
@@ -286,7 +287,7 @@ set -a; . ./.env; set +a; LANCEA_CONFIG=~/.config/lancea/config.json npx tsx scr
 ```sh
 git clone https://github.com/dziuba0x/lancea && cd lancea
 npm ci
-npm test        # 39 tests, offline: the guard, its rules, Smart Accounts, the autopilot and its wheel, the services, the dashboard
+npm test        # 42 tests, offline: the guard, its rules, Smart Accounts, the autopilot and its wheel, the services, the dashboard
 ```
 
 The live scripts need a Coston2 key with C2FLR, and DELICTI's build for the full ABIs. The services do not need either: they carry the few ABIs they call (`src/flare.ts`).

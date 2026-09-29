@@ -41,7 +41,8 @@ export interface LanceaConfig {
   /** Every co-signature costs the guard gas on Flare: below `slowBelowC2flr` the agent asks at most once per
    *  `slowEveryS`; below `restBelowC2flr` it asks nothing, so the guard keeps enough to strike. */
   pacing?: { slowBelowC2flr: number; restBelowC2flr: number; slowEveryS: number };
-  guard: { host: string; port: number; strikeOnPolicy: boolean; hourlyCapUsd6?: string; newPayeeCapUsd6?: string };
+  /** `dailyCapUsd6`: at most this many µUSD per UTC day across every rail (a refusal, never a strike). */
+  guard: { host: string; port: number; strikeOnPolicy: boolean; hourlyCapUsd6?: string; newPayeeCapUsd6?: string; dailyCapUsd6?: string };
   dataDir: string;
 }
 

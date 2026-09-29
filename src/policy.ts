@@ -20,6 +20,9 @@ export interface Policy {
 }
 
 export const HOUR_S = 3_600n;
+export const DAY_S = 86_400n;
+/** The start of the UTC day that `t` (unix seconds) falls in: the day a daily cap counts. */
+export const dayStart = (t: bigint): bigint => t - (t % DAY_S);
 export const DEFAULT_COOLING_S = 86_400n;
 /** XRPL dates count seconds from 2000-01-01. */
 export const RIPPLE_EPOCH = 946_684_800n;
@@ -27,6 +30,11 @@ export const RIPPLE_EPOCH = 946_684_800n;
 /** Spend in the last hour across every rail, from the meter's history, plus this payment. */
 export function overHourlyCap(spentNow: bigint, spentHourAgo: bigint, usd6: bigint, cap: bigint): boolean {
   return spentNow - spentHourAgo + usd6 > cap;
+}
+
+/** Spend since 00:00 UTC across every rail, from the meter's history, plus this payment. */
+export function overDailyCap(spentNow: bigint, spentAtDayStart: bigint, usd6: bigint, cap: bigint): boolean {
+  return spentNow - spentAtDayStart + usd6 > cap;
 }
 
 export interface PayeeHistory {

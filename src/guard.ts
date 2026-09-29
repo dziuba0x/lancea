@@ -35,7 +35,7 @@ import { Wallet, multisign, decode, type Payment } from "xrpl";
 import { XrplHttp } from "./xrpl-http.js";
 import { createPublicClient, createWalletClient, http, keccak256, type Address, type Hex, type Chain, stringToHex, pad } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { type Policy, HOUR_S, DEFAULT_COOLING_S, RIPPLE_EPOCH, overHourlyCap, payeeHistory, isNewPayee, overNewPayeeCap } from "./policy.js";
+import { type Policy, HOUR_S, DEFAULT_COOLING_S, RIPPLE_EPOCH, dayStart, overDailyCap, overHourlyCap, payeeHistory, isNewPayee, overNewPayeeCap } from "./policy.js";
 import { type ActionPolicy, decodeReference, decodeMint, judge } from "./smart-accounts.js";
 
 /** Where a guarded account meets Flare Smart Accounts (src/smart-accounts.ts). */
@@ -120,6 +120,9 @@ export interface GuardConfig {
   /** The most a transaction may burn in fees, in drops (default 10 000 = 0.01 XRP). A fee is outflow too:
    *  an agent could otherwise spend its budget on nothing. */
   maxFeeDrops?: bigint;
+  /** Lancea's daily cap: at most this many µUSD per UTC day across every rail. Crossing it is a refusal, never a
+   *  strike: an allowance used up is not an attack (the agent checks it before it asks). */
+  dailyCapUsd6?: bigint;
   /** Also strike when a payment breaks `policy` or `smartAccounts.policy` (default false: the principal opts in). */
   strikeOnPolicy?: boolean;
   /** What the account may do on Flare through its smart account. Without it, payments to the
@@ -188,6 +191,14 @@ export class Guard {
       return { signed: false, reason: `SummaMeter unreadable, nothing signed: ${short(e)}` };
     }
     if (stop) return this.refuse(agentBlob, usd6);
+
+    if (this.cfg.dailyCapUsd6 !== undefined) {
+      let over: string | undefined;
+      try { over = await this.overDaily(usd6, this.cfg.dailyCapUsd6); } catch (e) {
+        return { signed: false, usd6, reason: `the daily cap is unreadable, nothing signed: ${short(e)}` };
+      }
+      if (over) return { signed: false, usd6, reason: over };
+    }
 
     let broken: string | undefined;
     try { broken = await this.checkPolicy(tx, drops, usd6); } catch (e) {
@@ -329,6 +340,18 @@ export class Guard {
     } catch (e) {
       return { ok: false, error: `${what}: ${short(e)}`, hash };
     }
+  }
+
+  /** Today's spend (since 00:00 UTC, by the chain's clock) plus this payment, against the daily cap. */
+  private async overDaily(usd6: bigint, cap: bigint): Promise<string | undefined> {
+    const { meter, umbrellaId } = this.cfg;
+    const start = dayStart((await this.pc.getBlock()).timestamp);
+    const [spent, atStart] = await Promise.all([
+      this.pc.readContract({ address: meter, abi: summaMeterAbi, functionName: "spentUsd6", args: [umbrellaId] }) as Promise<bigint>,
+      this.pc.readContract({ address: meter, abi: summaMeterAbi, functionName: "spentAt", args: [umbrellaId, start] }) as Promise<bigint>,
+    ]);
+    if (!overDailyCap(spent, atStart, usd6, cap)) return undefined;
+    return `today's cap: ${Number(cap) / 1e6} USD a day across every rail, ${(Number(spent - atStart) / 1e6).toFixed(2)} spent since 00:00 UTC`;
   }
 
   /** The principal's own rules (src/policy.ts). Both work against the meter deployed today. */

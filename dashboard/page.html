@@ -137,36 +137,37 @@
           <h1>An AI agent that cannot move money alone.</h1>
           <p>Lancea gives an agent real work on real rails, and a leash it cannot slip: a second key, a dollar budget priced by Flare, and a tripwire. Every step leaves two witnesses you can check yourself.</p>
         </div>
-        <div class="span-12 glass pane flow rise">
-          <svg viewBox="0 0 1100 300" role="img" aria-label="The agent proposes, the guard reads the transaction and prices it on Flare, then co-signs or refuses">
-            <defs>
-              <linearGradient id="gc" x1="0" x2="1"><stop offset="0" stop-color="#35cfff" stop-opacity="0"/><stop offset="1" stop-color="#35cfff" stop-opacity=".9"/></linearGradient>
-              <linearGradient id="ga" x1="0" x2="1"><stop offset="0" stop-color="#ffae45" stop-opacity=".9"/><stop offset="1" stop-color="#ffae45" stop-opacity="0"/></linearGradient>
-            </defs>
+        <div class="span-12 glass pane flow rise" id="flow">
+          <div class="flow-head">
+            <div><span class="label">Try it</span><h2>Pick what the agent asks for.</h2></div>
+            <p class="flow-note">Each one plays a real decision from the chains, step by step, with its proofs.</p>
+          </div>
+          <svg id="fx" viewBox="0 0 1100 300" role="img" aria-label="The agent proposes; the guard reads the transaction, prices it on Flare, then co-signs or refuses">
             <g font-family="Geist, sans-serif" fill="#f5f5f7">
-              <g transform="translate(40 110)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">The agent</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">PROPOSES · WEIGHT 1</text></g>
-              <g transform="translate(430 110)"><rect width="240" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.35)"/><text x="120" y="38" text-anchor="middle" font-size="17" font-weight="600">The guard</text><text x="120" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">READS · PRICES · SIGNS</text></g>
-              <g transform="translate(860 40)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">XRP Ledger</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">2 OF 2 · IT MOVES</text></g>
-              <g transform="translate(860 180)"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.35)" stroke="rgba(255,107,107,.45)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">Strike on Flare</text><text x="100" y="60" text-anchor="middle" font-size="12" fill="#ff6b6b" font-family="Geist Mono, monospace" letter-spacing="1.5">REFUSED · TRIPWIRE</text></g>
-              <g transform="translate(450 14)"><rect width="200" height="56" rx="18" fill="rgba(3,4,9,.35)" stroke="rgba(255,174,69,.4)"/><text x="100" y="34" text-anchor="middle" font-size="14" font-weight="500">SummaMeter · FTSO</text></g>
+            <path class="fx-edge" pathLength="1" id="e-says" d="M240 140 H430" stroke="#35cfff"/>
+            <path class="fx-edge" pathLength="1" id="e-does" d="M240 164 H430" stroke="#ffae45"/>
+            <path class="fx-edge" pathLength="1" id="e-price" d="M550 110 V70" stroke="#ffae45"/>
+            <path class="fx-edge" pathLength="1" id="e-sign" d="M670 140 C 760 140 770 82 860 82" stroke="#f5f5f7"/>
+            <path class="fx-edge" pathLength="1" id="e-strike" d="M670 164 C 760 164 770 222 860 222" stroke="#ff6b6b"/>
+            <path class="fx-edge" pathLength="1" id="e-flare" d="M960 124 V180" stroke="#ffae45"/>
+            <text class="fx-tag" id="t-says" x="335" y="130" text-anchor="middle" fill="#35cfff">WHAT IT SAYS</text>
+            <text class="fx-tag" id="t-does" x="335" y="186" text-anchor="middle" fill="#ffae45">WHAT IT DOES</text>
+          <g transform="translate(40 110)"><g class="fx on" id="n-agent"><circle class="ping" cx="100" cy="42" r="48"/><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">The agent</text><text class="fsub" id="s-agent" x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">PROPOSES · WEIGHT 1</text></g></g>
+          <g transform="translate(430 110)"><g class="fx" id="n-guard"><rect width="240" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(245,245,247,.35)"/><text x="120" y="38" text-anchor="middle" font-size="17" font-weight="600">The guard</text><text class="fsub" id="s-guard" x="120" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">READS · PRICES · SIGNS</text></g></g>
+          <g transform="translate(450 14)"><g class="fx" id="n-meter"><rect width="200" height="56" rx="18" fill="rgba(3,4,9,.42)" stroke="rgba(255,174,69,.45)"/><text x="100" y="26" text-anchor="middle" font-size="14" font-weight="600">SummaMeter · FTSO</text><text class="fsub" id="s-meter" x="100" y="44" text-anchor="middle" font-size="10.5" fill="#ffae45" font-family="Geist Mono, monospace" letter-spacing="1.5">PRICES IT</text></g></g>
+          <g transform="translate(860 40)"><g class="fx" id="n-xrpl"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(245,245,247,.18)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">XRP Ledger</text><text class="fsub" id="s-xrpl" x="100" y="60" text-anchor="middle" font-size="12" fill="#a1a1a6" font-family="Geist Mono, monospace" letter-spacing="1.5">2 OF 2 · IT MOVES</text></g></g>
+          <g transform="translate(860 180)"><g class="fx" id="n-strike"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(255,107,107,.5)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">Strike on Flare</text><text class="fsub" id="s-strike" x="100" y="60" text-anchor="middle" font-size="12" fill="#ff6b6b" font-family="Geist Mono, monospace" letter-spacing="1.5">REFUSED · TRIPWIRE</text></g></g>
+          <g transform="translate(860 180)"><g class="fx" id="n-flare"><rect width="200" height="84" rx="22" fill="rgba(3,4,9,.42)" stroke="rgba(255,174,69,.45)"/><text x="100" y="38" text-anchor="middle" font-size="17" font-weight="600">Flare executes</text><text class="fsub" id="s-flare" x="100" y="60" text-anchor="middle" font-size="12" fill="#ffae45" font-family="Geist Mono, monospace" letter-spacing="1.5">THE PERSONAL ACCOUNT</text></g></g>
+            <text class="fx-hint" id="fx-hint" x="650" y="152" text-anchor="middle" font-size="15" fill="#a1a1a6">Pick a step below: the rest of the path draws itself, from a real decision.</text>
             </g>
-            <path id="p1" d="M240 140 H430" stroke="rgba(53,207,255,.35)" stroke-width="1.5" fill="none"/>
-            <path id="p1b" d="M240 164 H430" stroke="rgba(255,174,69,.35)" stroke-width="1.5" fill="none"/>
-            <path id="p2" d="M670 140 C 760 140 770 82 860 82" stroke="rgba(245,245,247,.4)" stroke-width="1.5" fill="none"/>
-            <path id="p3" d="M670 164 C 760 164 770 222 860 222" stroke="rgba(255,107,107,.4)" stroke-width="1.5" fill="none"/>
-            <path id="p4" d="M550 110 V70" stroke="rgba(255,174,69,.4)" stroke-width="1.5" fill="none"/>
-            <text x="335" y="130" text-anchor="middle" font-family="Geist Mono, monospace" font-size="11" letter-spacing="1.4" fill="#35cfff">WHAT IT SAYS</text>
-            <text x="335" y="186" text-anchor="middle" font-family="Geist Mono, monospace" font-size="11" letter-spacing="1.4" fill="#ffae45">WHAT IT DOES</text>
-            <circle r="5" fill="#35cfff"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.45;1" calcMode="linear"><mpath href="#p1"/></animateMotion></circle>
-            <circle r="5" fill="#ffae45"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.45;1" calcMode="linear"><mpath href="#p1b"/></animateMotion></circle>
-            <g><path d="M0 -8 1.5 -1.5 8 0 1.5 1.5 0 8 -1.5 1.5 -8 0 -1.5 -1.5Z" fill="#fff"><animateMotion dur="3.2s" repeatCount="indefinite" keyPoints="0;0;1" keyTimes="0;.5;1" calcMode="linear"><mpath href="#p2"/></animateMotion></path></g>
-            <circle r="4" fill="#ffae45"><animateMotion dur="1.6s" repeatCount="indefinite"><mpath href="#p4"/></animateMotion></circle>
           </svg>
+          <div class="try-actions" id="try-actions" role="group" aria-label="Pick what the agent asks for"></div>
+          <div class="try-foot" id="try-foot"></div>
         </div>
-        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--cyan)"></i>01 · The claim</span><h3>The agent proposes</h3><p>It signs a transaction with its own key and says, in words, what it is doing and why. Its key is only weight 1, so the transaction cannot move yet.</p></div>
-        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--amber)"></i>02 · The reading</span><h3>The guard reads it itself</h3><p>The guard ignores the words and decodes the transaction: who receives it, how much, and what any memo tells Flare to do.</p></div>
-        <div class="span-3 glass pane step rise"><span class="label"><i style="background:var(--amber)"></i>03 · The price</span><h3>One dollar budget</h3><p>Flare's FTSO prices the step. SummaMeter adds it to one budget that covers every rail, and refuses what would cross it.</p></div>
-        <div class="span-3 glass pane step rise"><span class="label"><i style="background:#fff"></i>04 · The verdict</span><h3>A second signature, or a strike</h3><p>Inside your budget and rules, the guard adds the second signature and the ledger accepts it. Outside, it refuses and writes a strike on Flare that trips every rail.</p></div>
+        <div class="span-3 glass pane step rise" id="card-claim"><span class="label"><i style="background:var(--cyan)"></i>01 · The claim</span><h3>The agent proposes</h3><p>It signs a transaction with its own key and says, in words, what it is doing and why. Its key is only weight 1, so the transaction cannot move yet.</p><div class="live" aria-live="polite"></div></div>
+        <div class="span-3 glass pane step rise" id="card-read"><span class="label"><i style="background:var(--amber)"></i>02 · The reading</span><h3>The guard reads it itself</h3><p>The guard ignores the words and decodes the transaction: who receives it, how much, and what any memo tells Flare to do.</p><div class="live" aria-live="polite"></div></div>
+        <div class="span-3 glass pane step rise" id="card-price"><span class="label"><i style="background:var(--amber)"></i>03 · The price</span><h3>One dollar budget</h3><p>Flare's FTSO prices the step. SummaMeter adds it to one budget that covers every rail, and refuses what would cross it.</p><div class="live" aria-live="polite"></div></div>
+        <div class="span-3 glass pane step rise" id="card-verdict"><span class="label"><i style="background:#fff"></i>04 · The verdict</span><h3>A second signature, or a strike</h3><p>Inside your budget and rules, the guard adds the second signature and the ledger accepts it. Outside, it refuses and writes a strike on Flare that trips every rail.</p><div class="live" aria-live="polite"></div></div>
         <div class="span-12 glass pane faq rise">
           <div class="pane-head"><h2>Questions</h2></div>
           <details><summary>Why two witnesses?</summary><p>What the agent says is its claim. What the transaction does is the fact, read by the guard from the signed transaction. When the two agree, the guard signs: agreement is evidence. When they do not, the difference is the finding.</p></details>

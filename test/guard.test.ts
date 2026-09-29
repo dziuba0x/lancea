@@ -9,7 +9,7 @@ import http from "node:http";
 import { Wallet, type Payment } from "xrpl";
 import { defineChain, decodeFunctionData, encodeFunctionResult, keccak256, parseTransaction, type Address, type Hex } from "viem";
 import { generatePrivateKey } from "viem/accounts";
-import { Guard, summaMeterAbi, registryAbi } from "../src/guard.js";
+import { Guard, summaMeterAbi, registryAbi, type GuardConfig } from "../src/guard.js";
 import type { XrplHttp } from "../src/xrpl-http.js";
 
 const Z = `0x${"0".repeat(64)}` as Hex;
@@ -89,12 +89,12 @@ function flare(s: { stop: boolean; usd6: bigint; tripped: boolean; spentAt: bigi
   };
 }
 
-function setup(url: string) {
+function setup(url: string, extra: Partial<GuardConfig> = {}) {
   const account = Wallet.generate(), agent = Wallet.generate();
   const xrpl = { submitted: 0, async submitAndWait() { this.submitted++; return { hash: "CAFE", result: "tesSUCCESS" }; }, async rpc() { return {}; } };
   const chain = defineChain({ id: 114, name: "mock", nativeCurrency: { name: "C2FLR", symbol: "C2FLR", decimals: 18 }, rpcUrls: { default: { http: [url] } } });
   const guard = new Guard({ account: account.address, guardSeed: Wallet.generate().seed!, flareKey: generatePrivateKey(), chain, rpcUrl: url,
-    meter: METER, umbrellaId: 25n, xrplSource: "testXRP" }, xrpl as unknown as XrplHttp);
+    meter: METER, umbrellaId: 25n, xrplSource: "testXRP", ...extra }, xrpl as unknown as XrplHttp);
   const pay = (sequence: number): string => agent.sign({ TransactionType: "Payment", Account: account.address, Destination: Wallet.generate().address,
     Amount: "20000000", Fee: "36", Sequence: sequence, LastLedgerSequence: 1000, SigningPubKey: "" } as Payment, true).tx_blob;
   return { guard, xrpl, pay };
@@ -152,5 +152,21 @@ test("within the budget and the key can pay: reserved, then co-signed", async ()
     const d = await guard.cosign(pay(1));
     assert.equal(d.signed, true);
     assert.equal(xrpl.submitted, 1);
+  } finally { node.close(); }
+});
+
+test("the daily cap: past today's allowance the guard refuses and strikes nothing; within it, it signs", async () => {
+  const s = { stop: false, usd6: 30_000_000n, tripped: false, spentAt: 0n, budget: 40_000_000n, fill: "ok" as const };
+  const node = await mockNode(flare(s));
+  try {
+    const over = setup(node.url, { dailyCapUsd6: 20_000_000n, strikeOnPolicy: true });
+    const d = await over.guard.cosign(over.pay(1));
+    assert.equal(d.signed, false);
+    assert.match((d as { reason: string }).reason, /today's cap: 20 USD a day across every rail, 0.00 spent since 00:00 UTC/);
+    assert.equal((d as { struck?: string }).struck, undefined);
+    assert.equal(s.tripped, false);
+    assert.equal(over.xrpl.submitted, 0);
+    const within = setup(node.url, { dailyCapUsd6: 40_000_000n });
+    assert.equal((await within.guard.cosign(within.pay(2))).signed, true);
   } finally { node.close(); }
 });

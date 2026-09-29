@@ -126,7 +126,7 @@ async function main() {
     meter: c.umbrella.meter, umbrellaId: BigInt(c.umbrella.id), xrplSource: c.network.xrplSource,
     smartAccounts: { operators: c.smartAccounts.operators, coreVault: c.smartAccounts.coreVault,
       policy: { vaults: [c.smartAccounts.vaultId], personalAccount: c.smartAccounts.personalAccount } },
-    strikeOnPolicy: c.guard.strikeOnPolicy, policy,
+    strikeOnPolicy: c.guard.strikeOnPolicy, policy, dailyCapUsd6: c.guard.dailyCapUsd6 ? BigInt(c.guard.dailyCapUsd6) : undefined,
   }, xrpl);
   const journal = new Journal(join(c.dataDir, "guard.jsonl"));
   const server = guardServer({

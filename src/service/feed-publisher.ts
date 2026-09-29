@@ -13,13 +13,14 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, type PublicClient } from "viem";
 import { short } from "../guard.js";
 import { coston2 } from "../flare.js";
 import { XrplHttp } from "../xrpl-http.js";
 import { Journal, toJson } from "./journal.js";
 import { loadConfig } from "./config.js";
 import { buildFeed, readChain } from "./feed.js";
+import { JournalStats } from "./stats.js";
 
 export class FeedRepo {
   constructor(readonly dir: string, readonly remote: string, readonly branch = "main", readonly sshCommand?: string) {}
@@ -53,6 +54,19 @@ export class FeedRepo {
 /** A feed's content without its timestamp: what decides whether it changed. */
 export const contentHash = (feed: Record<string, unknown>) => createHash("sha256").update(toJson({ ...feed, generatedAt: undefined })).digest("hex");
 
+/** What a co-signature costs the guard, measured: the gas of its latest reservations on Flare, averaged. */
+export async function costPerDecision(pc: PublicClient, hashes: string[], cache: Map<string, bigint>): Promise<string | undefined> {
+  for (const h of hashes) {
+    if (cache.has(h)) continue;
+    try {
+      const r = await pc.getTransactionReceipt({ hash: h as `0x${string}` });
+      cache.set(h, r.gasUsed * r.effectiveGasPrice);
+    } catch { /* not found yet, or the node is busy: the next minute asks again */ }
+  }
+  const known = hashes.filter((h) => cache.has(h)).map((h) => cache.get(h)!);
+  return known.length ? (known.reduce((a, b) => a + b, 0n) / BigInt(known.length)).toString() : undefined;
+}
+
 async function main() {
   const c = loadConfig();
   if (!c.feed?.repo) throw new Error("config.feed.repo is not set: there is nowhere to publish");
@@ -61,6 +75,8 @@ async function main() {
     `ssh -i ${join(keys, "feed_deploy_key")} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${join(c.dataDir, "known_hosts")}`);
   const guardJournal = new Journal(join(c.dataDir, "guard.jsonl"));
   const autopilotJournal = new Journal(join(c.dataDir, "autopilot.jsonl"));
+  const stats = new JournalStats(join(c.dataDir, "guard.jsonl"), join(c.dataDir, "autopilot.jsonl"));
+  const costs = new Map<string, bigint>(); // reservation → what it cost the guard, read once
   const xrpl = new XrplHttp(c.network.xrplRpc);
   const pc = createPublicClient({ chain: coston2(c.network.rpcUrl), transport: http(c.network.rpcUrl) });
   const every = (c.feed.publishSeconds ?? 60) * 1000, heartbeat = (c.feed.heartbeatSeconds ?? 600) * 1000;
@@ -69,7 +85,10 @@ async function main() {
   console.log(`lancea feed → ${c.feed.repo} (${c.feed.branch ?? "main"}) every ${every / 1000} s`);
   while (!stopping) {
     try {
-      const feed = buildFeed(c, await readChain(c, xrpl, pc as any), guardJournal.tail(100), autopilotJournal.tail(100));
+      stats.update();
+      const perDecisionWei = await costPerDecision(pc as any, stats.recentReservations(), costs);
+      const feed = buildFeed(c, await readChain(c, xrpl, pc as any, stats.topups.hashes), guardJournal.tail(100), autopilotJournal.tail(100), new Date(),
+        { stats: stats.snapshot(), exemplars: stats.exemplars, perDecisionWei });
       const h = contentHash(feed);
       if (h !== lastHash || Date.now() - lastPush >= heartbeat) {
         repo.publish(toJson(feed));
