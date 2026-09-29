@@ -10,7 +10,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createPublicClient, http, type PublicClient } from "viem";
@@ -20,7 +20,7 @@ import { XrplHttp } from "../xrpl-http.js";
 import { Journal, toJson } from "./journal.js";
 import { loadConfig } from "./config.js";
 import { buildFeed, readChain } from "./feed.js";
-import { JournalStats } from "./stats.js";
+import { BrainLog, JournalStats } from "./stats.js";
 
 export class FeedRepo {
   constructor(readonly dir: string, readonly remote: string, readonly branch = "main", readonly sshCommand?: string) {}
@@ -76,6 +76,7 @@ async function main() {
   const guardJournal = new Journal(join(c.dataDir, "guard.jsonl"));
   const autopilotJournal = new Journal(join(c.dataDir, "autopilot.jsonl"));
   const stats = new JournalStats(join(c.dataDir, "guard.jsonl"), join(c.dataDir, "autopilot.jsonl"));
+  const brain = new BrainLog(c.dataDir);
   const costs = new Map<string, bigint>(); // reservation → what it cost the guard, read once
   const xrpl = new XrplHttp(c.network.xrplRpc);
   const pc = createPublicClient({ chain: coston2(c.network.rpcUrl), transport: http(c.network.rpcUrl) });
@@ -86,9 +87,12 @@ async function main() {
   while (!stopping) {
     try {
       stats.update();
+      brain.update();
       const perDecisionWei = await costPerDecision(pc as any, stats.recentReservations(), costs);
       const feed = buildFeed(c, await readChain(c, xrpl, pc as any, stats.topups.hashes), guardJournal.tail(100), autopilotJournal.tail(100), new Date(),
-        { stats: stats.snapshot(), exemplars: stats.exemplars, perDecisionWei });
+        { stats: stats.snapshot(), exemplars: stats.exemplars, perDecisionWei, brain: brain.section() });
+      writeFileSync(join(c.dataDir, "feed.json.tmp"), toJson(feed)); // for the brain on this machine: the freshest feed, every minute
+      renameSync(join(c.dataDir, "feed.json.tmp"), join(c.dataDir, "feed.json"));
       const h = contentHash(feed);
       if (h !== lastHash || Date.now() - lastPush >= heartbeat) {
         repo.publish(toJson(feed));

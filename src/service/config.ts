@@ -42,8 +42,36 @@ export interface LanceaConfig {
    *  `slowEveryS`; below `restBelowC2flr` it asks nothing, so the guard keeps enough to strike. */
   pacing?: { slowBelowC2flr: number; restBelowC2flr: number; slowEveryS: number };
   /** `dailyCapUsd6`: at most this many µUSD per UTC day across every rail (a refusal, never a strike). */
-  guard: { host: string; port: number; strikeOnPolicy: boolean; hourlyCapUsd6?: string; newPayeeCapUsd6?: string; dailyCapUsd6?: string };
+  /** `coolingS`: how long a payee stays new (default a day); `knownPayees`: never new. */
+  guard: { host: string; port: number; strikeOnPolicy: boolean; hourlyCapUsd6?: string; newPayeeCapUsd6?: string; dailyCapUsd6?: string; coolingS?: number; knownPayees?: string[] };
   dataDir: string;
+  /** The brain (src/brain/server.ts): Gemini on its free tier, on this server, holding no key of this account. */
+  brain?: BrainConfig;
+}
+
+export interface BrainConfig {
+  /** The public API (127.0.0.1, the tunnel's target) and the autopilot's (127.0.0.1 only). */
+  port: number;
+  internalPort: number;
+  /** The autopilot asks the model for each step (the rules decide whenever it cannot). */
+  pilot?: boolean;
+  /** Model chains, first choice first: a model whose free quota is spent hands over to the next. */
+  models?: { chat?: string[]; pilot?: string[]; sentinel?: string[] };
+  /** How hard Gemini 3 models think, per job ("minimal", "low", "medium", "high"); the model's default when absent. */
+  thinking?: { chat?: string; pilot?: string; sentinel?: string };
+  /** Pages that may call the public API (CORS). */
+  origins?: string[];
+  /** "quick": a Cloudflare quick tunnel (a random https://….trycloudflare.com, no account); "off": none. */
+  tunnel?: "quick" | "off";
+  cloudflared?: string;
+  /** The Sentinel's rhythm: a note this often, and early after an incident. */
+  reflectEveryS?: number;
+  /** [label, path] of the documents the assistant can search (paths relative to the working directory). */
+  knowledge?: [string, string][];
+  /** The playground: its own config and keys directory (guard.json, agent.json, token, principal). */
+  playground?: { config: string; keys: string; rearmAfterS?: number; keepXrp?: number; refillXrp?: number; minGuardC2flr?: number };
+  /** Rate limits: [count, window in seconds]. */
+  limits?: { chatPerIp?: [number, number]; chatPerIpDay?: number; chatGlobal?: [number, number]; chatGlobalDay?: number; actPerIp?: [number, number]; actPerIpDay?: number; actGlobal?: [number, number] };
 }
 
 export interface GuardKeys { xrplSeed: string; flareKey: Hex }
@@ -85,12 +113,15 @@ export const venueOf = (c: LanceaConfig): Venue => ({
 const keysDir = () => process.env.LANCEA_KEYS ?? "keys";
 
 /** A key file's contents, if only its owner can read it. */
-function secret(name: string): string {
-  const path = join(keysDir(), name);
+function secret(name: string, dir = keysDir()): string {
+  const path = join(dir, name);
   const mode = statSync(path).mode & 0o777;
   if (mode & 0o077) throw new Error(`${path} is readable by others (mode ${mode.toString(8)}): chmod 600 it first`);
   return readFileSync(path, "utf8").trim();
 }
+
+/** A secret by name from $LANCEA_KEYS, only if its owner alone can read it (the brain's Gemini key: "gemini"). */
+export const loadSecret = (name: string, dir?: string): string => secret(name, dir);
 
 export const loadGuardKeys = (): GuardKeys => JSON.parse(secret("guard.json"));
 export const loadAgentKeys = (): AgentKeys => JSON.parse(secret("agent.json"));

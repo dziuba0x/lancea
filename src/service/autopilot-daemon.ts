@@ -25,6 +25,7 @@ import { toPayment, type State, type Step, type StepKind, type Strategy, type Ve
 import { readQueue } from "../firelight.js";
 import { dayStart, overDailyCap } from "../policy.js";
 import { RulesBrain, type Brain } from "../brain.js";
+import { AiBrain, remotePilot } from "../brain/pilot.js";
 import { short, summaMeterAbi } from "../guard.js";
 import { XrplHttp } from "../xrpl-http.js";
 import { b32, coston2, COSTON2, meterAbi, registryAbi, smartAccountsAbi } from "../flare.js";
@@ -130,7 +131,7 @@ export class Autopilot {
     const skip = new Set([...this.resting].filter(([, until]) => until > t).map(([kind]) => kind));
     const p = await this.o.brain.decide(s, strategy, skip);
     if (!p.step) {
-      this.once("idle", { state: s, why: p.why, by: p.by }, `idle ${toJson(s)}`);
+      this.once("idle", { state: s, why: p.why, by: p.by, ...(p.model ? { model: p.model } : {}) }, `idle ${toJson(s)}`);
       return `idle: ${p.why}`;
     }
     const pay = toPayment(p.step, this.o.venue);
@@ -151,7 +152,7 @@ export class Autopilot {
     this.last = "";
     this.lastAsk = t;
     const blob = await this.o.sign(pay);
-    journal.append("proposal", { state: s, step: p.step, why: p.why, by: p.by });
+    journal.append("proposal", { state: s, step: p.step, why: p.why, by: p.by, ...(p.model ? { model: p.model } : {}) });
     let v: Verdict;
     try {
       v = await this.o.guard.cosign({ blob, intent: p.step, why: p.why, by: p.by });
@@ -233,7 +234,7 @@ export class ChainObserver implements Observer {
 export const httpGuard = (url: string, token: string): GuardClient => ({
   async cosign(r) {
     const res = await fetch(`${url}/cosign`, {
-      method: "POST",
+      method: "POST", signal: AbortSignal.timeout(150_000), // a reservation and a submission take seconds, not minutes
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: toJson(r),
     });
@@ -254,7 +255,7 @@ export async function testnetFaucet(url: string, destination: string, drops: big
 }
 
 /** The umbrella names its agent; the agent's consent is on-chain before anything is bonded against it. */
-async function acknowledge(c: LanceaConfig, evmKey: Hex, journal: Journal): Promise<void> {
+export async function acknowledge(c: LanceaConfig, evmKey: Hex, journal: Journal): Promise<void> {
   const chain = coston2(c.network.rpcUrl);
   const pc = createPublicClient({ chain, transport: http(c.network.rpcUrl) });
   const id = BigInt(c.umbrella.id);
@@ -286,8 +287,10 @@ async function main() {
     targetDrops: BigInt(c.keeper.targetDrops), refillDrops: BigInt(c.keeper.refillDrops), everyS: c.keeper.everyS,
     faucet: (drops: bigint) => testnetFaucet(xrpl.faucet, c.account, drops),
   } : undefined;
+  // with the brain service on this machine, a model chooses each step inside the rules' bounds; the rules whenever it cannot
+  const brain = c.brain?.pilot ? new AiBrain(remotePilot(`http://127.0.0.1:${c.brain.internalPort ?? 8791}/decide`, 45_000)) : new RulesBrain();
   const pilot = new Autopilot({
-    brain: new RulesBrain(), strategy, venue: venueOf(c),
+    brain, strategy, venue: venueOf(c),
     observer: new ChainObserver(c, xrpl, pc, !!strategy.loop), guard: httpGuard(`http://${c.guard.host}:${c.guard.port}`, token),
     sign: async (tx) => agent.sign(await xrpl.autofill<Payment>(tx, 2), true).tx_blob,
     budget: async (tx) => {
@@ -310,7 +313,7 @@ async function main() {
     pacing: { slowBelowWei: parseEther(String(pace.slowBelowC2flr)), restBelowWei: parseEther(String(pace.restBelowC2flr)), slowEveryS: pace.slowEveryS },
     keeper,
   });
-  journal.append("start", { agent: agent.address, account: c.account, umbrella: c.umbrella.id, brain: "rules", tickSeconds: c.autopilot.tickSeconds,
+  journal.append("start", { agent: agent.address, account: c.account, umbrella: c.umbrella.id, brain: c.brain?.pilot ? "ai" : "rules", tickSeconds: c.autopilot.tickSeconds,
     wheel: strategy.loop ? { lots: strategy.loop.lots, lotDrops: strategy.loop.lotDrops } : undefined, keeper: keeper ? { targetDrops: keeper.targetDrops, refillDrops: keeper.refillDrops } : undefined });
   console.log(`lancea autopilot ${agent.address} | account ${c.account} | a tick every ${c.autopilot.tickSeconds} s` +
     (strategy.loop ? ` | the wheel: ${strategy.loop.lots} lots a period` : "") + (keeper ? ` | keeper: to ${Number(keeper.targetDrops) / 1e6} XRP` : ""));

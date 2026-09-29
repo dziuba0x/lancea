@@ -5,6 +5,7 @@
 - The account: master key disabled; SignerList principal 2, agent 1, guard 1; quorum 2. The agent's key alone signs nothing valid.
 - The guard: reads the agent's signed blob, checks the fee cap, decodes Flare Smart Accounts instructions (operator memos, Core Vault mints) against the principal's policy, asks SummaMeter.wouldExceed, writes SummaMeter.note (the reservation) before signing, then co-signs and submits. Refusals that are attempts are struck (SummaMeter.strike); the tripwire shuts every rail until the principal re-arms.
 - The autopilot: proposes one step per tick; with the wheel on it mints, deposits into Firelight, withdraws, claims and redeems, all as guarded XRPL payments. Paced by the guard's gas; topped up from the XRPL testnet faucet.
-- Live demo: https://dziuba0x.github.io/lancea/ (feed: https://github.com/dziuba0x/lancea-feed).
-- Code: src/guard.ts, src/smart-accounts.ts, src/policy.ts, src/autopilot.ts, src/firelight.ts, src/service/.
+- The brain (src/brain/): Gemini on its free tier, on the demo's server. It chooses the autopilot's steps among the rules' candidates (the guard still checks each), writes an hourly Sentinel note, and answers visitors on the dashboard's Agent view, with tools for live state, document search, FTSO prices, addresses and transactions, and a playground: a second guarded account whose agent key it holds, where visitors can order it to pay them and watch the playground's guard refuse and strike.
+- Live demo: https://dziuba0x.github.io/lancea/ (feed: https://github.com/dziuba0x/lancea-feed). Talk to the agent: https://dziuba0x.github.io/lancea/#agent
+- Code: src/guard.ts, src/smart-accounts.ts, src/policy.ts, src/autopilot.ts, src/firelight.ts, src/service/, src/brain/.
 - Status: testnets only (XRPL testnet, Flare Coston2), unaudited, MIT.

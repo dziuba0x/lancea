@@ -93,6 +93,64 @@ export function plan(s: State, k: Strategy, skip: ReadonlySet<StepKind> = new Se
   return undefined;
 }
 
+/** What may be done right now, with the bounds the rules allow: the choices an AI brain picks from. */
+export type Candidate =
+  | { kind: "mint"; minDrops: bigint; maxDrops: bigint }
+  | { kind: "deposit"; min: bigint; max: bigint; vaultId: number }
+  | { kind: "withdraw"; maxLots: bigint; lotDrops: bigint; marginDrops: bigint; vaultId: number }
+  | { kind: "claim"; period: bigint; amount: bigint; vaultId: number }
+  | { kind: "redeem"; maxLots: bigint; lotDrops: bigint };
+
+/** Every step the rules would allow now (the same gates as `plan`), each with its bounds. */
+export function candidates(s: State, k: Strategy, skip: ReadonlySet<StepKind> = new Set()): Candidate[] {
+  const out: Candidate[] = [];
+  const held = s.shares[k.vaultId] ?? 0n, loop = k.loop, q = s.vault;
+  if (loop && q) {
+    const ready = q.claimable[0];
+    if (ready && !skip.has("claim")) out.push({ kind: "claim", period: ready.period, amount: ready.assets, vaultId: k.vaultId });
+    const lots = s.fxrp / loop.lotDrops;
+    if (lots > 0n && !skip.has("redeem")) out.push({ kind: "redeem", maxLots: lots, lotDrops: loop.lotDrops });
+  }
+  const whole = s.fxrp / WHOLE;
+  if (whole > 0n) out.push({ kind: "deposit", min: WHOLE, max: whole * WHOLE, vaultId: k.vaultId });
+  if (loop && q && q.requested === 0n && !skip.has("withdraw")) {
+    const fit = held > loop.marginDrops ? (held - loop.marginDrops) / loop.lotDrops : 0n;
+    const lots = min(BigInt(loop.lots), fit);
+    if (lots > 0n) out.push({ kind: "withdraw", maxLots: lots, lotDrops: loop.lotDrops, marginDrops: loop.marginDrops, vaultId: k.vaultId });
+  }
+  const idle = s.xrpDrops - k.keepDrops;
+  if (idle >= k.minMintDrops) out.push({ kind: "mint", minDrops: k.minMintDrops, maxDrops: min(idle, k.maxMintDrops) });
+  return out;
+}
+
+/** An AI brain's choice, made a step only inside the candidate's bounds; undefined when it is not one of them. */
+export function materialize(choice: { action: string; amount?: number }, cands: Candidate[]): Step | undefined {
+  const c = cands.find((x) => x.kind === choice.action);
+  if (!c) return undefined;
+  const raw = Number(choice.amount ?? 0);
+  const n = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 1e12) : NaN; // no model's number can overflow a step
+  const clamp = (v: bigint, lo: bigint, hi: bigint) => (v < lo ? lo : v > hi ? hi : v);
+  switch (c.kind) {
+    case "claim": return { kind: "claim", period: c.period, amount: c.amount, vaultId: c.vaultId };
+    case "redeem": {
+      const lots = clamp(BigInt(Math.max(1, Math.floor(Number.isFinite(n) ? n : 1))), 1n, c.maxLots);
+      return { kind: "redeem", lots, drops: lots * c.lotDrops };
+    }
+    case "deposit": {
+      const want = BigInt(Math.floor(Number.isFinite(n) && n > 0 ? n : Number(c.max / WHOLE))) * WHOLE;
+      return { kind: "deposit", amount: clamp(want, c.min, c.max), vaultId: c.vaultId };
+    }
+    case "withdraw": {
+      const lots = clamp(BigInt(Math.max(1, Math.floor(Number.isFinite(n) ? n : 1))), 1n, c.maxLots);
+      return { kind: "withdraw", amount: lots * c.lotDrops + c.marginDrops, vaultId: c.vaultId };
+    }
+    case "mint": {
+      const drops = BigInt(Math.round((Number.isFinite(n) && n > 0 ? n : Number(c.maxDrops) / 1e6) * 10) * 100_000); // to 0.1 XRP
+      return { kind: "mint", drops: clamp(drops, c.minDrops, c.maxDrops) };
+    }
+  }
+}
+
 export interface Venue {
   account: string;
   /** The operator's XRPL wallet and its instruction fee in drops. */

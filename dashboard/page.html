@@ -12,6 +12,8 @@
     <nav class="tabs glass" id="tabs" role="tablist" aria-label="Views">
       <button class="tab" role="tab" id="tab-now" aria-controls="view-now" aria-selected="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.8 13.9 10.1 21.2 12 13.9 13.9 12 21.2 10.1 13.9 2.8 12 10.1 10.1Z"/></svg><span>Now</span></button>
+      <button class="tab" role="tab" id="tab-agent" aria-controls="view-agent" aria-selected="false" tabindex="-1">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 4.8h12a3 3 0 0 1 3 3v6.4a3 3 0 0 1-3 3h-6.2L7.4 20.6v-3.4H6a3 3 0 0 1-3-3V7.8a3 3 0 0 1 3-3Z"/><path fill="currentColor" stroke="none" d="M12 7.3 12.85 10.15 15.7 11 12.85 11.85 12 14.7 11.15 11.85 8.3 11 11.15 10.15Z"/></svg><span>Agent</span></button>
       <button class="tab" role="tab" id="tab-timeline" aria-controls="view-timeline" aria-selected="false" tabindex="-1">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="17.5" r="1.3" fill="currentColor" stroke="none"/></svg><span>Timeline</span></button>
       <button class="tab" role="tab" id="tab-budget" aria-controls="view-budget" aria-selected="false" tabindex="-1">
@@ -19,7 +21,7 @@
       <button class="tab" role="tab" id="tab-keys" aria-controls="view-keys" aria-selected="false" tabindex="-1">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="3.8"/><path d="M11.8 12H21M17.2 12v3.4M20.2 12v2.2"/></svg><span>Keys</span></button>
       <button class="tab" role="tab" id="tab-how" aria-controls="view-how" aria-selected="false" tabindex="-1">
-        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9.2" cy="12" r="5.6"/><circle cx="14.8" cy="12" r="5.6"/></svg><span>How it works</span></button>
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9.2" cy="12" r="5.6"/><circle cx="14.8" cy="12" r="5.6"/></svg><span data-short="How">How it works</span></button>
     </nav>
     <div class="status glass" id="status" role="button" tabindex="0" aria-live="polite" aria-label="The feed: tap for details">
       <span class="isl isl-compact" id="island-compact"><i class="dot"></i><span class="label on" id="status-text">Loading</span><span class="label net">XRPL testnet × Flare Coston2</span></span>
@@ -58,6 +60,7 @@
         <div class="span-3 glass pane stat rise" id="stat-fxrp"></div>
         <div class="span-3 glass pane stat rise" id="stat-shares"></div>
         <div class="span-3 glass pane stat rise" id="stat-gas"></div>
+        <div class="span-12 glass pane brain rise" id="brain" hidden></div>
         <div class="span-8 glass pane rise">
           <div class="pane-head"><h2>Latest decisions</h2><button class="linkbtn" data-go="timeline">All decisions</button></div>
           <ul class="decisions" id="now-list"></ul>
@@ -75,6 +78,28 @@
             <div><span>The guard</span><span class="weight"><i></i><i class="off"></i></span></div>
           </div>
           <button class="linkbtn" data-go="keys" style="margin-top:12px">Who can move the money</button>
+        </div>
+      </section>
+
+      <section class="view" id="view-agent" role="tabpanel" aria-labelledby="tab-agent" hidden>
+        <div class="span-12 intro rise agent-intro">
+          <span class="label">The agent · a brain on a leash</span>
+          <h1>Talk to the agent. Try&nbsp;to&nbsp;make&nbsp;it&nbsp;pay&nbsp;you.</h1>
+          <p>It knows Lancea, DELICTI and Flare, reads both chains live, and holds half the keys to a playground account on the XRP Ledger testnet. Ask it anything, or give it an order: it will try. Its guard decides, and every attempt lands on-chain.</p>
+        </div>
+        <div class="span-8 glass pane chat rise" id="chat">
+          <div class="pane-head"><h2>Conversation</h2><span class="label" id="chat-state">Connecting</span></div>
+          <ol class="msgs" id="msgs" aria-live="polite" aria-label="The conversation"></ol>
+          <div class="chips" id="chips" role="group" aria-label="Try one of these"></div>
+          <form class="composer" id="composer" autocomplete="off">
+            <textarea id="ask" rows="1" maxlength="1200" placeholder="Ask it anything, or give it an order" aria-label="Your message to the agent"></textarea>
+            <button type="submit" class="send" id="send" aria-label="Send"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15.5v-11M5.2 9.2 10 4.4l4.8 4.8"/></svg></button>
+          </form>
+          <p class="fine">Your messages go to Google's Gemini on its free tier, which may use them to improve Google's products: keep anything private out. Testnets only: nothing here is money.</p>
+        </div>
+        <div class="span-4 agent-side">
+          <div class="glass pane rise" id="pg"></div>
+          <div class="glass pane rise" id="tries"></div>
         </div>
       </section>
 

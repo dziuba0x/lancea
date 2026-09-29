@@ -11,8 +11,10 @@
  *
  *   PRIVATE_KEY=0x… npx tsx scripts/provision.ts --keys keys-public.json [--budget-usd 40] [--tripwire 1]
  *     [--days 90] [--guard-c2flr 3] [--agent-c2flr 0.5] [--data-dir /var/lib/lancea] [--out lancea.config.json]
+ *     [--owner-dir .run]   where the owner's key is saved (the playground keeps it with its other keys)
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Wallet, type AccountSet, type SignerListSet } from "xrpl";
 import { createPublicClient, createWalletClient, formatEther, http, keccak256, parseEther, toHex, type Address, type Hex } from "viem";
@@ -64,10 +66,11 @@ const xrpl = new XrplHttp(process.env.XRPL_RPC?.split(","));
 xrpl.onRetry = (note) => log(`xrpl: ${note}`);
 const owner = Wallet.generate();
 const acct = await xrpl.fund();
-mkdirSync(fileURLToPath(new URL("../.run/", import.meta.url)), { recursive: true, mode: 0o700 });
-const ownerFile = fileURLToPath(new URL(`../.run/owner-${new Date().toISOString().replace(/[:.]/g, "-")}.json`, import.meta.url));
+const ownerDir = arg("owner-dir") ?? fileURLToPath(new URL("../.run/", import.meta.url));
+mkdirSync(ownerDir, { recursive: true, mode: 0o700 });
+const ownerFile = join(ownerDir, `owner-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 writeFileSync(ownerFile, JSON.stringify({ account: acct.address, accountSeed: acct.seed, owner: owner.address, ownerSeed: owner.seed }, null, 2), { mode: 0o600 });
-log(`XRPL account ${acct.address}; the owner's key (weight 2) is in ${ownerFile.slice(ownerFile.indexOf(".run/"))}`);
+log(`XRPL account ${acct.address}; the owner's key (weight 2) is in ${ownerFile}`);
 const master = Wallet.fromSeed(acct.seed);
 const list = await xrpl.autofill<SignerListSet>({ TransactionType: "SignerListSet", Account: acct.address, SignerQuorum: 2, SignerEntries: [
   { SignerEntry: { Account: owner.address, SignerWeight: 2 } },

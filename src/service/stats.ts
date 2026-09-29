@@ -8,7 +8,7 @@
  *   exemplars   the latest real decision of each kind, pinned, so the page can replay one of each even
  *               when it has scrolled out of the journals' tail; a co-signed one carries its settlement
  */
-import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import type { Entry } from "./journal.js";
 
 /** A JSON-lines file read forward: each call returns the whole lines appended since the last. */
@@ -114,6 +114,59 @@ export class JournalStats {
       steps: Object.fromEntries(Object.entries(this.steps).map(([k, v]) => [k, { count: v.count, units: v.units.toString() }])),
       decisions: { ...this.decisions, signed24h: this.signedAt.length },
       topups: { count: this.topups.count, drops: this.topups.drops.toString() },
+    };
+  }
+}
+
+/**
+ * The brain's side of the feed, from its own journal (brain.jsonl) and its status file (brain.json): the
+ * Sentinel's latest notes, what visitors asked the playground to do and what its guard said, how many
+ * conversations it had, and the address its tunnel answers at. Visitors' words are never published:
+ * only what they asked for (an amount, an address) and the verdict.
+ */
+export class BrainLog {
+  readonly reflections: any[] = [];
+  readonly actions: any[] = [];
+  readonly verdicts: Record<string, number> = { "co-signed": 0, refused: 0, struck: 0, "not sent": 0 };
+  private chats: number[] = [];
+  private pilotAt: number[] = [];
+  private readonly f: Follow;
+  constructor(readonly dataDir: string) { this.f = new Follow(`${dataDir}/brain.jsonl`); }
+
+  update(now = Date.now()): this {
+    for (const e of this.f.next()) {
+      const x = e as any;
+      if (e.kind === "reflection") {
+        this.reflections.unshift({ at: e.at, mood: x.mood, headline: x.headline, body: x.body, watch: x.watch, by: x.by, model: x.model });
+        this.reflections.splice(6);
+      } else if (e.kind === "action") {
+        const a = x.act ?? {};
+        this.actions.unshift({
+          at: e.at, act: { kind: a.kind, xrp: a.xrp, fxrp: a.fxrp, lots: a.lots, destination: a.destination, recipient: a.recipient },
+          verdict: x.verdict, reason: typeof x.reason === "string" ? x.reason.slice(0, 200) : undefined, usd: x.usd, links: x.links,
+        });
+        this.actions.splice(12);
+        if (x.verdict in this.verdicts) this.verdicts[x.verdict]++;
+      } else if (e.kind === "chat") this.chats.push(Date.parse(e.at));
+      else if (e.kind === "rearmed" || e.kind === "tripped") {
+        this.actions.unshift({ at: e.at, event: e.kind, links: x.tx ? { rearm: x.tx } : undefined });
+        this.actions.splice(12);
+      }
+    }
+    this.chats = this.chats.filter((t) => t > now - 86_400_000);
+    return this;
+  }
+
+  /** The feed's `brain`: online when brain.json was written in the last two minutes. */
+  section(now = Date.now()) {
+    let s: any;
+    try { s = JSON.parse(readFileSync(`${this.dataDir}/brain.json`, "utf8")); } catch { s = undefined; }
+    if (!s && !this.reflections.length) return undefined;
+    const online = !!s && !s.stopped && now - Date.parse(s.updatedAt) < 120_000;
+    return {
+      // (the per-model call counts stay in brain.json: they change every minute and the page has no use for them)
+      online, url: online ? s.url : undefined, since: s?.startedAt, models: s?.models, pilot: s?.pilot, playground: online ? s.playground : undefined,
+      reflections: this.reflections, actions: this.actions, counts: { chats24h: this.chats.length, verdicts: { ...this.verdicts } },
     };
   }
 }

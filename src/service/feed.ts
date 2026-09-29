@@ -62,6 +62,8 @@ export interface FeedExtras {
   stats?: unknown;
   exemplars?: Record<string, unknown>;
   perDecisionWei?: string;
+  /** The brain service (src/brain/server.ts), when it runs here: see BrainLog. */
+  brain?: unknown;
 }
 
 export function buildFeed(c: LanceaConfig, chain: ChainSnapshot, guard: Entry[], autopilot: Entry[], now = new Date(), x: FeedExtras = {}) {
@@ -80,6 +82,7 @@ export function buildFeed(c: LanceaConfig, chain: ChainSnapshot, guard: Entry[],
     ...(chain.ledger ? { ledger: chain.ledger } : {}),
     ...(x.stats ? { stats: x.stats } : {}),
     ...(x.exemplars ? { exemplars: x.exemplars } : {}),
+    ...(x.brain ? { brain: x.brain } : {}),
     guard,
     autopilot,
   };

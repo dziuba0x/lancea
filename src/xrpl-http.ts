@@ -32,7 +32,7 @@ export class XrplHttp {
     let j: any, last = "";
     for (let attempt = 0; ; attempt++) {
       try {
-        const r = await fetch(this.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method, params: [params] }) });
+        const r = await fetch(this.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method, params: [params] }), signal: AbortSignal.timeout(20_000) });
         const text = await r.text();
         try { j = JSON.parse(text); break; } catch { last = text; }
       } catch (e) { last = (e as Error).message; }

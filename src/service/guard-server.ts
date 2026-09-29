@@ -119,7 +119,8 @@ async function main() {
   const xrpl = new XrplHttp(c.network.xrplRpc);
   const policy = c.guard.hourlyCapUsd6 || c.guard.newPayeeCapUsd6
     ? { hourlyCapUsd6: c.guard.hourlyCapUsd6 ? BigInt(c.guard.hourlyCapUsd6) : undefined,
-        newPayeeCapUsd6: c.guard.newPayeeCapUsd6 ? BigInt(c.guard.newPayeeCapUsd6) : undefined }
+        newPayeeCapUsd6: c.guard.newPayeeCapUsd6 ? BigInt(c.guard.newPayeeCapUsd6) : undefined,
+        coolingS: c.guard.coolingS, knownPayees: c.guard.knownPayees }
     : undefined;
   const guard = new Guard({
     account: c.account, guardSeed: keys.xrplSeed, flareKey: keys.flareKey, chain: coston2(c.network.rpcUrl), rpcUrl: c.network.rpcUrl,

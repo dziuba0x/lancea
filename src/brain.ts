@@ -12,6 +12,8 @@ export interface Proposal {
   step?: Step;
   why: string;
   by: "rules" | "ai";
+  /** The model that chose it, when `by` is "ai". */
+  model?: string;
 }
 
 export interface Brain {
