@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use Lancea, please cite it as below."
+title: "Lancea: a co-signer AI agents cannot talk past"
+abstract: "An XRP Ledger co-signer that will not sign past a DELICTI dollar budget counted across chains, priced by Flare's FTSO, with a tripwire that shuts every rail after an attempt."
+type: software
+authors:
+  - family-names: Dziuba
+    given-names: Alan
+  - name: Claude (Anthropic)
+repository-code: "https://github.com/dziuba0x/lancea"
+url: "https://dziuba0x.github.io/lancea/"
+license: MIT
+version: 0.1.0
+date-released: 2026-09-29
+keywords: [ai-agents, agent-security, xrpl, flare-network, multisig, spending-limits, delicti]
+references:
+  - type: software
+    title: "DELICTI: accountability for autonomous AI agents"
+    repository-code: "https://github.com/dziuba0x/delicti"

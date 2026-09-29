@@ -1,0 +1,9 @@
+name: Idea
+description: A rule, a rail, a view, or anything that would make the leash more useful
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes: { label: The idea, description: "What it would let a principal do, or stop." }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: Where it would live, description: "The guard, the autopilot, the services, the dashboard, or DELICTI itself." }

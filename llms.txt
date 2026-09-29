@@ -1,0 +1,10 @@
+# Lancea
+
+> A co-signer AI agents cannot talk past: an XRP Ledger guard that co-signs an agent's payments only within its principal's dollar budget, counted across XRPL and Flare by DELICTI's SummaMeter and priced by Flare's FTSO. Built on DELICTI (https://github.com/dziuba0x/delicti).
+
+- The account: master key disabled; SignerList principal 2, agent 1, guard 1; quorum 2. The agent's key alone signs nothing valid.
+- The guard: reads the agent's signed blob, checks the fee cap, decodes Flare Smart Accounts instructions (operator memos, Core Vault mints) against the principal's policy, asks SummaMeter.wouldExceed, writes SummaMeter.note (the reservation) before signing, then co-signs and submits. Refusals that are attempts are struck (SummaMeter.strike); the tripwire shuts every rail until the principal re-arms.
+- The autopilot: proposes one step per tick; with the wheel on it mints, deposits into Firelight, withdraws, claims and redeems, all as guarded XRPL payments. Paced by the guard's gas; topped up from the XRPL testnet faucet.
+- Live demo: https://dziuba0x.github.io/lancea/ (feed: https://github.com/dziuba0x/lancea-feed).
+- Code: src/guard.ts, src/smart-accounts.ts, src/policy.ts, src/autopilot.ts, src/firelight.ts, src/service/.
+- Status: testnets only (XRPL testnet, Flare Coston2), unaudited, MIT.

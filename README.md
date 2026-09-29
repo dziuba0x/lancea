@@ -1,6 +1,42 @@
-# Lancea
+<div align="center">
 
-**A co-signer on the XRP Ledger that will not sign past a [DELICTI](https://github.com/dziuba0x/delicti) budget, counted across chains.**
+<img src="assets/hero.webp" width="100%" alt="LANCEA, on a pane of liquid glass over deep space. A cyan nebula for the agent that proposes, an amber one for the guard that co-signs, and between them the budget ring, amber liquid filling its glass tube. A drop of glass flies a figure eight through the sky.">
+
+**A co-signer AI agents cannot talk past.** An agent holds a key to an XRP Ledger account, but only half of what a payment needs. The other half is a guard. The guard prices every payment against its principal's dollar budget on Flare, reads what the payment would do there, and then co-signs or refuses. A steered agent trips its own leash, on every rail at once.
+
+*One dollar budget across XRPL and Flare · priced by the FTSO on DELICTI's SummaMeter · Flare Smart Accounts read before they act · a tripwire that shuts every rail · live 24/7 on a public dashboard*
+
+[![test](https://github.com/dziuba0x/lancea/actions/workflows/test.yml/badge.svg)](https://github.com/dziuba0x/lancea/actions/workflows/test.yml)
+[![demo](https://github.com/dziuba0x/lancea/actions/workflows/watch.yml/badge.svg)](https://github.com/dziuba0x/lancea/actions/workflows/watch.yml)
+[![release](https://img.shields.io/github/v/release/dziuba0x/lancea?color=c9d1d9&label=release)](https://github.com/dziuba0x/lancea/releases)
+[![live demo](https://img.shields.io/badge/live%20demo-24%2F7-35CFFF)](https://dziuba0x.github.io/lancea/)
+![tests](https://img.shields.io/badge/tests-39-2ea44f)
+[![DELICTI](https://img.shields.io/badge/on-DELICTI%20v0.16-8957e5)](https://github.com/dziuba0x/delicti)
+![Coston2](https://img.shields.io/badge/live%20on-Flare%20Coston2-e62058)
+![XRPL](https://img.shields.io/badge/XRPL-testnet-23292f)
+![status](https://img.shields.io/badge/status-testnet%20·%20unaudited-lightgrey)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+[**Live demo**](https://dziuba0x.github.io/lancea/) · [The problem](#the-problem) · [How it works](#how-it-works) · [Watch it live](#watch-it-live) · [What the guard checks](#what-the-guard-checks) · [One guard, two ledgers](#one-guard-for-xrpl-and-flare-flare-smart-accounts) · [The drill](#the-drill-a-staged-hijack-and-the-re-arm) · [Quickstart](#quickstart) · [Deployments](#deployments) · [DELICTI](#lancea-and-delicti) · [Limits](#limits-stated-up-front) · [FAQ](#faq)
+
+</div>
+
+---
+
+> **TL;DR** Lancea is an open-source guard, written in TypeScript. It lets an AI agent hold a real XRP Ledger account without being able to spend past what its principal allows. The account's master key is disabled. Its SignerList holds the principal (weight 2), the agent (1) and the guard (1), with quorum 2. Before the guard adds the second signature, it asks [DELICTI](https://github.com/dziuba0x/delicti)'s `SummaMeter` on Flare whether the payment fits the umbrella's dollar budget. The budget spans XRPL and Flare, and the [FTSO](https://dev.flare.network/ftso/overview) prices every amount. The guard also reads Flare Smart Accounts instructions, to see what a payment would do on Flare. When a refusal looks like an attempt, the guard strikes it on-chain. The tripwire then shuts every rail of the umbrella, XRPL and x402 on Flare alike, until the principal re-arms it. On testnets, a live agent runs XRP through a Flare vault and back, around the clock, and [the dashboard](https://dziuba0x.github.io/lancea/) shows every decision.
+
+## The problem
+
+An AI agent with a wallet will be told things. It reads a planted note ("the treasury moved its settlement account"), and then it asks to pay somewhere new, politely and with a good reason. Prompt injection does not need to break the model's weights. It only needs the agent to believe one sentence.
+
+The XRP Ledger has no spending limit to fall back on:
+- Permission delegation (XLS-75) is all-or-nothing per transaction type, with no amount limits, and it is not enabled on mainnet.
+- A budget kept inside the agent is a budget the agent can be talked out of.
+- A budget kept on one chain does not see what the agent spends on another.
+
+Lancea moves the limit out of the agent's reach and across chains: the agent's key is only half a signature.
+
+## How it works
 
 Give an AI agent an XRPL account, disable its master key, and put three keys in its SignerList:
 
@@ -16,7 +52,26 @@ The guard can refuse. It cannot move funds. Its failure mode is liveness, never 
 
 This is the XRP Ledger's missing piece. Permission delegation (XLS-75) is all-or-nothing per transaction type: it has no amount limits, and it is not enabled on mainnet. Multisig has existed since 2016. Lancea makes it a spending limit that holds across chains.
 
-## One attempt, every rail (DELICTI amendment v1.2)
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Agent · key weight 1
+    participant G as Lancea guard · key weight 1
+    participant M as SummaMeter on Flare · FTSO prices
+    participant X as XRP Ledger
+    A->>G: a payment, signed by the agent, and why
+    G->>G: read the blob: account, fee cap, Smart Accounts memo, the principal's rules
+    G->>M: wouldExceed(umbrella, XRP outflow)?
+    alt it fits the budget
+        G->>M: note(amount): the reservation, written before the signature
+        G->>X: co-sign, combine, submit
+    else it crosses the budget
+        G-->>A: refused
+        G->>M: strike(umbrella, hash of the agent's blob), if it was an attempt
+    end
+```
+
+### One attempt, every rail (DELICTI amendment v1.2)
 
 A refusal is not only a no. When the refused payment breaks the budget even against the tally of ten minutes ago, at 99 % of its value, it was an **attempt**, not a lost race. The guard then **strikes** the umbrella in `SummaMeter`, with the hash of the agent's own signed blob as evidence.
 
@@ -26,7 +81,73 @@ Once the principal's tripwire is reached (`setTripwire`, one strike if they like
 
 It stays that way until the principal looks and re-arms. It works in reverse too: an attempt recorded on Flare (`MandateFacilitator.recordAttempt`) trips the guard here without a line of Lancea code, because both ask the same meter.
 
-**Status:** live end to end on DELICTI's deployed `SummaMeter` v1.2, [`0x39aa9b12…1FaB1D`](https://coston2-explorer.flare.network/address/0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D), source verified: the same meter every rail of an umbrella asks. Last run 2026-09-27 (XRPL testnet + Coston2): 6 of 6 decisions as designed. See *Live: the autopilot on a leash* below. Against a meter from before v1.2, the guard refuses exactly as before and strikes nothing.
+**Status:** live end to end on DELICTI's deployed `SummaMeter` v1.2, [`0x39aa9b12…1FaB1D`](https://coston2-explorer.flare.network/address/0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D), source verified: the same meter every rail of an umbrella asks. Last run 2026-09-27 (XRPL testnet + Coston2): 6 of 6 decisions as designed. The runs are in [docs/runs.md](docs/runs.md). Against a meter from before v1.2, the guard refuses exactly as before and strikes nothing.
+
+## Watch it live
+
+**[dziuba0x.github.io/lancea](https://dziuba0x.github.io/lancea/)**. A live agent works a guarded account on XRPL testnet and Flare Coston2, 24/7, from a small cloud machine. It looks at the account every 5 minutes and runs its XRP round a wheel, one co-signed step at a time:
+
+1. It starts a withdrawal from the Firelight vault once each vault period.
+2. It claims the withdrawal when it unlocks.
+3. It redeems the FXRP to XRP.
+4. It mints the XRP to FXRP again and deposits it again.
+
+Each step is an XRPL payment that the guard prices and co-signs, on a $30 000 umbrella that runs 60 days. That is about 140 decisions a day. Nothing on the page is staged. The feed is the services' own journals and a fresh read of both chains, pushed every minute. A GitHub Actions [watchman](.github/workflows/watch.yml) reads the feed every half hour and raises the alarm when the demo needs a hand.
+
+[dziuba0x.github.io/lancea](https://dziuba0x.github.io/lancea/) is the demo, live. It reads `feed.json` from the demo machine every minute. When the feed cannot be reached, it shows a dated snapshot and says so. When the machine has published nothing for 30 minutes, it says it is offline.
+
+Five views:
+
+- **Now:** the state in one sentence, and the budget as a glass ring. Its amber liquid is the dollar budget spent across every rail. Inside the ring, every co-signed step is a white star, arranged in a spiral around the point where the two witnesses meet. **Replay** steps back through the decisions one by one: the ring, the stars, the figure and the list show that moment. The view also has the balances with their history, the latest decisions, and a countdown to the agent's next look.
+- **Timeline:** every decision and note, by day, with filters and search. A decision opens in a sheet with the decoded transaction, the price and each hash on its explorer. A right click (or a long press) opens a menu: copy the hash, open the explorer.
+- **Budget:** spend over time against the budget, a table view, the pace, what the budget paid for, and XRP as FTSO priced each mint.
+- **Keys:** who can move the money. Choose signers and see what can happen. It also shows each key, its explorer link and the guard's gas.
+- **How it works:** the flow from the agent's claim to the guard's verdict, for a first-time visitor.
+
+The status capsule is an island: when a decision arrives while you watch, it opens to say what happened, and a tap pours that decision's sheet out of it. Keys: `1`–`5` switch views, `/` searches, `Esc` closes.
+
+Every decision has two witnesses:
+
+- **Agent said** (cyan): the agent's own words.
+- **Transaction does** (amber): read by the guard from the signed transaction.
+
+White marks a co-signature. Coral marks a refusal or a strike.
+
+The page is one file, built by `scripts/dashboard-build.ts` into `docs/index.html` from `dashboard/`:
+
+- `page.html` holds the markup;
+- `style.css` holds the styles;
+- `app.js` holds the views;
+- `glass.js` draws the sky and the glass.
+
+`glass.js` is a WebGL2 renderer in two passes, the recipe of the DELICTI hero, running live:
+
+1. **The sky, drawn into a texture with mipmaps.** It has a nebula lit by the two witnesses, three layers of stars, a few JWST spikes, meteors, a satellite, a pulsar, a far galaxy and the decisions. When a new co-signature arrives, cyan and amber light meet at the white star, and a new star is born there.
+2. **The glass, drawn from the page's own geometry.** Its shape is a squircle bevel. It refracts each colour channel separately (IOR 1.44 / 1.50 / 1.57) and has a weak Fresnel term. A light that moves travels around each rim, and the pointer is a second light. The soft shadow shows through the glass too. Glass appears by gaining its lensing, not by fading. Drops merge with Apple's neck.
+
+The glass moves like a liquid, on SwiftUI's springs (`Spring(duration:bounce:)`):
+
+- **Two layers, never glass on glass.** The page's glass is one layer. The sheet, the menu and the toast are an overlay above it, which casts its shadow on the page and never merges with it.
+- **Matched geometry.** A sheet grows out of the row, the star or the island it describes, with a liquid neck to a drop left behind, and flows back into it when it closes.
+- **Flow between views.** The panes of one view flow into the layout of the next: a pane divides where the new view has more, and panes merge where it has fewer. In flight they blend like glass in a GlassEffectContainer and part as they slow down; the new words land with their glass.
+- **Interactive glass.** Under a finger the glass swells and lights up from the point of touch, then springs back. A tab or a filter can be pressed and dragged: its lens lifts out of the bar as a clear drop and settles on the nearest choice.
+- **The pointer's drop.** It stretches as it moves, wobbles when it stops, sheds two droplets when flung and focuses a caustic on the sky. Over a control it sinks into the glass and becomes that control's highlight.
+
+It respects reduced motion (a still sky, no flow) and reduced transparency (solid panes). Without WebGL2 it falls back to CSS glass.
+
+## What the guard checks
+
+In order, on every payment. Any failure is a refusal, and a refusal is never a crash.
+
+| check | read from | on failure |
+|---|---|---|
+| an XRP `Payment` from the guarded account | the agent's signed blob | refused |
+| the fee is at most 0.01 XRP (a fee is outflow too) | the blob | refused |
+| a Smart Accounts payment does what the principal allows: an allowed vault, a mint to its own personal account, no destination tag | the memo, decoded (`src/smart-accounts.ts`) | refused; struck when the principal opts in |
+| the umbrella's dollar budget, across every rail, at the FTSO price | `SummaMeter.wouldExceed` on Flare | refused; struck when it was an attempt |
+| the principal's rules: an hourly cap across rails, cooling for new payees | `spentAt` history, `account_tx` | refused; struck when the principal opts in |
+| the umbrella is not tripped | `SummaMeter.tripped` | refused |
+| the reservation lands on Flare before the signature exists | `SummaMeter.note` | nothing signed |
 
 ## The principal's rules
 
@@ -142,47 +263,33 @@ Every Flare read and write in the guard now fails closed:
 - With 0.5 C2FLR, the rehearsal fails at the same step as the live run, now as a refusal.
 - With today's funding, all seven steps behave as designed, including through a 3× fee spike.
 
+## The drill: a staged hijack, and the re-arm
 
-## Live: the autopilot on a leash, 2026-09-27 (XRPL testnet + Flare Coston2)
+`scripts/drill.ts` does what a hijacked or prompt-injected agent would. It uses the agent's own key and the services' token to ask the running guard to co-sign a 5 XRP mint, and gives a planted note as its reason. The memo of that mint names a stranger as the recipient. The expected outcome:
 
-`scripts/leash-live.ts`, one run, on DELICTI's deployed meter.
-- **The meter:** `SummaMeter` v1.2 ([`0x39aa9b12…1FaB1D`](https://coston2-explorer.flare.network/address/0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D), DELICTI v0.16, source verified) and umbrella #28: **$40** across both chains, tripwire 1.
-- **The account:** guarded account `r3PbVz5eztnFEMipt7HDzWMFw451jBqrNB`, personal account `0xb5000A4f…42f20`.
-- **Before each co-signature,** the guard reserved the spend on Flare. Its Flare key is the umbrella's declared effector.
+1. The guard reads the memo itself and refuses.
+2. It writes a strike on Flare, which trips the umbrella (tripwire 1).
+3. The autopilot pauses on its next tick.
+4. The dashboard reads "The leash held." and says it was a drill.
 
-| step | the agent asks | the guard | XRPL | Coston2 |
-|---|---|---|---|---|
-| 2 | mint 20 XRP to its own personal account | co-signed, tally $30.33 of $40 | [`2A599C1B…BA4019`](https://testnet.xrpl.org/transactions/2A599C1B3B5493D74323E777BF3C78474547ADBDFDFBE1BCB2B77C1436BA4019) | [`0x0879fede…ab413bc`](https://coston2-explorer.flare.network/tx/0x0879fede39e3a73afecb6538fbe402b206182a3d12b653d8899dcd58bab413bc): **19.8 FXRP**, ~2 min |
-| 3 | deposit 19 FXRP into Firelight | co-signed | [`60A165C3…BD366C`](https://testnet.xrpl.org/transactions/60A165C31248A40774483DEAA9366D50F9B57B235D494A165719D606A3BD366C) | [`0x6913df12…e18e7637`](https://coston2-explorer.flare.network/tx/0x6913df12b882fdc8275dc37fb3b36deb2329c3d08d4f479e83f924abe18e7637): **18.985959 stXRP**, ~3 min |
-| 4 | mint 5 XRP to `0x…bEEF` (steered) | **refused and struck**: the umbrella trips | nothing signed | strike [`0xa9c305e4…e214b9f5`](https://coston2-explorer.flare.network/tx/0xa9c305e42bfdc4ff1f4ac0e222295d0eb7e1467701ae42ab01fdea33e214b9f5) |
-| 5 | redeem 1 share | **refused**: tripped, on every rail | nothing signed | — |
-| 6 | the principal re-arms; the same redeem | co-signed | [`78201163…32CD8C`](https://testnet.xrpl.org/transactions/7820116359E74C6DB8748423C26B7A8CC9A39A0F856FF94F69C2FA296C32CD8C) | [`0x67021199…607f9506`](https://coston2-explorer.flare.network/tx/0x67021199300e19c02db7a10b6dda3734a7cadd32f4497b399c2360a0607f9506): 1 stXRP redeem request, ~2.5 min |
-| 7 | mint 20 XRP more | **refused**: past $40 | nothing signed | — |
+Nothing can move either way: the agent's signature alone is weight 1 of the 2 the account needs.
 
-**Verdict: 6 of 6 decisions as designed.**
-- **One co-signer** governed the account on both ledgers.
-- **One dollar budget** held across them, on the meter DELICTI deployed for every rail.
-- **One steered request stopped every rail** until the principal looked.
+`scripts/rearm.ts` is the principal's re-arm. It needs the key that committed the umbrella; any other key reads `NotPrincipal`. The autopilot resumes by itself.
 
-Step 7 was refused but not struck. The first spend was eight minutes old, inside the ten-minute lookback, so the conservative rule did not call it an attempt.
+```bash
+LANCEA_CONFIG=~/.config/lancea/config.json LANCEA_KEYS=~/.config/lancea/keys npx tsx scripts/drill.ts
+set -a; . ./.env; set +a; LANCEA_CONFIG=~/.config/lancea/config.json npx tsx scripts/rearm.ts
+```
 
-The guard's Flare writes cost 0.42 C2FLR. What was left on the run's keys went back to the principal.
+## Quickstart
 
-The first run, on 2026-09-26, used a meter it deployed itself ([`0x158c200b…9537`](https://coston2-explorer.flare.network/address/0x158c200bc3ffae51610c7b8f7d3a729fa2099537), umbrella #26) and made the same six decisions; its transactions are listed in [this README as of that run](https://github.com/dziuba0x/lancea/blob/c6a7ead/README.md#live-the-autopilot-on-a-leash-2026-09-26-xrpl-testnet--flare-coston2).
+```sh
+git clone https://github.com/dziuba0x/lancea && cd lancea
+npm ci
+npm test        # 39 tests, offline: the guard, its rules, Smart Accounts, the autopilot and its wheel, the services, the dashboard
+```
 
-## Live, 2026-09-25 (XRPL testnet + Flare Coston2)
-
-`npx tsx scripts/live.ts`, one run:
-
-1. **XRPL.** Account `rfT9pw839NsV2STxkraMdNEyAU6Ny54qUX`: SignerList as above, master key disabled.
-2. **Flare.** DELICTI umbrella #23: **$5** across both chains, bonded in VaultSumma. The guard and the x402 `MandateFacilitator` are its declared effectors.
-3. **Flare, x402.** 1 mUSDT0 settled through the facilitator (`0x25c6ad16…`). Tally **$0.999652**.
-4. **XRPL.** 2 XRP. The agent signs, the guard checks, reserves on Flare (`0xf6a01957…`) and co-signs. Tx `183E53AD…`, **tesSUCCESS**. Tally **$4.085854**.
-5. **XRPL.** 2 XRP more: **refused**. It would reach about $7.17 of $5, counting the Flare spend.
-6. **XRPL.** The agent submits it alone anyway: **`tefBAD_QUORUM`**.
-7. **XRPL.** The principal alone, weight 2: `7432C479…` **tesSUCCESS**.
-
-## Run it
+The live scripts need a Coston2 key with C2FLR, and DELICTI's build for the full ABIs. The services do not need either: they carry the few ABIs they call (`src/flare.ts`).
 
 ```sh
 npm ci
@@ -193,7 +300,7 @@ DELICTI_OUT=../delicti/out/ npx tsx scripts/leash-live.ts   # the autopilot on a
 
 It talks to the XRP Ledger over plain JSON-RPC (`src/xrpl-http.ts`), because websockets are not available everywhere. Signing and encoding are offline, done by xrpl.js.
 
-## Run it 24/7: the guard and the autopilot as services
+### Run it 24/7: the guard and the autopilot as services
 
 Two processes, two sets of keys, one machine (`src/service/`):
 
@@ -239,74 +346,72 @@ sudo cp lancea.config.json /etc/lancea/config.json && sudo systemctl enable --no
 
 **Testnet only, stated plainly.** On one machine, the guard's key and the agent's key together make a quorum. With real funds the guard runs apart: in a TEE (Flare Confidential Compute), or as an on-chain gate over a Protocol Managed Wallet.
 
-## The dashboard
+## Deployments
 
-[dziuba0x.github.io/lancea](https://dziuba0x.github.io/lancea/) is the demo, live. It reads `feed.json` from the demo machine every minute. When the feed cannot be reached, it shows a dated snapshot and says so. When the machine has published nothing for 30 minutes, it says it is offline.
+Everything below is on public testnets and can be opened in an explorer.
 
-Five views:
+| what | where |
+|---|---|
+| DELICTI `SummaMeter` v1.2 (the budget, the tripwire) | Coston2 [`0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D`](https://coston2-explorer.flare.network/address/0x39aa9b12CDe7bFc936456247DFb3eb78aA1FaB1D) |
+| DELICTI `MandateRegistry` (umbrellas) | Coston2 [`0x2c58fb0504377fef325DceB66219bC6302263AA3`](https://coston2-explorer.flare.network/address/0x2c58fb0504377fef325DceB66219bC6302263AA3) |
+| DELICTI `VaultSumma` v0.16 (the bond) | Coston2 [`0x274e8aa149C0904E10b99c79017EB7EE74184E54`](https://coston2-explorer.flare.network/address/0x274e8aa149C0904E10b99c79017EB7EE74184E54) |
+| Flare Smart Accounts `MasterAccountController` | Coston2 [`0x434936d47503353f06750Db1A444DBDC5F0AD37c`](https://coston2-explorer.flare.network/address/0x434936d47503353f06750Db1A444DBDC5F0AD37c) |
+| FAssets `AssetManager` (FXRP) | Coston2 [`0xc1Ca88b937d0b528842F95d5731ffB586f4fbDFA`](https://coston2-explorer.flare.network/address/0xc1Ca88b937d0b528842F95d5731ffB586f4fbDFA) |
+| Firelight vault (id 1) | Coston2 [`0xC90D6847747b85d1fa2E07859869fb9fB72c0361`](https://coston2-explorer.flare.network/address/0xC90D6847747b85d1fa2E07859869fb9fB72c0361) |
+| the demo's guarded account | XRPL testnet [`rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn`](https://testnet.xrpl.org/accounts/rhtCafinfGVX6QZQYDGztLFL8qNt5LWcTn) |
+| its personal account on Flare | Coston2 [`0x953E5e9DAC303918fCa12e2a67743ae2157e04F5`](https://coston2-explorer.flare.network/address/0x953E5e9DAC303918fCa12e2a67743ae2157e04F5) |
+| the guard | XRPL [`rG3maSxmDjLLXTQJXLi1jz1mPqNoFffsJw`](https://testnet.xrpl.org/accounts/rG3maSxmDjLLXTQJXLi1jz1mPqNoFffsJw) · Coston2 [`0x676359c706C9CF2931f6A9B8bF4b4CaaBA8b5Db6`](https://coston2-explorer.flare.network/address/0x676359c706C9CF2931f6A9B8bF4b4CaaBA8b5Db6) (its gas) |
+| the agent | XRPL [`rPWDAWM1MUPPoaLiePm6yRp66HH18Uo7qq`](https://testnet.xrpl.org/accounts/rPWDAWM1MUPPoaLiePm6yRp66HH18Uo7qq) · Coston2 [`0xCD0C9af54aad6BAAb4c4dA261006106C5F049772`](https://coston2-explorer.flare.network/address/0xCD0C9af54aad6BAAb4c4dA261006106C5F049772) |
+| the umbrella | #31: $30 000, 60 days, tripwire 1 |
+| the feed | [`dziuba0x/lancea-feed`](https://github.com/dziuba0x/lancea-feed), one commit, replaced every minute |
+| the dashboard | [dziuba0x.github.io/lancea](https://dziuba0x.github.io/lancea/) (GitHub Pages, `docs/`) |
 
-- **Now:** the state in one sentence, and the budget as a glass ring. Its amber liquid is the dollar budget spent across every rail. Inside the ring, every co-signed step is a white star, arranged in a spiral around the point where the two witnesses meet. **Replay** steps back through the decisions one by one: the ring, the stars, the figure and the list show that moment. The view also has the balances with their history, the latest decisions, and a countdown to the agent's next look.
-- **Timeline:** every decision and note, by day, with filters and search. A decision opens in a sheet with the decoded transaction, the price and each hash on its explorer. A right click (or a long press) opens a menu: copy the hash, open the explorer.
-- **Budget:** spend over time against the budget, a table view, the pace, what the budget paid for, and XRP as FTSO priced each mint.
-- **Keys:** who can move the money. Choose signers and see what can happen. It also shows each key, its explorer link and the guard's gas.
-- **How it works:** the flow from the agent's claim to the guard's verdict, for a first-time visitor.
+## Lancea and DELICTI
 
-The status capsule is an island: when a decision arrives while you watch, it opens to say what happened, and a tap pours that decision's sheet out of it. Keys: `1`–`5` switch views, `/` searches, `Esc` closes.
+[DELICTI](https://github.com/dziuba0x/delicti) is the protocol: accountability for autonomous AI agents. A principal commits a mandate, and an independent witness confirms each deed. When the agent breaks the mandate, its bond pays. DELICTI's SUMMA extension turns umbrellas into dollar budgets that span rails. Its `SummaMeter` prices every amount with the FTSO and keeps the tally. Amendment v1.2 adds the tripwire.
 
-Every decision has two witnesses:
+Lancea is the first product built on it. DELICTI proves what an agent did, after the act, from the chains' own evidence. Lancea stops what an agent should not do, before the act, with half of every signature. Both ask the same meter, so a strike on one rail trips the other. They share a design language: two lights meeting in a white star, cyan for the one who proposes and amber for the one who checks, set in clear liquid glass.
 
-- **Agent said** (cyan): the agent's own words.
-- **Transaction does** (amber): read by the guard from the signed transaction.
+## Limits, stated up front
 
-White marks a co-signature. Coral marks a refusal or a strike.
+- **Testnets only, unaudited.** Nothing here should hold real money yet.
+- **XRP `Payment`s only.** Issued currencies (RLUSD) are outside DELICTI's evidence today: the FDC's `Payment` type attests native payments only.
+- **One guard, and its key is local.** The design allows *k of n* independent guards, each with a bond. XRPL SignerLists hold up to 32 signers, so no single guard can block or collude. The key is meant to move into a Flare Confidential Compute machine: TEE identities are secp256k1, which the XRP Ledger accepts as a signer.
+- **The guard's gas is real.** Every co-signature writes a reservation on Flare, at about 0.12 C2FLR. The agent slows down, and then stops, before the guard runs out of gas. Someone still has to top it up.
+- **A brake, not yet a verdict.** Linking the account's XRP-outflow mandate to the umbrella (DELICTI §6.10 + SUMMA) would convict even a compromised guard from FDC proofs. That link is not live yet.
+- **The autopilot's brain is rules today.** A model that proposes, checked by the same rules (M2), comes next.
 
-The page is one file, built by `scripts/dashboard-build.ts` into `docs/index.html` from `dashboard/`:
+## Roadmap
 
-- `page.html` holds the markup;
-- `style.css` holds the styles;
-- `app.js` holds the views;
-- `glass.js` draws the sky and the glass.
+- **M2: an AI brain.** A model proposes each step and explains it, and the rules check every proposal. A prompt-injection drill against the model itself follows.
+- **x402 on Flare** under the same umbrella, so one budget covers both an agent's API bills and its treasury.
+- ***k of n* guards with bonds**, and the guard's key in Flare Confidential Compute.
+- **A Xaman xApp** as the principal's front end.
+- **Mainnet** after an audit.
 
-`glass.js` is a WebGL2 renderer in two passes, the recipe of the DELICTI hero, running live:
+## FAQ
 
-1. **The sky, drawn into a texture with mipmaps.** It has a nebula lit by the two witnesses, three layers of stars, a few JWST spikes, meteors, a satellite, a pulsar, a far galaxy and the decisions. When a new co-signature arrives, cyan and amber light meet at the white star, and a new star is born there.
-2. **The glass, drawn from the page's own geometry.** Its shape is a squircle bevel. It refracts each colour channel separately (IOR 1.44 / 1.50 / 1.57) and has a weak Fresnel term. A light that moves travels around each rim, and the pointer is a second light. The soft shadow shows through the glass too. Glass appears by gaining its lensing, not by fading. Drops merge with Apple's neck.
+**Can the guard steal?** No. Its key is weight 1 of quorum 2, so it can only add the second signature to a payment the agent already signed. At worst it refuses: the failure mode is liveness, never theft.
 
-The glass moves like a liquid, on SwiftUI's springs (`Spring(duration:bounce:)`):
+**What if the guard is down, or wrong?** The principal holds weight 2 and can always act alone: recover, rotate keys, or remove the guard.
 
-- **Two layers, never glass on glass.** The page's glass is one layer. The sheet, the menu and the toast are an overlay above it, which casts its shadow on the page and never merges with it.
-- **Matched geometry.** A sheet grows out of the row, the star or the island it describes, with a liquid neck to a drop left behind, and flows back into it when it closes.
-- **Flow between views.** The panes of one view flow into the layout of the next: a pane divides where the new view has more, and panes merge where it has fewer. In flight they blend like glass in a GlassEffectContainer and part as they slow down; the new words land with their glass.
-- **Interactive glass.** Under a finger the glass swells and lights up from the point of touch, then springs back. A tab or a filter can be pressed and dragged: its lens lifts out of the bar as a clear drop and settles on the nearest choice.
-- **The pointer's drop.** It stretches as it moves, wobbles when it stops, sheds two droplets when flung and focuses a caustic on the sky. Over a control it sinks into the glass and becomes that control's highlight.
+**Why Flare?** It is the one place with prices (the FTSO), proofs from other chains (the FDC) and a bridge for the XRP Ledger's own users (FAssets, Smart Accounts), all built into the protocol. A budget that holds across XRPL and Flare needs all three.
 
-It respects reduced motion (a still sky, no flow) and reduced transparency (solid panes). Without WebGL2 it falls back to CSS glass.
+**Is the dashboard real?** Yes. It reads a feed the demo server publishes every minute from its own journals and a fresh read of both chains. Every row links to its transactions.
 
-## The drill: a staged hijack, and the re-arm
+**What does the demo cost to run?** Nothing but testnet tokens. It runs on an Oracle Cloud Always Free machine. The XRPL testnet faucet keeps the account topped up, and the guard's C2FLR comes from the Coston2 faucet.
 
-`scripts/drill.ts` does what a hijacked or prompt-injected agent would. It uses the agent's own key and the services' token to ask the running guard to co-sign a 5 XRP mint, and gives a planted note as its reason. The memo of that mint names a stranger as the recipient. The expected outcome:
+## Documents
 
-1. The guard reads the memo itself and refuses.
-2. It writes a strike on Flare, which trips the umbrella (tripwire 1).
-3. The autopilot pauses on its next tick.
-4. The dashboard reads "The leash held." and says it was a drill.
+- [docs/runs.md](docs/runs.md): the live runs, with every transaction.
+- [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [CITATION.cff](CITATION.cff) · [llms.txt](llms.txt).
+- DELICTI: [README](https://github.com/dziuba0x/delicti) · [SPEC](https://github.com/dziuba0x/delicti/blob/main/SPEC.md).
+- The hero is drawn by the dashboard's own glass (`assets/hero/hero.html`) and filmed by `scripts/hero.mjs`.
 
-Nothing can move either way: the agent's signature alone is weight 1 of the 2 the account needs.
+## Citing
 
-`scripts/rearm.ts` is the principal's re-arm. It needs the key that committed the umbrella; any other key reads `NotPrincipal`. The autopilot resumes by itself.
+See [CITATION.cff](CITATION.cff), or GitHub's *Cite this repository*.
 
-```bash
-LANCEA_CONFIG=~/.config/lancea/config.json LANCEA_KEYS=~/.config/lancea/keys npx tsx scripts/drill.ts
-set -a; . ./.env; set +a; LANCEA_CONFIG=~/.config/lancea/config.json npx tsx scripts/rearm.ts
-```
-
-## Status: MVP
-
-- XRP `Payment`s only. Issued currencies (RLUSD) are outside DELICTI's evidence today: the FDC's `Payment` type attests native payments only.
-- Smart Accounts: the full loop is proven live on testnets, through the guard: mint, deposit into Firelight, redeem. The dollar budget and the tripwire govern it (see *Live: the autopilot on a leash*).
-- One guard. The design allows *k of n* independent guards, each with a bond. XRPL SignerLists hold up to 32 signers, so no single guard can block or collude.
-- The guard's key is a local key. It is meant to move into a Flare Confidential Compute machine: TEE identities are secp256k1, which the XRP Ledger accepts as a signer.
-- Accountability behind the brake: link the account's XRP-outflow mandate to the umbrella (DELICTI §6.10 + SUMMA). Then even a compromised guard is convicted from FDC proofs.
-- A Xaman xApp as the front end.
+## License
 
 MIT. Testnets only. Unaudited.

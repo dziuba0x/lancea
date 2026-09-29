@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- Lancea's hero, drawn by the dashboard's own glass (dashboard/glass.js) and filmed frame by frame
+     by scripts/hero.mjs into assets/hero.webp. Sized by the viewport: 1600×544 for the README,
+     1280×640 for the social preview. Geist: SIL Open Font License (fonts/OFL.txt). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lancea</title>
+<style>
+  @font-face { font-family: Geist; font-weight: 300; src: url(fonts/Geist-Light.woff2) format("woff2"); }
+  @font-face { font-family: Geist; font-weight: 400; src: url(fonts/Geist-Regular.woff2) format("woff2"); }
+  @font-face { font-family: "Geist Mono"; font-weight: 500; src: url(fonts/GeistMono-Medium.woff2) format("woff2"); }
+  :root { --u: min(1vh, 0.34vw); --cyan: #35cfff; --amber: #ffb340; --ink: #f5f5f7; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #04050a; color: var(--ink); font-family: Geist, system-ui, sans-serif; }
+  #sky { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  .stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  .row { display: flex; align-items: center; gap: calc(5 * var(--u)); transform: translateY(calc(-2.5 * var(--u))); }
+  #ring { width: calc(36 * var(--u)); height: calc(36 * var(--u)); border-radius: 50%; flex: none; }
+  #plate { height: calc(31 * var(--u)); padding: 0 calc(8 * var(--u)) 0 calc(9 * var(--u)); border-radius: calc(15.5 * var(--u)); display: flex; align-items: center; }
+  h1 { margin: 0; font-weight: 300; font-size: calc(17 * var(--u)); line-height: 1; letter-spacing: 0.3em; margin-right: -0.3em;
+       background: linear-gradient(180deg, #ffffff 25%, #d7dee8 70%, #aeb8c6); -webkit-background-clip: text; background-clip: text; color: transparent;
+       filter: drop-shadow(0 calc(0.4 * var(--u)) calc(1.6 * var(--u)) rgba(0, 0, 0, 0.35)); }
+  .sub { position: fixed; left: 0; right: 0; top: calc(50% + 17 * var(--u)); margin: 0; text-align: center; font-weight: 400;
+         font-size: calc(3.9 * var(--u)); letter-spacing: 0.01em; color: rgba(245, 245, 247, 0.8); text-shadow: 0 1px calc(2 * var(--u)) rgba(0, 0, 0, 0.5); }
+  .chip { position: fixed; top: calc(6.5 * var(--u)); height: calc(5.4 * var(--u)); padding: 0 calc(2.3 * var(--u)); border-radius: calc(2.7 * var(--u));
+          display: flex; align-items: center; gap: calc(1.3 * var(--u)); font: 500 calc(1.85 * var(--u)) / 1 "Geist Mono", monospace;
+          letter-spacing: 0.14em; text-transform: uppercase; color: rgba(245, 245, 247, 0.88); white-space: nowrap; }
+  .chip.l { left: calc(5.5 * var(--u)); }
+  .chip.r { right: calc(5.5 * var(--u)); }
+  .dot { width: calc(1.25 * var(--u)); height: calc(1.25 * var(--u)); border-radius: 50%; box-shadow: 0 0 calc(1.2 * var(--u)) currentColor; }
+  .foot { position: fixed; bottom: calc(6.4 * var(--u)); font: 500 calc(1.7 * var(--u)) / 1 "Geist Mono", monospace; letter-spacing: 0.24em;
+          text-transform: uppercase; color: rgba(245, 245, 247, 0.5); }
+  .foot.l { left: calc(6.2 * var(--u)); }
+  .foot.r { right: calc(6.2 * var(--u)); }
+  #delicti { top: auto; bottom: calc(5 * var(--u)); left: 50%; transform: translateX(-50%); color: rgba(245, 245, 247, 0.8); }
+  #delicti b { font-weight: 500; color: var(--ink); letter-spacing: 0.3em; }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div class="stage"><div class="row">
+  <div id="ring"></div>
+  <div id="plate"><h1>LANCEA</h1></div>
+</div></div>
+<p class="sub">A co-signer AI agents cannot talk past</p>
+<div class="chip l" id="agent"><i class="dot" style="color:var(--cyan);background:var(--cyan)"></i>Signer 1 · the agent proposes</div>
+<div class="chip r" id="guard">Signer 2 · the guard co-signs<i class="dot" style="color:var(--amber);background:var(--amber)"></i></div>
+<div class="foot l">Propose · Price · Co-sign</div>
+<div class="foot r">XRPL · Flare · FTSO</div>
+<div class="chip" id="delicti">on the&nbsp;<b>DELICTI</b>&nbsp;protocol</div>
+<script src="../../dashboard/glass.js"></script>
+<script>
+  const $ = (s) => document.querySelector(s);
+  const ok = Glass.init($("#sky"));
+  Glass.add($("#plate"), { kind: "pane", scroll: false });
+  Glass.add($("#ring"), { kind: "ring", tube: 15, scroll: false });
+  for (const id of ["#agent", "#guard", "#delicti"]) Glass.add($(id), { kind: "chip", scroll: false });
+  for (const id of ["#plate", "#ring", "#agent", "#guard", "#delicti"]) Glass.show($(id), true, 0, { instant: true });
+  Glass.setFill($("#ring"), 0.64);
+  // the white star where the two lights meet sits behind the name: cyan (the agent) to its left, amber (the guard) to its right
+  const r = $("#plate").getBoundingClientRect();
+  Glass.focus(innerWidth / 2, r.top + r.height / 2, 0, false, true);
+  window.heroReady = ok;
+</script>
+</body>
+</html>

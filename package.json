@@ -1,15 +1,26 @@
 {
   "name": "lancea",
   "version": "0.1.0",
-  "description": "Lancea: a co-signer on the XRP Ledger that will not sign past a DELICTI budget",
-  "main": "index.js",
+  "description": "A co-signer AI agents cannot talk past: an XRP Ledger guard that will not sign past a DELICTI dollar budget, counted across XRPL and Flare",
   "scripts": {
     "live": "tsx scripts/live.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "ai-agents",
+    "agent-security",
+    "xrpl",
+    "flare-network",
+    "multisig",
+    "co-signer",
+    "spending-limits",
+    "fassets",
+    "ftso",
+    "smart-accounts",
+    "delicti"
+  ],
+  "author": "Alan Dziuba",
   "license": "MIT",
   "dependencies": {
     "viem": "^2.56.8",
@@ -21,5 +32,13 @@
     "typescript": "^7.0.2"
   },
   "type": "module",
-  "private": true
+  "private": true,
+  "homepage": "https://dziuba0x.github.io/lancea/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dziuba0x/lancea.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dziuba0x/lancea/issues"
+  }
 }
