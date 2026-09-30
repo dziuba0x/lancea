@@ -27,4 +27,11 @@ test("the dashboard builds into one page whose scripts compile", () => {
   assert.match(html, /id="mode-seg"[\s\S]*data-mode="auto"[\s\S]*data-mode="quick"[\s\S]*data-mode="deep"/);
   assert.match(html, /class="g g-stop"/);
   assert.doesNotMatch(html, /class="fine"/);
+  // 0060: a segment's lens rides with its control when the page scrolls; the menu is grown out of the
+  // pointer's drop (held while it is open, given back where the menu gathered) and sized by hand in lg.js
+  assert.ok(code.includes("{ ...o.lens, el: host }"), "a segment's lens knows its control");
+  assert.ok(code.includes("L.offEl === el"), "lenses are moved with the page before their springs run");
+  assert.ok(/function morph\(node, s\)[\s\S]*return \{[^}]*morph, warm/.test(code), "lg.js animates a piece of glass by hand");
+  assert.ok(code.includes("Glass.dropHold()") && code.includes("Glass.dropRelease(give[0], give[1], give[2], give[3], 1)"), "the menu takes the pointer's drop and gives it back");
+  for (const item of ["Analyze with the agent", "Make a drop of glass", "Make a wish", "Ask my own question…"]) assert.ok(code.includes(item), `the menu still offers "${item}"`);
 });

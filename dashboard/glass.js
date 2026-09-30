@@ -957,16 +957,20 @@ void main() {
     const q0 = o.fromRadius ?? radiusOf(el);
     if (!ov) {
       ov = { el, kind: KIND[o.kind ?? "sheet"], lr: new Liquid(src, q0), lens: o.from ? 0.45 : 0, vl: 0, press: 0, pv: 0, pressT: 0, p: 0, tether: null };
-      ov.tether = o.from && !S.reduced ? { lr: new Liquid(src, q0) } : null;
+      ov.tether = o.from && !S.reduced && !o.track ? { lr: new Liquid(src, q0) } : null;
       S.overs.push(ov);
     } else ov.tether = null; // opened again while it was closing: it simply turns around
     ov.state = "in"; ov.onFrame = o.onFrame; ov.onDone = null; ov.radius = radiusOf(el); ov.sink = false; ov.p = 0;
+    // (0060) track: the page animates the element itself (the context menu); this glass (its shadow) keeps to it
+    // frame for frame, corners included, with no springs of its own
+    ov.track = o.track ? (typeof o.track === "function" ? o.track : () => radiusOf(el)) : null;
     ov.d0 = Math.max(1, rdist(ov.lr, goal));
     if (S.reduced) { ov.lr.set(goal, ov.radius); ov.lens = 1; ov.p = 1; ov.tether = null; }
   }
   function overlayOut(el, o = {}) {
     const ov = S.overs.find((x) => x.el === el);
     if (!ov) { o.onDone?.(); return; }
+    if (o.instant) { S.overs = S.overs.filter((x2) => x2 !== ov); o.onDone?.(); return; }
     ov.state = "out"; ov.onDone = o.onDone; ov.onFrame = null; ov.sink = false;
     ov.to = o.to ? plain(o.to) : null; ov.toRadius = o.toRadius ?? 14; ov.from = ov.lr.rect;
     const [x, y] = ov.to ? mid(ov.to) : [0, 0];
@@ -979,7 +983,8 @@ void main() {
       const t = ov.tether;
       if (ov.state === "in") {
         const g = ov.el.getBoundingClientRect();
-        if (g.width < 1) { overlayOut(ov.el); continue; }
+        if (g.width < 1) { overlayOut(ov.el, { instant: !!ov.track }); continue; }
+        if (ov.track) { ov.lr.set(g, Math.min(ov.track(), g.width / 2, g.height / 2)); spring(ov, "lens", "vl", 1, SP.lens, dt); ov.p = 1; ov.liq = 0; continue; }
         ov.lr.step(g, ov.radius, dt, SP.sheetLead, SP.sheetTrail);
         spring(ov, "lens", "vl", 1, SP.lens, dt);
         ov.liq = (ov.liq ?? 0) + (smooth(80, 1400, ov.lr.speed()) - (ov.liq ?? 0)) * Math.min(1, dt * 12);
@@ -1012,7 +1017,7 @@ void main() {
   /** A lens that swells inside a bar: get() returns {rect, radius, lift, layer} or null. */
   function lens(key, get, o = {}) {
     S.lenses = S.lenses.filter((x) => x.key !== key);
-    const L = { key, get, hover: false, lr: null, str: 0, vs: 0, lift: 0, vlift: 0, height: o.height ?? 0.28, tint: o.tint ?? 1, layer: o.layer ?? 0 };
+    const L = { key, get, el: o.el ?? null, hover: false, lr: null, str: 0, vs: 0, lift: 0, vlift: 0, height: o.height ?? 0.28, tint: o.tint ?? 1, layer: o.layer ?? 0 };
     S.lenses.push(L);
     return L;
   }
@@ -1028,8 +1033,24 @@ void main() {
     const radius = o.radius === "capsule" ? Math.min(rect.width, rect.height) / 2 : Math.min(o.radius ?? 14, rect.width / 2, rect.height / 2);
     return { rect, radius, layer: o.layer ?? 0, lift: 0 };
   }
+  // (0060) What scrolls an element: the page, and any list or row inside it that scrolls on its own.
+  const scrollChain = new WeakMap();
+  function scrolled(el) {
+    let chain = scrollChain.get(el);
+    if (!chain) {
+      chain = [];
+      for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) { const cs = getComputedStyle(e); if (/(auto|scroll)/.test(cs.overflowY + cs.overflowX)) chain.push(e); }
+      scrollChain.set(el, chain);
+    }
+    let x = 0, y = 0; for (const e of chain) { x += e.scrollLeft; y += e.scrollTop; } return [x, y];
+  }
   function updateLenses(dt) {
     for (const L of S.lenses) {
+      // (0060) a lens rides with its control when the page scrolls: it is moved with the page before its springs
+      // run, so scrolling is never a displacement for them (the selection in a segment, the pointer's highlight)
+      const el = L.hover ? (S.hoverEl?.isConnected ? S.hoverEl : null) : L.el, off = el ? scrolled(el) : null;
+      if (L.lr && off && L.off && L.offEl === el) { const dx = L.off[0] - off[0], dy = L.off[1] - off[1]; if (dx || dy) { L.lr.l += dx; L.lr.r += dx; L.lr.t += dy; L.lr.b += dy; } }
+      L.off = off; L.offEl = el;
       const g = L.hover ? hoverGoal() : L.get?.();
       if (g) {
         if (!L.lr || L.str < 0.02) L.lr = L.hover ? new Liquid(pointerBox(9), 9) : new Liquid(g.rect, g.radius);
@@ -1335,9 +1356,10 @@ void main() {
     addEventListener("pointerup", up, { passive: true });
     addEventListener("pointercancel", up, { passive: true });
   }
-  function hitTest(x, y) {
+  function hitTest(x, y, page) {
     const inside = (r) => r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-    for (let i = S.overs.length - 1; i >= 0; i--) { const o = S.overs[i]; if (o.lens > 0.2 && o.state === "in" && inside(o.lr)) return { rec: o, layer: 1 }; }
+    // (page: what lies under the pointer on the page, not the context menu grown out of the pointer's own drop)
+    for (let i = S.overs.length - 1; i >= 0; i--) { const o = S.overs[i]; if (o.lens > 0.2 && o.state === "in" && !(page && o.track) && inside(o.lr)) return { rec: o, layer: 1 }; }
     for (let i = S.shapes.length - 1; i >= 0; i--) { const s = S.shapes[i]; if (!s.held && s.lens > 0.2 && inside(s.rect)) return { rec: s, layer: 0 }; }
     return null;
   }
@@ -1411,7 +1433,9 @@ void main() {
   function updateCursor(dt) {
     const c = S.cursor, now = S.now;
     const idle = now - c.moved > 2.6;
-    const want = c.fine && !S.reduced && !idle && c.onT ? 1 : 0;
+    const want = c.fine && !S.reduced && !idle && c.onT && !c.held ? 1 : 0;
+    // (0060) held: the context menu is this drop's glass for now (it is given back with dropRelease)
+    if (c.held) { c.on = 0; c.von = 0; }
     spring(c, "on", "von", want, want ? SP.pop : SP.evaporate, dt);
     if (!want && c.on < 0.003) { c.on = 0; c.von = 0; }
     if (c.px < -1e3) { c.px = c.x; c.py = c.y; for (const t of c.sat) { t.x = c.x; t.y = c.y; } }
@@ -1429,11 +1453,15 @@ void main() {
     spring(c, "st", "vst", Math.min(0.34, v / 3600), SP.jelly, dt);
     c.st = clamp(c.st, -0.3, 0.45);
     spring(c, "press", "vpress", c.down && !S.touch ? 1 : 0, c.down ? SP.press : SP.release, dt);
-    const over = c.fine ? hitTest(c.x, c.y) : null;
+    const over = c.fine ? hitTest(c.x, c.y, true) : null;
     c.glass += ((over && over.rec.kind !== 2 ? 1 : 0) - c.glass) * Math.min(1, dt * 6);
   }
+  // (0060) what the page animates by hand in step with the glass (the context menu): it runs first in each
+  // frame, so the glass drawn in that frame (a shadow, the pointer's drop) sees where it is
+  const pre = new Set();
   function update(dt) {
     const c = S.cursor, now = S.now;
+    for (const f of pre) { try { f(dt); } catch (e) { console.error("glass pre:", e); } }
     // shapes: lens (materialize), press, ring fill
     for (const s of S.shapes) {
       if (s.held) { s.lens = 0; s.v = 0; }
@@ -1532,6 +1560,7 @@ void main() {
     drops: S.drops.map((d) => [Math.round(d.x), Math.round(d.y), +d.r.toFixed(1)]),
     lenses: S.lenses.filter((L) => L.lr && L.str > 0.004).map((L) => [L.key, Math.round(L.lr.l), Math.round(L.lr.t), Math.round(L.lr.r), Math.round(L.lr.b), +L.str.toFixed(2)]),
     blobs: S.blobs.length, overs: S.overs.length, touch: !!S.touch, lk: +S.lk.toFixed(1),
+    cursor: { on: +S.cursor.on.toFixed(2), onT: S.cursor.onT, idle: +(S.now - S.cursor.moved).toFixed(2), fine: S.cursor.fine, held: !!S.cursor.held, glass: +S.cursor.glass.toFixed(2) },
     flights: S.flights.map((F) => [Math.round(F.lr.l), Math.round(F.lr.t), Math.round(F.lr.r), Math.round(F.lr.b), +F.lr.q.toFixed(1), +F.liq.toFixed(2)]),
     insets: S.insets.map((I) => [I.el.id || I.el.className.split(" ").slice(0, 2).join("."), +I.str.toFixed(2), I.lr ? Math.round(I.lr.r - I.lr.l) : 0]),
     shapes: S.shapes.filter((x) => x.rect && x.lens > 0.01).map((x) => [x.el.id || x.el.className.split(" ")[0], Math.round(x.rect.left), Math.round(x.rect.top), Math.round(x.rect.width), +x.lens.toFixed(2)]),
@@ -1751,11 +1780,29 @@ void main() {
   function setScroll(y, top, bottom) { S.scroll.y = y; S.scroll.top = top; S.scroll.bottom = bottom; }
   function setScroller(el) { S.scroller = el; }
   function stats() { return window.__lanceaStats; }
+  // (0060) The pointer's drop and the context menu: the menu is grown out of the drop (dropNow says where it is
+  // and how big), holds it while it is open, and gives it back where its glass gathered into a drop again,
+  // still moving (dropRelease), so the drop catches up with the pointer on its own springs.
+  function dropNow() {
+    const c = S.cursor;
+    return { x: c.px, y: c.py, r: 12.5 * Math.max(0, c.on) * (1 - c.glass) * (1 + 0.26 * c.press), glass: c.glass, fine: c.fine && !S.reduced && c.onT > 0, px: c.x, py: c.y };
+  }
+  function dropHold() { const c = S.cursor; c.held = true; c.on = 0; c.von = 0; }
+  function dropRelease(x, y, vx = 0, vy = 0, on = 1) {
+    const c = S.cursor; c.held = false;
+    const give = x != null && c.fine && !S.reduced;
+    const px = give ? x : c.x, py = give ? y : c.y;
+    c.px = px; c.py = py; c.vx = give ? vx : 0; c.vy = give ? vy : 0; c.on = give ? on : 0; c.von = 0;
+    if (give) { c.glass = 0; c.moved = S.now; const v = Math.hypot(vx, vy); if (v > 60) { c.ax = vx / v; c.ay = vy / v; } }
+    for (const t of c.sat) { t.x = px; t.y = py; t.vx = c.vx * 0.85; t.vy = c.vy * 0.85; }
+  }
+  function onFrame(f, on = true) { if (on) pre.add(f); else pre.delete(f); }
   return {
     init, add, remove, show, setFill, press, burst, setDecisions, focus, markAt, markHover, markPos, setScroll, setScroller,
     backdrop, sweep, ringState, ringPulse, ringAt, asleep, snapshot, flow, overlay, overlayOut, lens, hover, debug, stats,
     inset, insetOff, insetSet, fly,
     dropSpawn, dropAt, dropPop: popDrop, dropSplit: splitDrop, dropPopAll: popAll, dropCount: () => S.free.filter((d) => !d.pop && !d.spray).length, meteor,
+    dropNow, dropHold, dropRelease, onFrame, Liquid, springs: SP, spring,
     get ok() { return S.ok; }, get reduced() { return S.reduced; }, get solid() { return S.solid; }, get now() { return S.now; },
     get flowing() { return S.blobs.length > 0; }, get flights() { return S.flights.length; },
   };

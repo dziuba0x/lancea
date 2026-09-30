@@ -1235,7 +1235,7 @@
       const hr = host.getBoundingClientRect(), w = r.width, pad = 4;
       const cx = Math.min(Math.max(drag.x, hr.left + pad + w / 2), hr.right - pad - w / 2);
       return { rect: { left: cx - w / 2, right: cx + w / 2, top: r.top, bottom: r.bottom }, radius: r.height / 2, lift: 1 };
-    }, o.lens);
+    }, { ...o.lens, el: host }); // (0060: the lens knows its control, so it rides with it when the page scrolls)
     const nearest = (x) => { let best = null, bd = 1e9; for (const b of o.items()) { const r = b.getBoundingClientRect(); const d = Math.abs(x - (r.left + r.width / 2)); if (r.width && d < bd) { bd = d; best = b; } } return best; };
     host.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || !Glass.ok || !e.target.closest("button")) return;
@@ -1521,46 +1521,198 @@
     return it;
   }
   const itemHtml = (x, i) => `<button role="menuitem" data-i="${i}"${x.sub ? ' aria-haspopup="menu"' : ""}>${x.ic}<span>${esc(x.t)}</span>${x.sub ? `<i class="more">${ICON.chev}</i>` : ""}</button>`;
+
+  // ─── The menu's glass (0060): out of the pointer's drop, and back into it ──
+  // Right-click the sky and the pointer's own drop spills into the menu: its four edges run out on springs
+  // (the edge that leads is stiffer, so the glass stretches as it spreads and settles with a little bounce,
+  // the springs of the sheets that open out of a row), its bevel thins from a lens into a sheet, and it
+  // clears into the top bar's glass as it grows. The words condense out of it where it has passed over them.
+  // Move away, or click the sky, and it gathers toward the pointer, the edge nearest leading, into a drop
+  // that is handed back to the pointer still moving: the drop catches up and holds on. On a pane (where the
+  // drop has sunk into the glass) the same glass rises out of the point pressed and sinks back into it. Over
+  // the options, a lens forms out of the pointer and wraps the one beneath, the way the model picker's does.
+  const MLOOK = { drop: { blur: 0.4, frost: 0.1, dim: 0, lift: 0.04 }, menu: { blur: 5, frost: 0.9, dim: 0.3, lift: 0.015 } };
+  const MENU_R = 22, BEAD = 25;
+  const mspr = (d, b) => ({ k: (2 * Math.PI / d) ** 2, c: (4 * Math.PI * (1 - b)) / d });
+  const FOLD_MOVE = mspr(0.46, 0.14), FOLD_SIZE = mspr(0.26, 0.04), FOLD_ROUND = mspr(0.2, 0);
+  const mbox = (l, t, r, b) => ({ left: l, top: t, right: r, bottom: b, width: r - l, height: b - t });
+  const mclamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const msmooth = (a, b, x) => { const t = mclamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const ptr = { x: -1e4, y: -1e4, fine: false, key: false };
+  const MG = { st: "off", lr: null, fin: null, cx: 0, cy: 0, vcx: 0, vcy: 0, t0: 0, dir: [1, 1], held: false, give: false, toward: null, then: null, items: [], hooked: false, raf: 0, last: 0,
+    lens: { lr: null, str: 0, vs: 0, el: null, x: 0, y: 0 } };
+  function mgRadius() { const L = MG.lr; return L ? Math.min(MENU_R, (L.r - L.l) / 2, (L.b - L.t) / 2) : MENU_R; }
+  function mgKick() {
+    if (Glass.ok) { if (!MG.hooked) { MG.hooked = true; Glass.onFrame(mgStep); } return; }
+    if (!MG.raf) { MG.last = performance.now(); MG.raf = requestAnimationFrame(mgRaf); }
+  }
+  function mgRaf(now) {
+    MG.raf = 0; if (MG.st === "off") return;
+    if (!window.__lanceaFreeze) mgStep(Math.min(0.05, (now - MG.last) / 1000));
+    MG.last = now; MG.raf = requestAnimationFrame(mgRaf);
+  }
+  /** Where the words of the page now on show sit, inside the menu (for the words to condense where the glass passes). */
+  function mgMeasure() {
+    const m = $("#menu"), inn = $(".menu-in", m), page = $(m.classList.contains("at-sub") ? ".menu-page.sub" : ".menu-page.main", m);
+    if (!inn || !page) return [];
+    const ir = inn.getBoundingClientRect();
+    return [...page.children].map((el) => { const r = el.getBoundingClientRect(); return { el, x: r.left - ir.left, y: r.top - ir.top, w: r.width, h: r.height, t: 0 }; });
+  }
+  function mgStep(dt) {
+    const m = $("#menu"), L = MG.lr;
+    if (MG.st === "off" || !L || m.hidden) { if (MG.hooked) { MG.hooked = false; Glass.onFrame(mgStep, false); } return; }
+    const SP = Glass.springs, R = Glass.reduced, spring = Glass.spring;
+    if (MG.st === "open") {
+      const f = MG.fin, g = mbox(f.l, f.t, f.l + f.w, f.t + f.h);
+      if (R) { L.set(g, MENU_R); MG.cx = f.l; MG.cy = f.t; }
+      else { L.step(g, null, dt, SP.sheetLead, SP.sheetTrail); spring(MG, "cx", "vcx", f.l, SP.sheetLead, dt); spring(MG, "cy", "vcy", f.t, SP.sheetLead, dt); }
+    } else {
+      // gathering: the glass draws itself in, the far side rushing in fastest, into a drop that sets off after
+      // the pointer, wherever it goes. Over the sky that drop is handed to the pointer, still moving, and the
+      // pointer's drop catches up on its own springs, its two droplets trailing; over a pane it sinks away.
+      const [x, y] = MG.toward(), d = Glass.ok && Glass.dropNow ? Glass.dropNow() : null;
+      const bead = MG.give && d && d.glass < 0.5 ? BEAD : 4, F = MG.f;
+      if (R) return mgOff(bead === BEAD ? [x, y, 0, 0] : null);
+      // (its size and its shape on springs of their own: surface tension rounds it faster than it shrinks)
+      spring(F, "x", "vx", x, FOLD_MOVE, dt); spring(F, "y", "vy", y, FOLD_MOVE, dt);
+      spring(F, "s", "vs", bead, FOLD_SIZE, dt); spring(F, "q", "vq", 0, FOLD_ROUND, dt);
+      F.s = Math.max(F.s, 2);
+      const fw = F.s * Math.exp(F.q / 2), fh = F.s * Math.exp(-F.q / 2);
+      L.set(mbox(F.x - fw / 2, F.y - fh / 2, F.x + fw / 2, F.y + fh / 2), Math.min(fw, fh) / 2);
+      m.style.opacity = bead === BEAD ? "" : msmooth(3, 14, F.s).toFixed(3);
+      if (bead === BEAD ? Math.max(fw, fh) <= BEAD * 1.15 + 1 : F.s <= 6) return mgOff(bead === BEAD ? [F.x, F.y, F.vx, F.vy] : null);
+    }
+    const w = Math.max(1, L.r - L.l), h = Math.max(1, L.b - L.t), r = Math.min(MENU_R, w / 2, h / 2);
+    const geo = `${L.l.toFixed(2)}|${L.t.toFixed(2)}|${w.toFixed(2)}|${h.toFixed(2)}|${MG.cx.toFixed(2)}|${MG.cy.toFixed(2)}`;
+    if (geo === MG.geo && !m.classList.contains("revealing")) return mgLens(dt, R); // (settled: nothing to write)
+    MG.geo = geo;
+    Object.assign(m.style, { left: `${L.l.toFixed(2)}px`, top: `${L.t.toFixed(2)}px`, width: `${w.toFixed(2)}px`, height: `${h.toFixed(2)}px`, borderRadius: `${r.toFixed(2)}px` });
+    // a drop is clear; the larger it spreads, the more it is the menu's glass (the top bar's)
+    const k = msmooth(BEAD + 6, 150, Math.sqrt(w * h)), a = MLOOK.drop, b = MLOOK.menu, mix = (p, q) => p + (q - p) * k;
+    // (while it is still a drop it wears the pointer's drop's skin: its lit rim, its highlight, its dark band)
+    m.style.setProperty("--drop", (1 - msmooth(BEAD + 2, 66, Math.sqrt(w * h))).toFixed(3));
+    if (LG.ok) LG.morph(m, { w, h, r: MENU_R, blur: mix(a.blur, b.blur), frost: mix(a.frost, b.frost), dim: mix(a.dim, b.dim), lift: mix(a.lift, b.lift) });
+    else if (!m.closest(".solid")) { const bl = (2 + 16 * k).toFixed(1); m.style.webkitBackdropFilter = m.style.backdropFilter = `blur(${bl}px) saturate(1.6) brightness(${(1 - 0.1 * k).toFixed(3)})`; m.style.background = `rgba(14, 16, 28, ${(0.3 * k).toFixed(3)})`; }
+    const inn = $(".menu-in", m);
+    if (inn) inn.style.transform = `translate(${(MG.cx - L.l).toFixed(2)}px, ${(MG.cy - L.t).toFixed(2)}px)`;
+    // the words condense out of the glass where it has passed over them (from the side it spreads from)
+    if (MG.st === "open" && m.classList.contains("revealing")) {
+      const gx0 = L.l - MG.cx, gy0 = L.t - MG.cy, gx1 = L.r - MG.cx, gy1 = L.b - MG.cy;
+      let all = true;
+      for (const it of MG.items) {
+        // (how much of the item the glass's front has crossed, from its near side to its far side)
+        const cy = MG.dir[1] > 0 ? (gy1 - it.y) / Math.max(8, it.h - 2) : (it.y + it.h - gy0) / Math.max(8, it.h - 2);
+        const cx = MG.dir[0] > 0 ? (gx1 - it.x - 24) / 96 : (it.x + it.w - 24 - gx0) / 96;
+        const want = R ? 1 : Math.min(mclamp(cy, 0, 1), mclamp(cx, 0, 1));
+        it.t = R ? 1 : it.t + (want - it.t) * Math.min(1, dt * 15);
+        if (want >= 1 && it.t > 0.992) it.t = 1;
+        if (it.t < 1) all = false;
+        it.el.style.setProperty("--t", it.t.toFixed(3));
+      }
+      if (all) { m.classList.remove("revealing"); for (const it of MG.items) it.el.style.removeProperty("--t"); }
+    }
+    mgLens(dt, R);
+  }
+  /** The lens over the options: the pointer's drop sinks into the menu's glass and wraps the option beneath. */
+  function mgLens(dt, R) {
+    const Z = MG.lens, SP = Glass.springs, el = $("#menu .menu-lens"); if (!el) return;
+    const on = MG.st === "open" && Z.el?.isConnected && !Z.el.closest(".menu-page[inert]") ? Z.el : null;
+    const bx = (x, y, s) => mbox(x - s, y - s, x + s, y + s);
+    if (on) {
+      const r = on.getBoundingClientRect(), g = mbox(r.left - MG.cx, r.top - MG.cy, r.right - MG.cx, r.bottom - MG.cy);
+      if (!Z.lr || Z.str < 0.02) Z.lr = new Glass.Liquid(bx(Z.x, Z.y, 9), 9);
+      if (R) { Z.lr.set(g, 15); Z.str = 1; } else { Z.lr.step(g, 15, dt, SP.hoverLead, SP.hoverTrail); Glass.spring(Z, "str", "vs", 1, SP.hoverIn, dt); }
+    } else if (Z.lr) {
+      Z.lr.step(bx(Z.x, Z.y, 7), 7, dt, SP.hoverLead, SP.hoverTrail);
+      Glass.spring(Z, "str", "vs", 0, SP.fast, dt);
+      if (Z.str < 0.004 || R) { Z.str = 0; Z.vs = 0; Z.lr = null; }
+    }
+    const q = Z.lr;
+    if (!q) { if (Z.geo !== "") { Z.geo = ""; el.style.opacity = "0"; } return; }
+    const w = Math.max(1, q.r - q.l), h = Math.max(1, q.b - q.t), o = Math.max(0, Math.min(1, Z.str));
+    const geo = `${q.l.toFixed(2)}|${q.t.toFixed(2)}|${w.toFixed(2)}|${h.toFixed(2)}|${o.toFixed(3)}`;
+    if (geo === Z.geo) return;
+    Z.geo = geo;
+    Object.assign(el.style, { transform: `translate(${q.l.toFixed(2)}px, ${q.t.toFixed(2)}px)`, width: `${w.toFixed(2)}px`, height: `${h.toFixed(2)}px`, borderRadius: `${Math.min(q.q, w / 2, h / 2).toFixed(2)}px`, opacity: o.toFixed(3) });
+  }
+  function mgOff(give) {
+    const m = $("#menu"), then = MG.then;
+    MG.st = "off"; MG.lr = null; MG.then = null; MG.lens.lr = null; MG.lens.str = 0; MG.lens.el = null;
+    if (Glass.ok) Glass.overlayOut(m, { instant: true });
+    m.hidden = true; m.classList.remove("folding", "at-sub", "revealing", "open");
+    if (MG.held) { MG.held = false; if (give) Glass.dropRelease(give[0], give[1], give[2], give[3], 1); else Glass.dropRelease(); }
+    then?.();
+  }
   function openMenu(x, y, c) {
     const m = $("#menu");
-    if (menuAt) { menuAt = null; m.classList.remove("open", "at-sub"); }
     const items = menuItems(c);
     if (!items.length) return;
     const qs = items.some((q) => q.sub) ? questionsFor(c) : [];
-    m.innerHTML = `<div class="menu-pages"><div class="menu-page main" role="none">${items.map(itemHtml).join("")}</div>${qs.length ? `<div class="menu-page sub" role="none">
+    // (already on screen, opening or gathering: the glass turns around and flows to its new place)
+    const was = MG.st !== "off" && MG.lr && !m.hidden;
+    m.innerHTML = `<i class="menu-drop" aria-hidden="true"></i><div class="menu-in"><i class="menu-lens" aria-hidden="true"></i><div class="menu-pages"><div class="menu-page main" role="none">${items.map(itemHtml).join("")}</div>${qs.length ? `<div class="menu-page sub" role="none" inert>
       <button role="menuitem" data-back="1">${ICON.back}<span>Analyze with the agent</span></button><i class="sep" role="none"></i>
       ${qs.map((q, i) => `<button role="menuitem" data-q="${i}">${ICON.agent}<span>${esc(q)}</span></button>`).join("")}
-      <button role="menuitem" data-own="1">${ICON.pen}<span>Ask my own question…</span></button></div>` : ""}</div>`;
-    m.hidden = false; m.classList.remove("closing", "open", "at-sub"); m.style.height = ""; m.style.width = "";
-    const main = $(".menu-page.main", m), sub = $(".menu-page.sub", m);
-    const w = Math.max(main.scrollWidth, sub?.scrollWidth ?? 0) + 12;
-    m.style.width = `${Math.min(Math.max(250, w), innerWidth - 24)}px`;
-    const mw = m.offsetWidth, mh = m.offsetHeight;
-    const left = Math.max(12, Math.min(x, innerWidth - mw - 12)), top = y + mh + 12 > innerHeight ? Math.max(12, y - mh) : y;
-    m.style.left = `${left}px`; m.style.top = `${top}px`;
-    m.style.setProperty("--ox", `${x - left}px`); m.style.setProperty("--oy", `${y - top}px`);
+      <button role="menuitem" data-own="1">${ICON.pen}<span>Ask my own question…</span></button></div>` : ""}</div></div>`;
+    m.hidden = false; m.style.opacity = ""; m.classList.remove("folding", "at-sub"); m.classList.add("open", "revealing");
+    if (!m.classList.contains("lg")) LG.attach(m, { ...MLOOK.drop, radius: MENU_R, saturate: 1.45 });
+    const inn = $(".menu-in", m), main = $(".menu-page.main", m), sub = $(".menu-page.sub", m);
+    inn.style.width = "max-content";
+    const w = Math.min(Math.max(250, Math.max(main.scrollWidth, sub?.scrollWidth ?? 0) + 12), innerWidth - 24);
+    inn.style.width = `${w}px`;
+    const h = main.offsetHeight + 12;
+    const left = Math.max(12, Math.min(x, innerWidth - w - 12)), top = y + h + 12 > innerHeight ? Math.max(12, y - h) : y;
+    MG.fin = { l: left, t: top, w, h };
+    if (!was) {
+      // out of the pointer's drop when it is out on the sky (it becomes the menu); out of the point pressed on a pane
+      const d = Glass.ok && ptr.fine && Glass.dropNow ? Glass.dropNow() : null, sky = !!(d && d.fine && d.glass < 0.5);
+      const r0 = sky ? Math.max(10, d.r || BEAD / 2) : 4, ox = sky && d.r > 3 ? d.x : x, oy = sky && d.r > 3 ? d.y : y;
+      MG.lr = new Glass.Liquid(mbox(ox - r0, oy - r0, ox + r0, oy + r0), r0);
+      MG.dir = [Math.sign(left + w / 2 - ox) || 1, Math.sign(top + h / 2 - oy) || 1];
+      if (ptr.fine && Glass.ok && !MG.held) { Glass.dropHold(); MG.held = true; }
+      MG.lens.lr = null; MG.lens.str = 0;
+    } else {
+      const L = MG.lr;
+      MG.dir = [Math.sign(left + w / 2 - (L.l + L.r) / 2) || 1, Math.sign(top + h / 2 - (L.t + L.b) / 2) || 1];
+    }
+    m.style.setProperty("--mdx", `${-6 * MG.dir[0]}px`); m.style.setProperty("--mdy", `${-4 * MG.dir[1]}px`);
+    MG.cx = left; MG.cy = top; MG.vcx = MG.vcy = 0; MG.then = null;
+    MG.st = "open"; MG.t0 = performance.now(); MG.lens.el = null; MG.geo = null; MG.lens.geo = null;
+    MG.items = mgMeasure();
+    for (const it of MG.items) it.el.style.setProperty("--t", "0");
     menuAt = { x, y, c, items, qs, sy: $("#scroller").scrollTop };
-    LG.attach(m, MENU_GLASS);
-    if (Glass.ok) Glass.overlay(m, { kind: "shade", from: { left: x - 5, right: x + 5, top: y - 5, bottom: y + 5 }, fromRadius: 5 });
-    const at = menuAt;
-    requestAnimationFrame(() => { if (menuAt === at) m.classList.add("open"); });
+    if (Glass.ok) Glass.overlay(m, { kind: "shade", track: mgRadius });
+    mgStep(0); mgKick();
     m.querySelector("button")?.focus({ preventScroll: true });
   }
-  function closeMenu() {
+  /** o: { x, y } where a touch closed it (it gathers there), then: what to do once it is a drop again. */
+  function closeMenu(o = {}) {
     const m = $("#menu"); if (!menuAt) return;
-    const { x, y } = menuAt; menuAt = null;
-    m.classList.remove("open"); m.classList.add("closing");
-    if (Glass.ok) Glass.overlayOut(m, { to: { left: x - 3, right: x + 3, top: y - 3, bottom: y + 3 }, toRadius: 3 });
-    clearTimeout(m.__t); m.__t = setTimeout(() => { if (!menuAt) { m.hidden = true; m.classList.remove("closing", "at-sub"); } }, 260);
+    const A = menuAt; menuAt = null;
+    m.classList.remove("open", "revealing"); m.classList.add("folding");
+    for (const it of MG.items) it.el.style.removeProperty("--t");
+    MG.lens.el = null; MG.then = o.then ?? null;
+    if (!MG.lr || MG.st === "off") { mgOff(null); return; }
+    const fine = ptr.fine && o.x == null, L = MG.lr;
+    const w0 = Math.max(2, L.r - L.l), h0 = Math.max(2, L.b - L.t);
+    MG.f = { x: (L.l + L.r) / 2, y: (L.t + L.b) / 2, vx: (L.vl + L.vr) / 2, vy: (L.vt + L.vb) / 2, s: Math.sqrt(w0 * h0), vs: 0, q: Math.log(w0 / h0), vq: 0 };
+    MG.st = "fold"; MG.give = fine && MG.held;
+    const tx = o.x ?? A.x, ty = o.y ?? A.y;
+    MG.toward = fine ? () => [ptr.x, ptr.y] : () => [tx, ty];
+    if (m.contains(document.activeElement)) document.activeElement.blur();
+    mgKick();
   }
-  /** Slide to the questions (or back), the glass growing or shrinking to fit them. */
+  /** Slide to the questions (or back); the glass grows or shrinks to fit them, as a liquid. */
   function menuPage(sub) {
-    const m = $("#menu"), page = $(sub ? ".menu-page.sub" : ".menu-page.main", m); if (!page) return;
-    m.style.height = `${m.offsetHeight}px`; void m.offsetHeight;
+    const m = $("#menu"), page = $(sub ? ".menu-page.sub" : ".menu-page.main", m); if (!page || !MG.fin) return;
     m.classList.toggle("at-sub", sub);
-    m.style.height = `${page.offsetHeight + 12}px`;
-    const r = m.getBoundingClientRect();
-    if (r.bottom > innerHeight - 12) m.style.top = `${Math.max(12, innerHeight - 12 - (page.offsetHeight + 12))}px`;
+    $(".menu-page.main", m).toggleAttribute("inert", sub); $(".menu-page.sub", m)?.toggleAttribute("inert", !sub);
+    const h = page.offsetHeight + 12;
+    MG.fin.h = h;
+    // (the lens leaves with the page it was on; it forms again out of the pointer, or on the focused option)
+    Object.assign(MG.lens, { el: null, lr: null, str: 0, vs: 0, geo: null });
+    if (MG.fin.t + h > innerHeight - 12) MG.fin.t = Math.max(12, innerHeight - 12 - h);
+    mgKick();
     page.querySelector("button")?.focus({ preventScroll: true });
   }
   function menuFor(key, x, y) { const d = st.m?.decisions.find((q) => q.key === key); if (d) openMenu(x, y, { type: "decision", d, from: rowOf(key) }); }
@@ -1619,6 +1771,8 @@
     const x = A.items[Number(b.dataset.i)]; if (!x) return;
     if (x.sub) return menuPage(true);
     if (x.k === "ask") return sendToAgent(x.q, aboutOf(c), b);
+    // (0060) a new drop buds off the pointer's drop once the menu has gathered back into it
+    if (x.k === "drop") return closeMenu({ then: () => Glass.dropSpawn?.(ptr.fine ? ptr.x : A.x, ptr.fine ? ptr.y : A.y) });
     closeMenu();
     if (x.k === "copy") copy(x.v, b);
     else if (x.k === "url") { const u = safeUrl(x.v) ?? (/^https:\/\//.test(x.v) ? x.v : null); if (u) window.open(u, "_blank", "noopener"); }
@@ -1626,7 +1780,6 @@
     else if (x.k === "sheet") openSheet(c.key, $(`[data-sheet="${c.key}"]`));
     else if (x.k === "own") prefillAgent(`About ${aboutOf(c)}: `);
     else if (x.k === "agent") go("agent");
-    else if (x.k === "drop") Glass.dropSpawn?.(A.x, A.y);
     else if (x.k === "pop") Glass.dropPop?.(c.id);
     else if (x.k === "split") Glass.dropSplit?.(c.id);
     else if (x.k === "popall") Glass.dropPopAll?.();
@@ -1634,7 +1787,8 @@
   }
 
   // ─── The pointer: its drop becomes the highlight of the control beneath ───
-  const HOVER = ".tab, #filters button, #mode-seg button, .linkbtn, .copy, .close, .signer, .faq summary, .decision, #status, .menu button, .try-b, .chip, .send";
+  // (0060: the menu's options have a lens of their own, drawn in the menu's glass: see mgLens)
+  const HOVER = ".tab, #filters button, #mode-seg button, .linkbtn, .copy, .close, .signer, .faq summary, .decision, #status, .try-b, .chip, .send";
   const LIFT = ".tab, #filters button, #mode-seg button, .copy, .close, .linkbtn, .try-b, .chip, .send";
   function hoverOpts(el) {
     const layer = el.closest(".sheet, .menu") ? 1 : 0;
@@ -1735,14 +1889,41 @@
       openMenu(e.clientX, e.clientY, contextOf(e.target, e.clientX, e.clientY));
     });
     document.addEventListener("pointerdown", (e) => {
-      if (menuAt && !e.target.closest("#menu")) closeMenu();
+      ptr.x = e.clientX; ptr.y = e.clientY; ptr.fine = e.pointerType === "mouse"; ptr.key = false;
+      // (a click outside: the menu gathers toward the pointer, or into the point a finger touched; like Apple's
+      // menus, that click only closes it, it does not also press what is under it)
+      if (menuAt && !e.target.closest("#menu")) { closeMenu(ptr.fine ? {} : { x: e.clientX, y: e.clientY }); if (e.button === 0) st.swallowT = performance.now() + 700; }
       if (e.pointerType === "mouse" || e.target.closest("input, textarea, button, a, #tabs, #menu, .chips, .rp-track")) return;
       const x = e.clientX, y = e.clientY, target = e.target;
       press = { x, y, fired: false, t: setTimeout(() => { if (!press) return; press.fired = true; openMenu(x, y, contextOf(target, x, y)); }, 520) };
     }, { passive: true });
-    document.addEventListener("pointermove", (e) => { if (press && !press.fired && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) { clearTimeout(press.t); press = null; } onHover(e); }, { passive: true });
+    document.addEventListener("pointermove", (e) => {
+      ptr.x = e.clientX; ptr.y = e.clientY; ptr.fine = e.pointerType === "mouse"; ptr.key = false;
+      if (press && !press.fired && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) { clearTimeout(press.t); press = null; }
+      // (0060) move away from the menu and it gathers back into the pointer's drop
+      if (menuAt && ptr.fine && MG.st === "open" && MG.fin && performance.now() - MG.t0 > 220) {
+        const f = MG.fin, dx = Math.max(f.l - e.clientX, 0, e.clientX - (f.l + f.w)), dy = Math.max(f.t - e.clientY, 0, e.clientY - (f.t + f.h));
+        if (Math.hypot(dx, dy) > 44) closeMenu();
+      }
+      onHover(e);
+    }, { passive: true });
     document.addEventListener("pointerup", () => { if (press && !press.fired) { clearTimeout(press.t); press = null; } }, { passive: true });
+    addEventListener("click", (e) => { if (st.swallowT && performance.now() < st.swallowT) { e.preventDefault(); e.stopPropagation(); } st.swallowT = 0; }, { capture: true });
+    document.addEventListener("keydown", (e) => { if (!e.metaKey && !e.ctrlKey) ptr.key = true; }, { capture: true });
     $("#menu").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && menuAt) menuAct(b); });
+    // the lens over the options follows the pointer (and the keys)
+    $("#menu").addEventListener("pointermove", (e) => {
+      if (e.pointerType !== "mouse" || MG.st !== "open") return;
+      MG.lens.x = e.clientX - MG.cx; MG.lens.y = e.clientY - MG.cy;
+      MG.lens.el = e.target.closest(".menu-page:not([inert]) button"); mgKick();
+    }, { passive: true });
+    $("#menu").addEventListener("pointerleave", () => { MG.lens.el = null; mgKick(); }, { passive: true });
+    $("#menu").addEventListener("focusin", (e) => {
+      if (!ptr.key || MG.st !== "open" || !e.target.matches("button")) return;
+      const r = e.target.getBoundingClientRect();
+      if (!MG.lens.lr) { MG.lens.x = r.left + 18 - MG.cx; MG.lens.y = r.top + r.height / 2 - MG.cy; }
+      MG.lens.el = e.target; mgKick();
+    });
     $("#menu").addEventListener("keydown", (e) => {
       const m = $("#menu"), page = $(m.classList.contains("at-sub") ? ".menu-page.sub" : ".menu-page.main", m);
       const bs = $$("button", page), i = bs.indexOf(document.activeElement);
@@ -1829,8 +2010,6 @@
     else Glass.focus(innerWidth * 0.5, innerHeight * (innerWidth <= 760 ? 0.2 : 0.3), 0, false);
   }
 
-  /** A menu reads over anything: much more frost, and darker. */
-  const MENU_GLASS = { radius: 22, blur: 12, frost: 0.94, dim: 0.46, lift: 0.02, saturate: 1.5 };
   /** The bars' glass: clear at the rim, frosted enough in the middle for their words to read over the page's. */
   const BAR_GLASS = { radius: "capsule", blur: 5, frost: 0.9, dim: 0.28, lift: 0.015 };
   function boot() {
@@ -1863,6 +2042,7 @@
     setInterval(() => { if (st.feed) { renderStatus(); tickNext(); tickUntil(); refreshPg(); } }, 1000);
     setInterval(tickAgo, 15000);
     document.fonts?.ready?.then(() => st.tabsLens.kick());
+    LG.warm?.(MENU_R, 6, 48); // (the menu's drop, drawn ahead of time while the page is idle)
     // for tests: feed the page by hand
     window.__lanceaApply = (f, live = true) => apply(f, live);
   }

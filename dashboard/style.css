@@ -539,16 +539,14 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
 .no-gl .toast.show, .solid .toast.show { opacity: 1; transform: none; }
 .no-gl .toast span, .solid .toast span { opacity: 1; }
 
-/* The context menu: a piece of the browser's glass grown out of the point that was pressed (lg.js), frosted
-   enough to read over the page. "Analyze with the agent" slides the questions in, and the glass grows to fit. */
-.menu {
-  position: absolute; z-index: 40; min-width: 250px; padding: 6px; border-radius: 22px; overflow: hidden;
-  transform-origin: var(--ox, 0) var(--oy, 0); transform: scale(0.5); opacity: 0;
-  transition: transform var(--d-bouncy) var(--e-bouncy), opacity 0.14s linear, height var(--d-snappy) var(--e-snappy), top var(--d-snappy) var(--e-snappy);
-}
+/* The context menu (0060): the pointer's own drop spills into it, and gathers back into it. Its glass is
+   sized by hand every frame (app.js, mgStep: four edges on springs, the bevel thinning from a lens to a
+   sheet, the frost of the top bar arriving as it spreads); the words live in place underneath (.menu-in) and
+   condense out of the glass where it has passed over them: from a blur, loosely spaced and thin, into
+   focus, at their weight, as if poured into the letters. Over the options, a lens of its own (.menu-lens). */
+.menu { position: absolute; z-index: 40; left: 0; top: 0; width: 0; height: 0; border-radius: 22px; overflow: hidden; contain: layout; }
 .menu[hidden] { display: none; }
-.menu.open { transform: none; opacity: 1; }
-.menu.closing { transform: scale(0.55); opacity: 0; transition: transform 0.24s var(--out), opacity 0.2s linear; }
+.menu-in { position: absolute; left: 0; top: 0; padding: 6px; }
 .menu-pages { position: relative; }
 .menu-page { display: grid; gap: 1px; transition: transform var(--d-snappy) var(--e-snappy), opacity 0.22s var(--out), filter 0.22s var(--out); }
 .menu-page.sub { position: absolute; left: 0; right: 0; top: 0; transform: translateX(46%); opacity: 0; filter: blur(4px); pointer-events: none; }
@@ -556,20 +554,49 @@ table.data td:last-child, table.data th:last-child { text-align: right; }
 .menu.at-sub .menu-page.sub { transform: none; opacity: 1; filter: none; pointer-events: auto; }
 .menu button {
   position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 9px 14px 9px 12px; border: 0; border-radius: 15px; background: none;
-  font: 500 14px/1.25 var(--sans); color: var(--ink); text-align: left; cursor: pointer; white-space: nowrap;
+  font: 500 14px/1.25 var(--sans); letter-spacing: -0.006em; color: var(--ink); text-align: left; cursor: pointer; white-space: nowrap;
   transition: background 0.2s var(--out), translate 0.3s var(--out);
 }
-.menu.open .menu-page > * { animation: rise-in 0.42s var(--e-snappy) both; }
-.menu.open .menu-page > :nth-child(2) { animation-delay: 30ms; } .menu.open .menu-page > :nth-child(3) { animation-delay: 60ms; }
-.menu.open .menu-page > :nth-child(4) { animation-delay: 90ms; } .menu.open .menu-page > :nth-child(5) { animation-delay: 120ms; } .menu.open .menu-page > :nth-child(n+6) { animation-delay: 150ms; }
+/* words of glass: lit from above, a little cooler at the foot, like the light through a lens */
+.menu button span { background: linear-gradient(180deg, #fff 18%, rgba(222, 234, 255, 0.86) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.menu.revealing .menu-page > * {
+  --t: 1;
+  opacity: var(--t);
+  filter: blur(calc((1 - var(--t)) * 4.5px));
+  letter-spacing: calc((1 - var(--t)) * 0.07em - 0.006em);
+  font-variation-settings: "wght" calc(320 + 180 * var(--t));
+  transform: translate(calc((1 - var(--t)) * var(--mdx, -6px)), calc((1 - var(--t)) * var(--mdy, -4px)));
+}
+.menu.folding .menu-page > * { opacity: 0; filter: blur(3px); transition: opacity 0.1s linear, filter 0.12s linear; }
 .menu button svg { width: 16px; height: 16px; color: var(--ink-2); flex: none; }
 .menu button .more { margin-left: auto; display: grid; place-items: center; color: var(--ink-3); padding-left: 10px; }
 .menu button .more svg { width: 13px; height: 13px; color: var(--ink-3); }
-.menu button:hover, .menu button:focus-visible { outline: none; background: rgba(245, 245, 247, 0.1); }
-.menu button:active { background: rgba(245, 245, 247, 0.16); }
-.menu .menu-page.sub button[data-back] { color: var(--ink-2); font-size: 13px; }
+.menu button:focus-visible { outline: none; }
+.menu button:active { background: rgba(245, 245, 247, 0.12); }
+.menu .menu-page.sub button[data-back] { font-size: 13px; }
+.menu .menu-page.sub button[data-back] span { background: none; color: var(--ink-2); }
 .menu .sep { display: block; height: 1px; margin: 3px 12px; background: var(--hair); }
+/* the lens over the options: the pointer's drop, sunk into the menu's glass (like the model picker's) */
+.menu-lens {
+  position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 0; pointer-events: none; opacity: 0; border-radius: 15px;
+  background: radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.06) 62%, rgba(255, 255, 255, 0.1));
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.34), inset 0 1px 1px rgba(255, 255, 255, 0.36), inset 0 -1px 2px rgba(255, 255, 255, 0.12);
+}
+.menu.folding .menu-lens { opacity: 0 !important; transition: opacity 0.1s linear; }
+/* the skin of the pointer's drop, worn while the menu is still a drop (--drop: 1 at the drop's size, 0 by 66 px):
+   its rim lit from the top left, a highlight, and the dark band a sphere of glass shows at its edge */
+.menu-drop {
+  position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none; opacity: var(--drop, 0);
+  background:
+    radial-gradient(38% 30% at 33% 27%, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0) 72%),
+    radial-gradient(closest-side, rgba(255, 255, 255, 0.05) 30%, rgba(0, 10, 18, 0.34) 58%, rgba(0, 10, 18, 0.16) 74%, rgba(255, 255, 255, 0.12) 92%, rgba(255, 255, 255, 0) 100%);
+  box-shadow: inset 1.5px 2px 1.5px -0.5px rgba(255, 255, 255, 0.72), inset -1px -1.5px 2px -1px rgba(255, 255, 255, 0.34), inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+}
+.no-gl .menu-drop, .solid .menu-drop { display: none; }
+.no-gl .menu-lens, .solid .menu-lens { display: none; }
+.no-gl .menu button:hover, .solid .menu button:hover, .no-gl .menu button:focus-visible, .solid .menu button:focus-visible { background: rgba(245, 245, 247, 0.1); }
 .no-gl .menu, .solid .menu { background: rgba(14, 16, 26, 0.94); box-shadow: inset 0 0 0 1px var(--hair-2), 0 18px 50px rgba(0, 0, 0, 0.45); }
+@media (hover: none) { .menu button:active { background: rgba(245, 245, 247, 0.14); } }
 /* a question on its way to the conversation: a capsule of glass carrying its words */
 .carrier { position: fixed; z-index: 45; display: flex; align-items: center; gap: 10px; padding: 0 16px 0 14px; border-radius: 999px; pointer-events: none;
   color: var(--ink); font: 500 14px/1 var(--sans); white-space: nowrap; overflow: hidden; transition: opacity 0.2s var(--out), filter 0.2s var(--out); }

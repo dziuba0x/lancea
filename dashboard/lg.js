@@ -77,7 +77,7 @@ const LG = (() => {
       r: draw(c, 1, (u) => [prof(c - u), 0, rim(c - u)]),
     };
     tiles.set(key, t);
-    if (tiles.size > 48) tiles.delete(tiles.keys().next().value);
+    if (tiles.size > 160) tiles.delete(tiles.keys().next().value);
     return t;
   }
 
@@ -92,6 +92,13 @@ const LG = (() => {
     const Hh = o.height ?? B * (m <= 64 ? 0.95 : 0.72);
     const depth = o.depth ?? (m <= 64 ? 40 : 48), lim = o.lim ?? (m <= 64 ? 30 : 38);
     return { r, B, Hh, depth, lim, S: Math.ceil(lim * 2.2) };
+  }
+  /** (0060) A shape morphed by hand (a drop that spreads into a sheet): the bevel follows the size smoothly,
+   *  so a drop is a lens all through and a sheet is flat in the middle, with no step in how much it bends.
+   *  Whole pixels, so the tiles of a growing drop are drawn once and kept. */
+  function morphParams(rec, w, h) {
+    const m = Math.max(2, Math.round(Math.min(w, h))), r = Math.min(rec.m.r, m / 2), B = clamp(Math.round(m * 0.42), 3, 20);
+    return { r: Math.round(r * 2) / 2, B, Hh: B * 0.85, depth: 44, lim: 34, S: Math.ceil(34 * 2.2) };
   }
 
   function build(rec) {
@@ -175,7 +182,7 @@ const LG = (() => {
     const w = size?.w ?? node.offsetWidth, h = size?.h ?? node.offsetHeight;
     if (w < 2 || h < 2) return;
     const dpr = Math.min(2, devicePixelRatio || 1);
-    const P = params(rec, w, h), key = `${P.r}|${P.B}|${P.Hh}|${P.depth}|${P.lim}|${dpr}`;
+    const P = rec.m ? morphParams(rec, w, h) : params(rec, w, h), key = `${P.r}|${P.B}|${P.Hh}|${P.depth}|${P.lim}|${dpr}`;
     if (key !== rec.key) {
       const t = tileSet(P.r, P.B, P.Hh, P.depth, P.lim, P.S, dpr);
       rec.imgs.forEach((im, i) => im.setAttribute("href", t[TILES[i]]));
@@ -187,6 +194,28 @@ const LG = (() => {
       place(rec.imgs, Math.min(rec.c, w / 2, h / 2), 0, 0, w, h);
       rec.f.setAttribute("width", w); rec.f.setAttribute("height", h);
     }
+  }
+  /** (0060) Animate a piece of glass by hand, every frame: its size (w, h), its corner radius (r), and its
+   *  look (blur, frost, dim, lift), all at once. */
+  function morph(node, s) {
+    const rec = items.get(node); if (!rec) return;
+    rec.m = { r: s.r };
+    Object.assign(rec.o, { blur: s.blur, frost: s.frost, dim: s.dim, lift: s.lift });
+    if (!rec.f) return;
+    const k = `${s.blur.toFixed(2)}|${s.frost.toFixed(3)}|${s.dim.toFixed(3)}|${s.lift.toFixed(3)}`;
+    if (k !== rec.tk) { rec.tk = k; retune(rec); }
+    update(node, { w: s.w, h: s.h });
+  }
+  /** Draw a growing drop's tiles ahead of time, when the page is idle (the first menu opens without a hitch). */
+  function warm(r = 22, from = 6, to = 48) {
+    if (!ok) return;
+    const dpr = Math.min(2, devicePixelRatio || 1), fake = { m: { r } };
+    let m = from;
+    const next = (dl) => {
+      while (m <= to && (!dl || dl.timeRemaining() > 4)) { const P = morphParams(fake, m, m); tileSet(P.r, P.B, P.Hh, P.depth, P.lim, P.S, dpr); m++; }
+      if (m <= to) (window.requestIdleCallback ?? ((f) => setTimeout(f, 60)))(next);
+    };
+    (window.requestIdleCallback ?? ((f) => setTimeout(f, 60)))(next);
   }
   // Light: the key light swings slowly (±20°), so the rim's highlight travels around every silhouette;
   // the pointer is a second light, a glint on the rim nearest to it.
@@ -209,5 +238,5 @@ const LG = (() => {
   addEventListener("pointerleave", () => light(-1e4, -1e4), { passive: true });
   setInterval(() => { if (!raf && !document.hidden) raf = requestAnimationFrame(lightFrame); }, 400);
 
-  return { ok, attach, detach, update, light, get chromium() { return chromium; } };
+  return { ok, attach, detach, update, light, morph, warm, get chromium() { return chromium; } };
 })();
