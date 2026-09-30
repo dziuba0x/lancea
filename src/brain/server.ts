@@ -30,25 +30,31 @@ import { short } from "../guard.js";
 import { XrplHttp } from "../xrpl-http.js";
 import { Journal } from "../service/journal.js";
 import { loadConfig, loadSecret, type BrainConfig, type LanceaConfig } from "../service/config.js";
-import { Assistant, type ChatEvent } from "./assistant.js";
+import { Assistant, type ChatEvent, type Mode, type Turn } from "./assistant.js";
 import { ChainTools, printable } from "./chain-tools.js";
-import { Gemini, jsonOf, listModels, resolveChain } from "./gemini.js";
+import { Gemini, jsonOf, listModels, modelName, resolveChain } from "./gemini.js";
 import { brief, Library, type BriefFacts } from "./knowledge.js";
 import { Limits, visitor } from "./limits.js";
 import { PILOT_SCHEMA, PILOT_SYSTEM, type PilotAnswer } from "./pilot.js";
 import { Playground } from "./playground.js";
 import { Sentinel } from "./sentinel.js";
 
-/** Free-tier models only (Flash and Flash-Lite; Pro is not free). A spent quota hands over to the next. */
+/**
+ * Free-tier models only (Flash and Flash-Lite; Pro is not free). A spent quota hands over to the next.
+ * The Flash models think better and allow ~20 requests a day each: they answer the deep questions. The
+ * Flash-Lite ones allow hundreds: quick answers, the pilot and the Sentinel, which may use half a day's
+ * quota at most, so visitors always find some left.
+ */
 export const BRAIN_DEFAULTS = {
   port: 8790,
   internalPort: 8791,
   models: {
-    chat: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"],
-    pilot: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-flash-lite-latest"],
-    sentinel: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"],
+    quick: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"],
+    deep: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-flash-latest"],
+    pilot: ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"],
+    sentinel: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"],
   },
-  thinking: { chat: "low", pilot: "low" } as { chat?: string; pilot?: string; sentinel?: string },
+  thinking: { quick: "low", deep: "medium", pilot: "low" } as { quick?: string; deep?: string; pilot?: string; sentinel?: string },
   origins: ["https://dziuba0x.github.io"],
   reflectEveryS: 3600,
   knowledge: [
@@ -63,7 +69,13 @@ export const BRAIN_DEFAULTS = {
   },
 };
 
-export type Chains = { chat: string[]; pilot: string[]; sentinel: string[] };
+export type Chains = { quick: string[]; deep: string[]; pilot: string[]; sentinel: string[] };
+
+/** What each mode would answer with now, for the page: the model, and about how many answers are left today. */
+export function modesOf(gemini: Gemini, chains: Chains) {
+  const one = (models: string[]) => { const s = gemini.status(models); return { model: s.model, name: s.model ? modelName(s.model) : undefined, left: s.left, approx: s.approx, until: s.until }; };
+  return { quick: one(chains.quick), deep: one(chains.deep) };
+}
 const expand = (p: string) => resolve(p.replace(/^~(?=\/|$)/, homedir()));
 
 // ------------------------------------------------------------------------------------------------ http
@@ -88,7 +100,7 @@ function reply(res: ServerResponse, status: number, body: unknown, headers: Reco
  *  counted by address, or by /64 for IPv6. */
 const ipOf = (req: IncomingMessage) => visitor(String(req.headers["cf-connecting-ip"] ?? req.socket.remoteAddress ?? "?").slice(0, 64));
 
-interface Job { events: ChatEvent[]; done: boolean; at: number }
+interface Job { events: ChatEvent[]; done: boolean; at: number; ctl: AbortController; turn: Turn }
 
 export interface PublicApiOptions {
   assistant?: Assistant;
@@ -97,6 +109,8 @@ export interface PublicApiOptions {
   limitsCfg: typeof BRAIN_DEFAULTS.limits;
   health: () => Record<string, unknown>;
   state: () => Promise<Record<string, unknown>>;
+  /** What each mode would answer with now (shown above the conversation). */
+  modes?: () => Record<string, unknown>;
   journal?: Journal;
   /** Conversations thinking at the same time, at most. */
   maxRunning?: number;
@@ -123,15 +137,16 @@ export function publicApi(o: PublicApiOptions): Server {
       if (req.method === "GET" && url.pathname === "/api/health") return reply(res, 200, o.health(), cors);
       if (req.method === "GET" && url.pathname === "/api/state") {
         if (!o.limits.take(`state:${ip}`, 30, 60_000) || !o.limits.take("state:all", 240, 60_000)) return reply(res, 429, { error: "slow down", retryInS: 10 }, cors);
-        return reply(res, 200, await o.state(), cors);
+        return reply(res, 200, { ...(await o.state()), modes: o.modes?.() }, cors);
       }
       if (req.method === "POST" && url.pathname === "/api/chat") {
         // only the dashboard talks to the brain: another site cannot spend its free thinking from its visitors' browsers
         if (!allowed) return reply(res, 403, { error: "the agent talks on its own page: https://dziuba0x.github.io/lancea/#agent" }, cors);
         if (!o.assistant) return reply(res, 503, { error: "the assistant is resting" }, cors);
-        let b: { session?: unknown; message?: unknown };
-        try { b = JSON.parse(await readBody(req)); } catch (e) { return reply(res, (e as { status?: number }).status ?? 400, { error: "a JSON body: {session, message}" }, cors); }
+        let b: { session?: unknown; message?: unknown; mode?: unknown };
+        try { b = JSON.parse(await readBody(req)); } catch (e) { return reply(res, (e as { status?: number }).status ?? 400, { error: "a JSON body: {session, message, mode}" }, cors); }
         const message = typeof b.message === "string" ? b.message.trim() : "";
+        const mode: Mode = b.mode === "quick" || b.mode === "deep" ? b.mode : "auto";
         if (!message || message.length > 1200) return reply(res, 400, { error: "a message of 1 to 1200 characters" }, cors);
         const session = typeof b.session === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(b.session) ? b.session : randomUUID();
         const [n, s] = L.chatPerIp, [gn, gs] = L.chatGlobal;
@@ -146,19 +161,31 @@ export function publicApi(o: PublicApiOptions): Server {
         o.limits.take(`chat:${ip}`, n, s * 1000); o.limits.take(`chatday:${ip}`, L.chatPerIpDay, 86_400_000);
         o.limits.take("chat:all", gn, gs * 1000); o.limits.take("chatday:all", L.chatGlobalDay, 86_400_000);
         sweep();
-        const id = randomUUID(), job: Job = { events: [], done: false, at: Date.now() };
+        const id = randomUUID(), ctl = new AbortController(), job: Job = { events: [], done: false, at: Date.now(), ctl, turn: { signal: ctl.signal } };
         jobs.set(id, job);
         running++;
         const t0 = Date.now(), tools: string[] = [];
-        let model = "";
+        let model = "", depth = "";
         o.assistant.chat(session, message, ip, (e) => {
           if (e.t === "tool") tools.push(e.name);
           if (e.t === "answer") model = e.model;
+          if (e.t === "route") depth = e.mode;
           job.events.push(e);
           if (e.t === "done") job.done = true;
-        }).catch((e) => { job.events.push({ t: "error", text: "Something went wrong on my side. Try again in a moment." }, { t: "done" }); job.done = true; note("error", { where: "chat", error: short(e) }); })
-          .finally(() => { running--; note("chat", { ms: Date.now() - t0, model, tools, answered: job.events.some((e) => e.t === "answer") }); });
+        }, mode, job.turn).catch((e) => { job.events.push({ t: "error", text: "Something went wrong on my side. Try again in a moment." }, { t: "done" }); job.done = true; note("error", { where: "chat", error: short(e) }); })
+          .finally(() => { running--; note("chat", { ms: Date.now() - t0, model, mode, depth, tools, answered: job.events.some((e) => e.t === "answer"), stopped: job.events.some((e) => e.t === "stopped") }); });
         return reply(res, 202, { job: id, session }, cors);
+      }
+      // stop a conversation that is still thinking: only between its steps, never once a proposal has left
+      const c = /^\/api\/job\/([0-9a-f-]{36})\/cancel$/.exec(url.pathname);
+      if (req.method === "POST" && c) {
+        if (!allowed) return reply(res, 403, { error: "the agent talks on its own page" }, cors);
+        const job = jobs.get(c[1]);
+        if (!job) return reply(res, 404, { error: "no such job (they last ten minutes)" }, cors);
+        if (job.done) return reply(res, 409, { stopped: false, why: "it has already answered" }, cors);
+        if (job.turn.committed) return reply(res, 409, { stopped: false, why: "a proposal is already with the guard: it cannot be taken back" }, cors);
+        job.ctl.abort();
+        return reply(res, 200, { stopped: true }, cors);
       }
       const m = /^\/api\/job\/([0-9a-f-]{36})$/.exec(url.pathname);
       if (req.method === "GET" && m) {
@@ -256,7 +283,7 @@ export function pilotDecider(o: { gemini: Gemini; models: () => string[]; thinki
       const r = await o.gemini.generate(o.models(), {
         system: PILOT_SYSTEM, contents: [{ role: "user", parts: [{ text: JSON.stringify(context) }] }], json: PILOT_SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: 2048, thinking: o.thinking,
         deadline: t0 + (o.budgetMs ?? 36_000),
-      }, o.perModelMs ?? 12_000);
+      }, o.perModelMs ?? 12_000, { share: 0.5 });
       const a = jsonOf<PilotAnswer>(r.text);
       if (!a || typeof a.action !== "string") throw new Error("no action in the answer");
       o.stats.answered++; o.stats.model = r.model; o.stats.at = new Date().toISOString();
@@ -372,7 +399,7 @@ export function brainConfig(c: LanceaConfig) {
   const D = BRAIN_DEFAULTS;
   return {
     port: b.port ?? D.port, internalPort: b.internalPort ?? D.internalPort, pilot: b.pilot ?? false,
-    models: { chat: b.models?.chat ?? D.models.chat, pilot: b.models?.pilot ?? D.models.pilot, sentinel: b.models?.sentinel ?? D.models.sentinel },
+    models: { quick: b.models?.quick ?? D.models.quick, deep: b.models?.deep ?? b.models?.chat ?? D.models.deep, pilot: b.models?.pilot ?? D.models.pilot, sentinel: b.models?.sentinel ?? D.models.sentinel },
     thinking: { ...D.thinking, ...(b.thinking ?? {}) },
     origins: b.origins ?? D.origins, tunnel: b.tunnel ?? "quick", cloudflared: expand(b.cloudflared ?? "~/bin/cloudflared"),
     reflectEveryS: b.reflectEveryS ?? D.reflectEveryS, knowledge: b.knowledge ?? D.knowledge,
@@ -400,13 +427,14 @@ async function main() {
     throw new Error(`no Gemini key: put it in $LANCEA_KEYS/gemini, mode 600 (${short(e)})`);
   }
   const base = process.env.GEMINI_BASE ?? "https://generativelanguage.googleapis.com/v1beta"; // another only for tests
-  const gemini = new Gemini(key, fetch, base);
+  const gemini = new Gemini(key, fetch, base, { usagePath: check ? undefined : join(c.dataDir, "gemini-usage.json") });
   let available: string[] | undefined;
   try { available = await listModels(key, fetch, base); } catch (e) { log(`models: the listing failed (${short(e)}), the chains stay as configured`); }
   const chains: Chains = {
-    chat: resolveChain(b.models.chat, available),
+    quick: resolveChain(b.models.quick, available, true),
+    deep: resolveChain(b.models.deep, available),
     pilot: resolveChain(b.models.pilot, available, true),
-    sentinel: resolveChain(b.models.sentinel, available),
+    sentinel: resolveChain(b.models.sentinel, available, true),
   };
   const journal = new Journal(join(c.dataDir, "brain.jsonl"));
   const feedPath = join(c.dataDir, "feed.json");
@@ -431,7 +459,7 @@ async function main() {
   const limits = new Limits();
   const L = b.limits;
   const assistant = new Assistant({
-    gemini, models: chains.chat, thinking: b.thinking.chat, library, playground, feedPath, brief: briefText, chain, venues, journal, limits,
+    gemini, models: { quick: chains.quick, deep: chains.deep }, thinking: { quick: b.thinking.quick, deep: b.thinking.deep }, library, playground, feedPath, brief: briefText, chain, venues, journal, limits,
     actionLimit: { perIp: [L.actPerIp[0], L.actPerIp[1] * 1000], perIpDay: L.actPerIpDay, global: [L.actGlobal[0], L.actGlobal[1] * 1000] },
   });
   const pilotStats: PilotStats = { asked: 0, answered: 0, failed: 0 };
@@ -443,9 +471,10 @@ async function main() {
   const startedAt = new Date().toISOString();
   let tunnel: Tunnel | undefined;
   let pgState: Record<string, unknown> | undefined;
-  const health = () => ({ ok: true, name: "Lancea's brain", since: startedAt, models: chains, playground: !!playground, docs: library.chunks.length });
+  const modes = () => modesOf(gemini, chains);
+  const health = () => ({ ok: true, name: "Lancea's brain", since: startedAt, models: chains, modes: modes(), playground: !!playground, docs: library.chunks.length });
   const pub = publicApi({
-    assistant, limits, origins: b.origins, limitsCfg: L, health, journal,
+    assistant, limits, origins: b.origins, limitsCfg: L, health, journal, modes,
     state: async () => ({ playground: playground ? await playground.state().catch(() => pgState) : undefined, at: new Date().toISOString() }),
   });
   const internal = internalApi({ decide });
@@ -457,11 +486,11 @@ async function main() {
     else log(`tunnel: no cloudflared at ${b.cloudflared}; the public API stays on 127.0.0.1:${b.port}`);
   }
   journal.append("start", { models: chains, docs: library.chunks.length, playground: pcfg?.account, pilot: b.pilot });
-  log(`lancea brain: public 127.0.0.1:${b.port}, internal 127.0.0.1:${b.internalPort} | chat ${chains.chat.join(" > ")} | pilot ${chains.pilot.join(" > ")} | sentinel ${chains.sentinel.join(" > ")} | ${library.chunks.length} passages from ${docs} documents${playground ? ` | playground ${pcfg!.account}` : ""}`);
+  log(`lancea brain: public 127.0.0.1:${b.port}, internal 127.0.0.1:${b.internalPort} | quick ${chains.quick.join(" > ")} | deep ${chains.deep.join(" > ")} | pilot ${chains.pilot.join(" > ")} | sentinel ${chains.sentinel.join(" > ")} | ${library.chunks.length} passages from ${docs} documents${playground ? ` | playground ${pcfg!.account}` : ""}`);
 
   const status = () => writeAtomic(join(c.dataDir, "brain.json"), JSON.stringify({
     url: tunnel?.url, tunnelSince: tunnel?.since, startedAt, updatedAt: new Date().toISOString(),
-    models: chains, usage: Object.fromEntries(gemini.used), pilot: { on: b.pilot, ...pilotStats }, playground: pgState,
+    models: chains, modes: modes(), usage: Object.fromEntries(gemini.used), pilot: { on: b.pilot, ...pilotStats }, playground: pgState,
   }));
   const busy = new Set<string>();
   const loop = (name: string, everyMs: number, f: () => Promise<unknown>) => {
@@ -499,7 +528,7 @@ async function runCheck(o: {
 }) {
   const say = (s: string) => console.log(s);
   say(`== the key: ${o.available ? `${o.available.length} models, the free text ones: ${o.available.filter((m) => /flash/.test(m) && !/image|tts|audio|live|embed/.test(m)).join(", ")}` : "the model listing failed"}`);
-  say(`== the chains\n   chat      ${o.chains.chat.join(" > ")}\n   pilot     ${o.chains.pilot.join(" > ")}\n   sentinel  ${o.chains.sentinel.join(" > ")}`);
+  say(`== the chains\n   quick     ${o.chains.quick.join(" > ")}\n   deep      ${o.chains.deep.join(" > ")}\n   pilot     ${o.chains.pilot.join(" > ")}\n   sentinel  ${o.chains.sentinel.join(" > ")}`);
   say(`== knowledge: ${o.library.chunks.length} passages from ${o.docs} documents`);
   let ok = true;
   for (const [name, models] of Object.entries(o.chains)) {

@@ -16,12 +16,44 @@ import type { Journal } from "../service/journal.js";
 
 export type ChatEvent =
   | { t: "status"; text: string }
+  | { t: "route"; mode: Depth; chosen: boolean; why: string }
   | { t: "tool"; name: string; args: Record<string, unknown> }
   | { t: "say"; text: string }
   | { t: "action"; result: ActResult }
-  | { t: "answer"; text: string; model: string }
+  | { t: "answer"; text: string; model: string; mode?: Depth; ms?: number }
+  | { t: "stopped"; text: string }
   | { t: "error"; text: string }
   | { t: "done" };
+
+/** What the visitor picked above the conversation: the brain decides (auto), a quick answer, or a deep one. */
+export type Mode = "auto" | "quick" | "deep";
+export type Depth = "quick" | "deep";
+/** One conversation's turn, as the server holds it: stopping it, and whether a proposal already left. */
+export interface Turn { signal?: AbortSignal; committed?: boolean }
+
+const DEEP = /\b(why|how (?:does|do|did|would|could|is|are|can)|explain|analy[sz]|compare|differen|trade-?offs?|risk|attack|secur|audit|design|architect|strateg|plan|step by step|in depth|deep|walk me through|what if|should i|pros and cons|prove|proof|mechani|under the hood|dlaczego|czemu|jak (?:dzia|to|si|mo)|wyja[sś]ni|wyt[lł]umacz|przeanalizuj|analiz|por[oó]wnaj|r[oó][zż]ni|ryzyk|atak|bezpiecz|audyt|architektur|strategi|krok po kroku|szczeg[oó][lł]|co je[sś]li|czy warto|udowodni|mechanizm)/i;
+const ACT = /\b(pay|send|transfer|mint|deposit|withdraw|claim|redeem|zap[lł]a[cć]|wy[sś]lij|przelej|wp[lł]a[cć]|wyp[lł]a[cć]|odbierz)\b/i;
+const HASH = /\b(?:0x)?[0-9a-fA-F]{64}\b/;
+
+/**
+ * Quick or deep, from the words alone: instant, no call spent on it. Deep is for questions that ask for
+ * mechanics, reasons, analysis or comparison, long messages, several questions at once, and a transaction
+ * to be analysed; an order, a greeting or a price is quick.
+ */
+export function routeOf(message: string): { mode: Depth; why: string } {
+  const m = message.trim(), words = m.split(/\s+/).filter(Boolean).length;
+  const deepWord = DEEP.test(m), act = ACT.test(m), hash = HASH.test(m), questions = (m.match(/\?/g) ?? []).length;
+  let score = 0;
+  if (deepWord) score += 2;
+  if (words > 45) score += 2; else if (words > 22) score += 1;
+  if (questions >= 2) score += 1;
+  if (hash && /(explain|analy|why|what|wyja|dlacz|co |przeanal)/i.test(m)) score += 2;
+  if (act && !deepWord) score -= 2;
+  if (words <= 4) score -= 1;
+  const mode: Depth = score >= 2 ? "deep" : "quick";
+  const why = mode === "deep" ? (hash ? "a transaction to analyse" : deepWord ? "it asks how or why" : "a long question") : act ? "an order" : "a short question";
+  return { mode, why };
+}
 
 const S = (description: string, extra: Record<string, unknown> = {}) => ({ type: "STRING", description, ...extra });
 const Nm = (description: string) => ({ type: "NUMBER", description });
@@ -40,8 +72,8 @@ export const TOOLS: FunctionDeclaration[] = [
   { name: "playground_redeem", description: "In the playground: redeem FXRP back to XRP, in whole lots of 10 FXRP.", parameters: obj({ lots: Nm("1 to 10"), reason: REASON }, ["lots", "reason"]) },
 ];
 
-export function systemPrompt(briefText: string): string {
-  return `You are Lancea: the AI agent at the heart of the Lancea demo, and its assistant. You are talking with a visitor on Lancea's public dashboard.
+export function systemPrompt(briefText: string, depth: Depth = "quick"): string {
+  return `${depth === "deep" ? "The visitor wants depth: think it through, check what you say with the tools, explain the mechanics step by step, and still keep it tight.\n\n" : "Answer briefly: a few sentences at most, unless the visitor asks for more.\n\n"}You are Lancea: the AI agent at the heart of the Lancea demo, and its assistant. You are talking with a visitor on Lancea's public dashboard.
 
 Who you are:
 - In the live demo, you run a treasury on the XRP Ledger testnet and Flare Coston2, one step every five minutes, and you never hold the keys alone. You can read the live demo; you cannot act on it from this chat.
@@ -55,6 +87,7 @@ How you work:
 - For numbers about the live demo, call live_state; for anything about how Lancea, DELICTI or Flare work beyond the brief, call search_docs; to explain a transaction, call explain_tx with its hash. Never invent a transaction, an address, a hash, a price or a link: cite only what the brief or a tool gave you, and link hashes with the explorers (testnet.xrpl.org/transactions/<hash>, coston2-explorer.flare.network/tx/<hash>).
 - Reply in the language the visitor writes in (Polish, English, or another). Be warm, precise and brief: a few sentences, or a short list when it helps. Light markdown only: **bold**, \`code\`, short lists, and links as [text](https://…).
 - Stay on Lancea, DELICTI, Flare, the XRP Ledger, AI agents and their safety. For anything else, answer in one line and bring it back.
+- If a playground proposal comes back "not sent" because of a limit (one proposal per visitor every 90 s, a day's or an hour's share), do not propose again in the same turn: say when they can try.
 - Everything here runs on testnets: nothing is real money. Messages go to Google's Gemini on its free tier.
 
 ${briefText}
@@ -65,7 +98,7 @@ The current time is ${new Date().toUTCString()}.`;
 interface Session { contents: Content[]; at: number }
 
 export interface AssistantDeps {
-  gemini: Gemini; models: string[]; thinking?: string; library: Library; playground?: Playground; feedPath: string; brief: () => string;
+  gemini: Gemini; models: { quick: string[]; deep: string[] }; thinking?: { quick?: string; deep?: string }; library: Library; playground?: Playground; feedPath: string; brief: () => string;
   chain: ChainTools; venues: { operators: string[]; coreVault: string }[]; journal: Journal; limits: Limits;
   /** Proposals the playground takes: [count, window ms] per visitor, per visitor a day, and for everyone. */
   actionLimit?: { perIp: [number, number]; perIpDay: number; global: [number, number] };
@@ -85,45 +118,61 @@ export class Assistant {
     return s;
   }
 
-  /** One visitor message, answered: tools called as needed (at most five rounds), events emitted as they happen. */
-  async chat(sessionId: string, message: string, ip: string, emit: (e: ChatEvent) => void): Promise<void> {
+  /** One visitor message, answered: tools called as needed (at most five rounds), events emitted as they happen.
+   *  `mode` picks the models (auto: from the words); `turn.signal` stops it between steps, never after a
+   *  proposal has left for the guard (`turn.committed`). */
+  async chat(sessionId: string, message: string, ip: string, emit: (e: ChatEvent) => void, mode: Mode = "auto", turn: Turn = {}): Promise<void> {
     const s = this.session(sessionId);
-    const hits = this.d.library.search(message, 3);
+    const t0 = Date.now();
+    const routed = mode === "auto" ? routeOf(message) : { mode: mode as Depth, why: "chosen" };
+    const depth = routed.mode;
+    emit({ t: "route", mode: depth, chosen: mode !== "auto", why: routed.why });
+    // a deep question falls back on the quick models when the deep ones have spent their day, and the other way round
+    const chain = depth === "deep" ? [...this.d.models.deep, ...this.d.models.quick] : [...this.d.models.quick, ...this.d.models.deep];
+    const hits = this.d.library.search(message, depth === "deep" ? 4 : 3);
     const context = hits.length ? `\n\n[Passages that may help, from the project's documents:]\n${hits.map((h) => `— ${h.source} › ${h.title}\n${h.text.slice(0, 900)}`).join("\n\n")}` : "";
     const contents: Content[] = [...s.contents, { role: "user", parts: [{ text: message.slice(0, 1200) + context }] }];
+    const stopped = () => { emit({ t: "stopped", text: "Stopped. Nothing was sent to the guard." }); emit({ t: "done" }); };
     emit({ t: "status", text: "thinking" });
     const deadline = Date.now() + 90_000; // a conversation holds one of a few seats: ninety seconds at most
-    let calls = 0;
+    let calls = 0, prefer: string | undefined;
     for (let round = 0; round < 5 && Date.now() < deadline; round++) {
+      if (turn.signal?.aborted) return turn.committed ? emit({ t: "done" }) : stopped();
       let r;
       try {
-        r = await this.d.gemini.generate(this.d.models, { system: systemPrompt(this.d.brief()), contents, tools: TOOLS, maxOutputTokens: 4096, thinking: this.d.thinking, deadline: deadline - 5_000 }, 40_000);
+        r = await this.d.gemini.generate(chain, {
+          system: systemPrompt(this.d.brief(), depth), contents, tools: TOOLS, maxOutputTokens: 4096,
+          thinking: depth === "deep" ? this.d.thinking?.deep : this.d.thinking?.quick, deadline: deadline - 5_000,
+        }, 40_000, { prefer, signal: turn.signal });
       } catch (e) {
-        const busy = /429|resting|in time/.test(String((e as Error).message));
+        if (turn.signal?.aborted || (e as { status?: number }).status === 499) return turn.committed ? emit({ t: "done" }) : stopped();
+        const busy = /429|resting|in time|no time/.test(String((e as Error).message));
         emit({ t: "error", text: busy ? "My free thinking quota is catching its breath. Try again in a minute." : "I could not think that through just now. Try again in a moment." });
         this.d.journal.append("error", { where: "chat", error: String((e as Error).message).slice(0, 240) });
         return emit({ t: "done" });
       }
+      prefer = r.model;
       contents.push(r.content);
       if (!r.calls.length) {
         // what the next turn remembers: the visitor's words (without the passages) and the answer
-        const turn: Content[] = [{ role: "user", parts: [{ text: message.slice(0, 1200) }] }, { role: "model", parts: [{ text: r.text || "…" }] }];
-        s.contents = [...s.contents, ...turn].slice(-16);
-        emit({ t: "answer", text: r.text || "…", model: r.model });
+        const said: Content[] = [{ role: "user", parts: [{ text: message.slice(0, 1200) }] }, { role: "model", parts: [{ text: r.text || "…" }] }];
+        s.contents = [...s.contents, ...said].slice(-16);
+        emit({ t: "answer", text: r.text || "…", model: r.model, mode: depth, ms: Date.now() - t0 });
         return emit({ t: "done" });
       }
       if (r.text) emit({ t: "say", text: r.text });
       const responses: Part[] = [];
       for (const [i, call] of r.calls.entries()) {
+        if (turn.signal?.aborted) return turn.committed ? emit({ t: "done" }) : stopped();
         // four tools a round, ten a conversation: the public nodes are shared with the live guard
         const over = i >= 4 || ++calls > 10;
         if (!over) emit({ t: "tool", name: call.name, args: call.args });
-        const out = over ? { error: "too many lookups at once: answer with what you have, or ask the visitor to narrow it down" } : await this.tool(call.name, call.args, ip, emit);
+        const out = over ? { error: "too many lookups at once: answer with what you have, or ask the visitor to narrow it down" } : await this.tool(call.name, call.args, ip, emit, turn);
         responses.push({ functionResponse: { name: call.name, response: { result: out }, ...(call.id ? { id: call.id } : {}) } });
       }
       contents.push({ role: "user", parts: responses });
     }
-    emit({ t: "answer", text: Date.now() >= deadline ? "That took me too long to think through. Could you ask it in a simpler way?" : "I went round in circles there. Could you ask that in another way?", model: "" });
+    emit({ t: "answer", text: Date.now() >= deadline ? "That took me too long to think through. Could you ask it in a simpler way?" : "I went round in circles there. Could you ask that in another way?", model: "", mode: depth, ms: Date.now() - t0 });
     emit({ t: "done" });
   }
 
@@ -131,7 +180,7 @@ export class Assistant {
     try { return existsSync(this.d.feedPath) ? JSON.parse(readFileSync(this.d.feedPath, "utf8")) : {}; } catch { return {}; }
   }
 
-  private async tool(name: string, a: Record<string, any>, ip: string, emit: (e: ChatEvent) => void): Promise<unknown> {
+  private async tool(name: string, a: Record<string, any>, ip: string, emit: (e: ChatEvent) => void, turn: Turn = {}): Promise<unknown> {
     try {
       if (name === "live_state") return { live: liveSummary(this.feed()), playground: this.d.playground ? await this.d.playground.state() : "not running" };
       if (name === "search_docs") return this.d.library.search(String(a.query ?? ""), 4).map((c) => ({ source: c.source, title: c.title, text: c.text.slice(0, 1400) }));
@@ -147,6 +196,9 @@ export class Assistant {
       if (this.d.limits.wait(`act:${ip}`, perN, perMs) > 0) return held(`the playground takes one proposal per visitor every ${Math.round(perMs / 1000)} s: try again in ${this.d.limits.wait(`act:${ip}`, perN, perMs)} s`);
       if (this.d.limits.wait(`actday:${ip}`, day, 86_400_000) > 0) return held(`that is ${day} proposals from you today: the playground's gas is shared, so come back tomorrow`);
       if (this.d.limits.wait("act:all", gN, gMs) > 0) return held("the playground has had its fill of proposals this hour (every one costs its guard gas): try again later");
+      // the last moment it can be stopped: from here the proposal is on its way to the guard
+      if (turn.signal?.aborted) return held("stopped before it was sent");
+      turn.committed = true;
       this.d.limits.take(`act:${ip}`, perN, perMs); this.d.limits.take(`actday:${ip}`, day, 86_400_000); this.d.limits.take("act:all", gN, gMs);
       let result: ActResult;
       try { result = await this.d.playground.act(act, String(a.reason ?? "a visitor asked for it")); } catch (e) { return held(`the playground stumbled: ${String((e as Error).message).slice(0, 160)}`); }

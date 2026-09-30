@@ -1,7 +1,7 @@
 /**
  * Builds the dashboard's page for GitHub Pages (docs/index.html) from its sources: the markup
  * (dashboard/page.html), its style (dashboard/style.css), the sky and glass renderer
- * (dashboard/glass.js), the page's logic (dashboard/app.js), and the sample it shows when the live
+ * (dashboard/glass.js), the glass above the words (dashboard/lg.js), the page's logic (dashboard/app.js), and the sample it shows when the live
  * feed cannot be reached (dashboard/sample-feed.json).
  *   npx tsx scripts/dashboard-build.ts                     docs/index.html
  *   npx tsx scripts/dashboard-build.ts --sample f.json --out x.html [--fragment]
@@ -17,7 +17,7 @@ const read = (f: string) => readFileSync(`${root}dashboard/${f}`, "utf8");
 const samplePath = arg("sample") ?? `${root}dashboard/sample-feed.json`;
 const out = arg("out") ?? `${root}docs/index.html`;
 const sample = JSON.stringify(JSON.parse(readFileSync(samplePath, "utf8"))).replace(/<\//g, "<\\/");
-const script = `${read("glass.js")}\n${read("app.js")}`;
+const script = `${read("glass.js")}\n${read("lg.js")}\n${read("app.js")}`;
 if (/<\/script/i.test(script)) throw new Error("a script contains </script");
 let fragment = read("page.html");
 for (const [key, value] of [["STYLE", read("style.css")], ["SCRIPT", script], ["SAMPLE_JSON", sample]] as const) {

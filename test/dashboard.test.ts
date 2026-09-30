@@ -21,4 +21,10 @@ test("the dashboard builds into one page whose scripts compile", () => {
   const code = html.match(/<script>\n([\s\S]*?)\n<\/script>/)![1];
   assert.doesNotThrow(() => new Script(code), "the page's script compiles");
   for (const shader of ["FS_NEBULA", "FS_SKY", "FS_GLASS", "VS_STARS", "FS_MARKS"]) assert.ok(code.includes(`const ${shader}`), shader);
+  // 0059: the glass above the words, the modes, the stop, and no fine print under the conversation
+  assert.ok(code.includes("const LG = ("), "the browser's glass (lg.js) is in the page");
+  assert.doesNotMatch(code, /operator: "arithmetic"/, "no arithmetic composite in the glass filter (Chromium draws it half transparent)");
+  assert.match(html, /id="mode-seg"[\s\S]*data-mode="auto"[\s\S]*data-mode="quick"[\s\S]*data-mode="deep"/);
+  assert.match(html, /class="g g-stop"/);
+  assert.doesNotMatch(html, /class="fine"/);
 });

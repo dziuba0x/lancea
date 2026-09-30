@@ -10,7 +10,7 @@
 [![demo](https://github.com/dziuba0x/lancea/actions/workflows/watch.yml/badge.svg)](https://github.com/dziuba0x/lancea/actions/workflows/watch.yml)
 [![release](https://img.shields.io/github/v/release/dziuba0x/lancea?color=c9d1d9&label=release)](https://github.com/dziuba0x/lancea/releases)
 [![live demo](https://img.shields.io/badge/live%20demo-24%2F7-35CFFF)](https://dziuba0x.github.io/lancea/)
-![tests](https://img.shields.io/badge/tests-63-2ea44f)
+![tests](https://img.shields.io/badge/tests-68-2ea44f)
 [![DELICTI](https://img.shields.io/badge/on-DELICTI%20v0.16-8957e5)](https://github.com/dziuba0x/delicti)
 ![Coston2](https://img.shields.io/badge/live%20on-Flare%20Coston2-e62058)
 ![XRPL](https://img.shields.io/badge/XRPL-testnet-23292f)
@@ -119,7 +119,8 @@ The page is one file, built by `scripts/dashboard-build.ts` into `docs/index.htm
 - `page.html` holds the markup;
 - `style.css` holds the styles;
 - `app.js` holds the views;
-- `glass.js` draws the sky and the glass.
+- `glass.js` draws the sky and the glass;
+- `lg.js` draws the glass that floats above the words.
 
 `glass.js` is a WebGL2 renderer in two passes, the recipe of the DELICTI hero, running live:
 
@@ -134,11 +135,19 @@ The glass moves like a liquid, on SwiftUI's springs (`Spring(duration:bounce:)`)
 - **Interactive glass.** Under a finger the glass swells and lights up from the point of touch, then springs back. A tab or a filter can be pressed and dragged: its lens lifts out of the bar as a clear drop and settles on the nearest choice.
 - **The pointer's drop.** It stretches as it moves, wobbles when it stops, sheds two droplets when flung and focuses a caustic on the sky. Over a control it sinks into the glass and becomes that control's highlight.
 
+- **Raised glass.** What lives on a pane is the pane's own glass, raised, never glass on glass: the conversation's composer, its send drop, the suggestions and the visitor's words are lenses that follow their elements on springs (a reflow glides, a scrolling list carries them frame for frame). A message leaves the composer as a drop of its glass, stretches as it rises, keeps a liquid neck to the composer until it snaps, and lands as a bubble; a suggestion flies up the same way.
+- **The ring** is a tube of clear glass that the day's spending fills with liquid light: a meniscus that wobbles when the fill moves or the pointer tugs at it, a slow current of luminous streaks, gold dust drifting in it, a pulse that runs from its tail to its front when a decision is born, and a ripple when it is touched. A birth is a supernova: an intake of light, a flare in the shape of the mark it leaves, and a shock whose outer edge is cyan and inner edge amber.
+- **Free drops** drift on a slow current and keep off the panes. Two that touch merge; a meteor that crosses one splits it in two; a star's birth blows them outward; they can be picked up and thrown, and a tap pops one into droplets that evaporate. A right click on the sky makes a new one, which buds off the pointer's drop and flies off.
+
+**Above the words** (`lg.js`): WebGL cannot see the page's words, so what floats above them (the top bar's three capsules, the phone's tab bar, the context menu, the toast) is drawn by the browser itself, as a backdrop filter made of an SVG displacement map: the same squircle bevel and per-channel refraction, so whatever scrolls under the bar is magnified toward its rim and bends around its corners. The map is cut in nine tiles, so a capsule can grow and morph every frame without being drawn again. The frost thins toward the rim, where the bending stays sharp. The page scrolls to the very edges of the window, under the bars. Chromium draws it; Safari and Firefox get a frosted glass of the same shape.
+
+**Everywhere, a right click** (or a long press) opens our own menu, with what makes sense there: a decision, a transaction, a link, an address, selected words, a pane, a drop, the sky. "Analyze with the agent" slides in questions; one of them travels to the conversation as a capsule of glass, sinks into the composer and is asked there, with the transaction's hashes attached.
+
 It respects reduced motion (a still sky, no flow) and reduced transparency (solid panes). Without WebGL2 it falls back to CSS glass.
 
 ## The brain: talk to the agent, try to make it pay you
 
-**[dziuba0x.github.io/lancea/#agent](https://dziuba0x.github.io/lancea/#agent)**. The agent has a brain now, and it runs entirely on the demo's server (`src/brain/`), on Google's Gemini, **free tier only**: Flash and Flash-Lite models, in chains, so a model whose free quota is spent hands over to the next (`gemini-3.8-flash` › `gemini-3.7-flash` › `gemini-3.5-flash-lite` for talk; Flash-Lite for the pilot; when Google renames them, the newest free Flash models the key can call). It holds no key of the live demo. It does three jobs:
+**[dziuba0x.github.io/lancea/#agent](https://dziuba0x.github.io/lancea/#agent)**. The agent has a brain now, and it runs entirely on the demo's server (`src/brain/`), on Google's Gemini, **free tier only**: Flash and Flash-Lite models, in chains, so a model whose free quota is spent hands over to the next (when Google renames them, the newest free Flash models the key can call). It holds no key of the live demo. It does three jobs:
 
 1. **The pilot.** Each tick, the autopilot shows the model the steps the rules would allow now, each with its bounds (`candidates` in `src/autopilot.ts`), and the numbers that matter: balances, the vault's queue, today's spend against the cap, the guard's gas, the latest verdicts, and any notes strangers attached to payments into the account, marked untrusted. The model picks one step and sizes it, or waits, and says why in a sentence the dashboard shows. It cannot invent a step: its answer becomes a step only inside a candidate's bounds (`materialize`), and the guard still prices and checks every one. No answer in 30 seconds, an answer outside the candidates, or a third wait in a row, and the rules decide (`AiBrain` in `src/brain/pilot.ts`).
 2. **The Sentinel.** Every hour, and soon after anything unusual (a strike, a refusal, a step Flare did not execute, a cap, low gas), it reads the feed and writes a short note: how things stand, what to watch next. It is the card on the Now view.
@@ -150,6 +159,9 @@ How it runs:
 
 - **`lancea-brain`**: a public API on `127.0.0.1:8790`, reached through a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) (`https://….trycloudflare.com`, no account, no open port); the tunnel's address travels to the dashboard in the feed. A message becomes a job the page polls (`POST /api/chat`, `GET /api/job/:id`). The autopilot's own door, `POST /decide`, is on `127.0.0.1:8791` and never tunnelled.
 - **`lancea-playground-guard`**: the playground's guard, on `127.0.0.1:8788`, with its own keys.
+- **Quick, deep or auto.** Above the conversation a visitor picks how hard it thinks. Quick answers come from Flash-Lite (`gemini-3.5-flash-lite` › `gemini-3.1-flash-lite` › …, hundreds of free requests a day); deep ones from the Flash models (`gemini-3.8-flash` › `gemini-3.7-flash` › … › `gemini-2.5-flash`, about 20 a day each), with more thinking; auto picks from the words alone, instantly, with no call spent on it (how and why, analysis, a transaction to explain, a long question: deep; an order, a price, a greeting: quick). Every answer names the model that gave it.
+- **The free tier, counted.** The brain counts each model's requests a minute and a day, the way Google does (the day starts at midnight Pacific time), and keeps the count across restarts (`gemini-usage.json`). A model whose minute is full is passed over for the next without a call; one whose day is spent rests until midnight Pacific, and a 429 teaches the brain the model's real limit. The pilot and the Sentinel may use half a model's day at most, so visitors always find some left; deep falls back on quick, and the page shows how many deep answers are left today.
+- **Stop.** While it thinks, the send button is a stop (`POST /api/job/:id/cancel`): the conversation ends between two steps. Once a proposal is on its way to the guard it cannot be taken back, and the button says so.
 - **Limits** for a free tier and a guard's gas: per visitor, 10 messages every 10 minutes and 60 a day; for everyone, 8 a minute and 900 a day; one playground proposal per visitor every 90 seconds, 12 a day, 20 an hour in all. Below 1.5 C2FLR the playground's guard takes nothing, and keeps its gas for strikes.
 - **Privacy.** What visitors type goes to Google's free tier, which may use it to improve Google's products. The page says so. The feed publishes what visitors asked the playground to do and the verdicts, never their words.
 

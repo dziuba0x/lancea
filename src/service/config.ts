@@ -56,9 +56,10 @@ export interface BrainConfig {
   /** The autopilot asks the model for each step (the rules decide whenever it cannot). */
   pilot?: boolean;
   /** Model chains, first choice first: a model whose free quota is spent hands over to the next. */
-  models?: { chat?: string[]; pilot?: string[]; sentinel?: string[] };
+  /** quick: short answers (Flash-Lite); deep: questions that need thought (Flash); chat: the deep chain, as 0058 called it. */
+  models?: { quick?: string[]; deep?: string[]; chat?: string[]; pilot?: string[]; sentinel?: string[] };
   /** How hard Gemini 3 models think, per job ("minimal", "low", "medium", "high"); the model's default when absent. */
-  thinking?: { chat?: string; pilot?: string; sentinel?: string };
+  thinking?: { quick?: string; deep?: string; pilot?: string; sentinel?: string };
   /** Pages that may call the public API (CORS). */
   origins?: string[];
   /** "quick": a Cloudflare quick tunnel (a random https://….trycloudflare.com, no account); "off": none. */

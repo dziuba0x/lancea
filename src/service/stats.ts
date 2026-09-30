@@ -165,7 +165,7 @@ export class BrainLog {
     const online = !!s && !s.stopped && now - Date.parse(s.updatedAt) < 120_000;
     return {
       // (the per-model call counts stay in brain.json: they change every minute and the page has no use for them)
-      online, url: online ? s.url : undefined, since: s?.startedAt, models: s?.models, pilot: s?.pilot, playground: online ? s.playground : undefined,
+      online, url: online ? s.url : undefined, since: s?.startedAt, models: s?.models, modes: online ? s.modes : undefined, pilot: s?.pilot, playground: online ? s.playground : undefined,
       reflections: this.reflections, actions: this.actions, counts: { chats24h: this.chats.length, verdicts: { ...this.verdicts } },
     };
   }

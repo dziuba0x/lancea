@@ -96,7 +96,7 @@ export class Sentinel {
     let note: any, by = "rules", model: string | undefined;
     if (this.o.gemini) {
       try {
-        const r = await this.o.gemini.generate(this.o.models, { system: SENTINEL_SYSTEM, contents: [{ role: "user", parts: [{ text: JSON.stringify({ METRICS: m, EVENTS: m.events }) }] }], json: SENTINEL_SCHEMA, maxOutputTokens: 2048, thinking: "low" });
+        const r = await this.o.gemini.generate(this.o.models, { system: SENTINEL_SYSTEM, contents: [{ role: "user", parts: [{ text: JSON.stringify({ METRICS: m, EVENTS: m.events }) }] }], json: SENTINEL_SCHEMA, maxOutputTokens: 2048, thinking: "low" }, 45_000, { share: 0.5 });
         note = jsonOf(r.text); by = "ai"; model = r.model;
       } catch (e) { this.o.journal.append("error", { where: "sentinel", error: String((e as Error).message).slice(0, 240) }); }
     }

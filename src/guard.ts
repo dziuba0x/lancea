@@ -207,7 +207,7 @@ export class Guard {
     if (broken) return this.policyRefusal(agentBlob, broken, usd6);
 
     // the reservation: written on Flare BEFORE the signature exists. No reservation, no signature.
-    const r = await this.write("note", () => this.fw.writeContract({ address: this.cfg.meter, abi: summaMeterAbi, functionName: "note", args: [...args] }));
+    const r = await this.write("note", () => this.meterWrite("note", [...args]));
     if (!r.ok) return { signed: false, usd6, reason: `reservation failed, nothing signed: ${r.error}` };
     const reservation = r.hash;
 
@@ -306,9 +306,7 @@ export class Guard {
 
   /** Report a refused payment to the tripwire; the evidence is the hash of the agent's own signed blob. */
   private async strike(agentBlob: string): Promise<{ struck?: Hex; error?: string }> {
-    const r = await this.write("strike", () => this.fw.writeContract({
-      address: this.cfg.meter, abi: summaMeterAbi, functionName: "strike", args: [this.cfg.umbrellaId, keccak256(`0x${agentBlob}`)],
-    }));
+    const r = await this.write("strike", () => this.meterWrite("strike", [this.cfg.umbrellaId, keccak256(`0x${agentBlob}`)]));
     if (r.ok) { this.pending = undefined; return { struck: r.hash }; }
     this.pending = { blob: agentBlob, hash: r.hash };
     return { error: r.error };
@@ -328,6 +326,17 @@ export class Guard {
     if ((await this.tripped()) === true) { this.pending = undefined; return undefined; }
     const s = await this.strike(p.blob);
     return s.struck ? undefined : `an earlier strike has not landed (${s.error}); nothing is signed until it does`;
+  }
+
+  /**
+   * A write to the meter with room to spare: the gas is estimated against the chain as it is now, and a
+   * reservation can cost more by the time it lands (another umbrella's note in the same block, the day's
+   * first checkpoint), so it gets 30 % more and 25,000 on top. Unused gas is not paid for.
+   */
+  private async meterWrite(functionName: "note" | "strike", args: readonly unknown[]): Promise<Hex> {
+    const req = { address: this.cfg.meter, abi: summaMeterAbi, functionName, args } as const;
+    const est = await this.pc.estimateContractGas({ ...req, account: this.fw.account } as never) as bigint;
+    return this.fw.writeContract({ ...req, gas: (est * 13n) / 10n + 25_000n } as never);
   }
 
   /** One write to the meter, waited for. A failure comes back as text: the caller refuses, it never throws. */

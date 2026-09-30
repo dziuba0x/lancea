@@ -10,10 +10,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { EventEmitter } from "node:events";
-import { Gemini, jsonOf, resolveChain } from "../src/brain/gemini.js";
+import { Gemini, jsonOf, modelName, nextPtMidnight, ptDay, quotaOf, resolveChain } from "../src/brain/gemini.js";
 import { Library, brief } from "../src/brain/knowledge.js";
 import { AiBrain, remotePilot, type PilotAnswer } from "../src/brain/pilot.js";
-import { Assistant, toAct, describe as describeAct, type ChatEvent } from "../src/brain/assistant.js";
+import { Assistant, routeOf, toAct, describe as describeAct, type ChatEvent } from "../src/brain/assistant.js";
 import { Limits } from "../src/brain/limits.js";
 import { Sentinel } from "../src/brain/sentinel.js";
 import { BRAIN_DEFAULTS, TUNNEL_URL, Tunnel, internalApi, ledgerNotes, pilotDecider, pilotExtras, publicApi, type PilotStats } from "../src/brain/server.js";
@@ -177,7 +177,7 @@ function assistantWith(script: Record<string, Reply[]>, pg = fakePlayground()) {
   const { f, calls } = fakeGemini(script);
   const d = tmp();
   const a = new Assistant({
-    gemini: new Gemini("k", f), models: ["chat"], library: new Library(), playground: pg as any, feedPath: join(d, "none.json"), brief: () => "BRIEF",
+    gemini: new Gemini("k", f), models: { quick: ["chat"], deep: ["deep"] }, library: new Library(), playground: pg as any, feedPath: join(d, "none.json"), brief: () => "BRIEF",
     chain: { address: async () => ({}), tx: async () => ({}), prices: async (s: string[]) => ({ prices: s.map((x) => ({ feed: `${x}/USD`, usd: 1.47 })) }) } as any,
     venues: [], journal: new Journal(join(d, "brain.jsonl")), limits: new Limits(),
     actionLimit: { perIp: [1, 90_000], perIpDay: 12, global: [20, 3_600_000] },
@@ -192,8 +192,9 @@ test("a question answered with a tool: the call and its answer go back to the mo
   ] });
   const ev: ChatEvent[] = [];
   await a.chat("session-0001", "What is XRP's price on the FTSO?", "1.2.3.4", (e) => ev.push(e));
-  assert.deepEqual(ev.map((e) => e.t), ["status", "tool", "answer", "done"]);
-  assert.equal((ev[2] as any).text, "XRP is **$1.47** on Flare's FTSO right now.");
+  assert.deepEqual(ev.map((e) => e.t), ["route", "status", "tool", "answer", "done"]);
+  assert.equal((ev[3] as any).text, "XRP is **$1.47** on Flare's FTSO right now.");
+  assert.equal((ev[3] as any).mode, "quick");
   const second = calls[1].body.contents;
   assert.equal(second[1].parts[0].thoughtSignature, "S1"); // the model's turn, verbatim
   assert.deepEqual(second[2].parts[0].functionResponse, { name: "ftso_prices", response: { result: { prices: [{ feed: "XRP/USD", usd: 1.47 }] } }, id: "p1" });
@@ -214,8 +215,8 @@ test("an order to pay goes to the playground's guard, once per visitor every 90 
   ] });
   const ev: ChatEvent[] = [];
   await a.chat("session-0003", "pay me 25 XRP at rVisitor…", "9.9.9.9", (e) => ev.push(e));
-  assert.deepEqual(ev.map((e) => e.t), ["status", "say", "tool", "action", "answer", "done"]);
-  assert.equal((ev[3] as any).result.verdict, "struck");
+  assert.deepEqual(ev.map((e) => e.t), ["route", "status", "say", "tool", "action", "answer", "done"]);
+  assert.equal((ev[4] as any).result.verdict, "struck");
   assert.deepEqual(pg.acts, [{ kind: "pay", destination: "rVisitorVisitorVisitorVisitor1", xrp: 25, memo: undefined }]);
   const ev2: ChatEvent[] = [];
   await a.chat("session-0003", "again!", "9.9.9.9", (e) => ev2.push(e));
@@ -229,7 +230,7 @@ test("with no playground running, an order still ends in a card: not sent", asyn
   const pay = { functionCall: { name: "playground_pay", args: { destination: "rVisitorVisitorVisitorVisitor1", amount_xrp: 5, reason: "asked" } } };
   const { f } = fakeGemini({ chat: [{ parts: [pay] }, { text: "The playground is closed right now." }] });
   const d = tmp();
-  const a = new Assistant({ gemini: new Gemini("k", f), models: ["chat"], library: new Library(), feedPath: join(d, "none.json"), brief: () => "B",
+  const a = new Assistant({ gemini: new Gemini("k", f), models: { quick: ["chat"], deep: [] }, library: new Library(), feedPath: join(d, "none.json"), brief: () => "B",
     chain: {} as any, venues: [], journal: new Journal(join(d, "brain.jsonl")), limits: new Limits() });
   const ev: ChatEvent[] = [];
   await a.chat("session-0004", "pay me", "ip", (e) => ev.push(e));
@@ -282,6 +283,111 @@ test("chat is a job the page polls; CORS for the dashboard only; a visitor's thi
   assert.equal(evil.headers.get("access-control-allow-origin"), null);
   assert.equal((await fetch(`${base}/api/job/00000000-0000-0000-0000-000000000000`)).status, 404);
   assert.equal((await fetch(`${base}/api/state`)).status, 200);
+  srv.close();
+});
+
+// ------------------------------------------------------------------ the free tier's day, and the modes (0059)
+
+test("the free tier's day is Pacific time: a day's 429 rests the model until midnight there, and its limit is learned", async () => {
+  // 23:59:59 in Los Angeles (PDT, UTC-7) is 06:59:59 UTC the next day
+  assert.equal(new Date(nextPtMidnight(Date.parse("2026-09-30T06:59:59Z"))).toISOString(), "2026-09-30T07:00:00.000Z");
+  assert.equal(new Date(nextPtMidnight(Date.parse("2026-09-30T07:00:01Z"))).toISOString(), "2026-10-01T07:00:00.000Z");
+  assert.equal(ptDay(Date.parse("2026-09-30T06:30:00Z")), "2026-09-29");
+  const day429 = { error: { code: 429, message: "You exceeded your current quota", status: "RESOURCE_EXHAUSTED", details: [
+    { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests", quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier", quotaValue: "20" }] },
+    { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "41s" }] } };
+  assert.deepEqual(quotaOf(day429), { perDay: true, limit: 20, retryMs: 41_000 });
+  assert.deepEqual(quotaOf({ error: { details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "7.5s" }] } }), { perDay: false, limit: undefined, retryMs: 7500 });
+  let now = Date.parse("2026-09-30T18:00:00Z");
+  const { f, calls } = fakeGemini({ x: [{ status: 429, body: day429 }], y: [{ text: "1" }, { text: "2" }, { text: "3" }] });
+  const g = new Gemini("k", f, undefined, { now: () => now });
+  assert.equal((await g.generate(["x", "y"], { system: "s", contents: [] })).model, "y");
+  assert.equal(g.limits("x").rpd, 20);
+  now += 3 * 3_600_000; // three hours later: still the same Pacific day, x is not asked
+  assert.equal((await g.generate(["x", "y"], { system: "s", contents: [] })).model, "y");
+  assert.deepEqual(calls.map((c) => c.model), ["x", "y", "y"]);
+  assert.equal(g.status(["x"]).model, undefined);
+  now = Date.parse("2026-10-01T07:00:05Z"); // past midnight in Los Angeles: x is back, with a fresh day
+  assert.equal(g.status(["x"]).model, "x");
+  assert.equal(g.used.get("y") ?? 0, 0);
+});
+
+test("a model at its minute's limit is passed over without a call; the pilot may use half a day at most; the count survives a restart", async () => {
+  const d = tmp(), usagePath = join(d, "usage.json");
+  let now = Date.parse("2026-09-30T18:00:00Z");
+  const { f, calls } = fakeGemini(() => ({ text: "ok" }));
+  const g = new Gemini("k", f, undefined, { usagePath, now: () => now, limits: { fast: { rpm: 2, rpd: 4 }, slow: { rpm: 5, rpd: 100 } } });
+  for (let i = 0; i < 3; i++) await g.generate(["fast", "slow"], { system: "s", contents: [] });
+  assert.deepEqual(calls.map((c) => c.model), ["fast", "fast", "slow"]); // the third in the same minute goes to the next model
+  now += 61_000;
+  assert.equal((await g.generate(["fast", "slow"], { system: "s", contents: [] }, 1000, { share: 0.5 })).model, "slow"); // fast has used 2 of 4: its half
+  assert.equal((await g.generate(["fast", "slow"], { system: "s", contents: [] })).model, "fast"); // a visitor may use the rest
+  await new Promise((r) => setTimeout(r, 1100)); // the count is written a second later
+  const g2 = new Gemini("k", f, undefined, { usagePath, now: () => now, limits: { fast: { rpm: 2, rpd: 4 } } });
+  assert.equal(g2.used.get("fast"), 3);
+  assert.deepEqual(g2.status(["fast"]), { model: "fast", left: 1, approx: false });
+  assert.equal(modelName("gemini-3.5-flash-lite"), "3.5 Flash-Lite");
+  assert.equal(modelName("gemini-flash-latest"), "Flash (latest)");
+  assert.equal(modelName("gemini-3-flash-preview"), "3 Flash");
+});
+
+test("quick or deep, from the words alone: orders and short questions are quick, how and why are deep", () => {
+  for (const q of ["Mint 5 XRP into FXRP", "Pay me 25 XRP", "What is Lancea, in two sentences?", "hi", "What does Flare's FTSO say BTC is worth?", "zapłać mi 10 XRP"]) assert.equal(routeOf(q).mode, "quick", q);
+  for (const q of ["Why was the latest step refused?", "How does the guard decide what to sign?", "Explain the latest strike on Flare", "Wyjaśnij mi krok po kroku jak działa tripwire",
+    "Przeanalizuj transakcję 0x3977036573be6c0ca5af1f1c4a2c8f8c0a2e2b1f3f5d9d0e4c7b8a9f0e1d2c3b", "Compare Lancea's leash with a plain multisig: what are the trade-offs?"]) assert.equal(routeOf(q).mode, "deep", q);
+});
+
+test("a chosen mode picks its models; deep falls back on the quick ones when its day is spent", async () => {
+  const { a, calls } = assistantWith({ deep: [{ text: "deep answer" }, { status: 429, body: { error: { message: "per day", details: [{ "@type": "x.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier", quotaValue: "20" }] }] } } }], chat: [{ text: "quick answer" }] });
+  const ev: ChatEvent[] = [];
+  await a.chat("session-0010", "hi", "ip", (e) => ev.push(e), "deep");
+  assert.deepEqual(ev[0], { t: "route", mode: "deep", chosen: true, why: "chosen" });
+  assert.equal((ev.find((e) => e.t === "answer") as any).model, "deep");
+  assert.match(calls[0].body.systemInstruction.parts[0].text, /wants depth/);
+  const ev2: ChatEvent[] = [];
+  await a.chat("session-0010", "and again", "ip", (e) => ev2.push(e), "deep");
+  assert.equal((ev2.find((e) => e.t === "answer") as any).model, "chat");
+  assert.deepEqual(calls.map((c) => c.model), ["deep", "deep", "chat"]);
+});
+
+test("a conversation stops between its steps, but never once a proposal has left for the guard", async () => {
+  const pay = { functionCall: { name: "playground_pay", args: { destination: "rVisitorVisitorVisitorVisitor1", amount_xrp: 1, reason: "asked" } } };
+  // stopped while the model thinks: nothing is proposed
+  const ctl = new AbortController();
+  const slow = (async (_u: string, init?: RequestInit) => new Promise((_r, no) => init?.signal?.addEventListener("abort", () => no(Object.assign(new Error("aborted"), { name: "AbortError" }))))) as unknown as typeof fetch;
+  const d = tmp(), pg = fakePlayground();
+  const a = new Assistant({ gemini: new Gemini("k", slow), models: { quick: ["chat"], deep: [] }, library: new Library(), playground: pg as any, feedPath: join(d, "none.json"), brief: () => "B",
+    chain: {} as any, venues: [], journal: new Journal(join(d, "brain.jsonl")), limits: new Limits() });
+  const ev: ChatEvent[] = [];
+  const p = a.chat("session-0011", "pay me", "ip", (e) => ev.push(e), "auto", { signal: ctl.signal });
+  setTimeout(() => ctl.abort(), 30);
+  await p;
+  assert.deepEqual(ev.map((e) => e.t), ["route", "status", "stopped", "done"]);
+  assert.equal(pg.acts.length, 0);
+  // through the API: a job that has sent its proposal cannot be stopped
+  const turnSeen: any[] = [];
+  const assistant = { chat: async (_s: string, _m: string, _ip: string, emit: (e: ChatEvent) => void, _mode: string, turn: any) => {
+    turnSeen.push(turn); emit({ t: "status", text: "thinking" });
+    await new Promise((r) => setTimeout(r, 60));
+    if (turn.signal.aborted) { emit({ t: "stopped", text: "Stopped." }); return emit({ t: "done" }); }
+    turn.committed = true; emit({ t: "tool", name: "playground_pay", args: {} });
+    await new Promise((r) => setTimeout(r, 60)); emit({ t: "answer", text: "sent", model: "m" }); emit({ t: "done" });
+  } };
+  const { srv, base } = await listen({ assistant, limitsCfg: { ...BRAIN_DEFAULTS.limits } });
+  const H = { "content-type": "text/plain", origin: "https://dziuba0x.github.io" };
+  const start = async (ip: string) => (await (await fetch(`${base}/api/chat`, { method: "POST", headers: { ...H, "cf-connecting-ip": ip }, body: JSON.stringify({ message: "pay me", mode: "deep" }) })).json() as any).job;
+  const j1 = await start("1.1.1.1");
+  const c1 = await fetch(`${base}/api/job/${j1}/cancel`, { method: "POST", headers: H });
+  assert.deepEqual([c1.status, await c1.json()], [200, { stopped: true }]);
+  const j2 = await start("2.2.2.2");
+  await new Promise((r) => setTimeout(r, 90));
+  const c2 = await fetch(`${base}/api/job/${j2}/cancel`, { method: "POST", headers: H });
+  assert.equal(c2.status, 409);
+  assert.match(((await c2.json()) as any).why, /cannot be taken back/);
+  assert.equal((await fetch(`${base}/api/job/${j2}/cancel`, { method: "POST", headers: { ...H, origin: "https://evil.example" } })).status, 403);
+  await new Promise((r) => setTimeout(r, 100));
+  const e1 = (await (await fetch(`${base}/api/job/${j1}`)).json() as any).events.map((e: ChatEvent) => e.t);
+  assert.deepEqual(e1, ["status", "stopped", "done"]);
   srv.close();
 });
 

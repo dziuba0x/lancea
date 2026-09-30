@@ -17,7 +17,7 @@
  * The recipe is the one proven on the DELICTI hero (claude/45); here it runs live.
  */
 const Glass = (() => {
-  const MAXB = 28, MAXL = 6, MAXO = 6, MAXD = 8;
+  const MAXB = 28, MAXL = 24, MAXO = 6, MAXD = 16;
   const mq = (q) => { try { return matchMedia(q); } catch { return { matches: false, addEventListener() {} }; } };
   const motionQ = mq("(prefers-reduced-motion: reduce)"), transQ = mq("(prefers-reduced-transparency: reduce)");
   const fineQ = mq("(hover: hover) and (pointer: fine)");
@@ -31,6 +31,7 @@ const Glass = (() => {
     flowLead: spr(0.52, 0.12), flowTrail: spr(0.7, 0.12),
     sheetLead: spr(0.46, 0.2), sheetTrail: spr(0.62, 0.2), shrink: spr(0.42, 0), grow: spr(0.46, 0),
     lensLead: spr(0.34, 0.14), lensTrail: spr(0.54, 0.14), lift: spr(0.32, 0.24),
+    flyLead: spr(0.68, 0.2), flyTrail: spr(0.98, 0.2),
     hoverLead: spr(0.24, 0.1), hoverTrail: spr(0.36, 0.1), hoverIn: spr(0.3, 0),
     drop: spr(0.39, 0.25), sat1: spr(0.3, 0.3), sat2: spr(0.38, 0.28),
     jelly: spr(0.34, 0.52), pop: spr(0.4, 0.34), evaporate: spr(1.1, 0),
@@ -77,7 +78,7 @@ const Glass = (() => {
     ok: false, gl: null, cv: null, W: 0, H: 0, PX: 1, scale: 1,
     reduced: motionQ.matches, solid: transQ.matches,
     t0: performance.now(), now: 0, dt: 0.016, last: 0, frame: 0, fade: 0,
-    shapes: [], blobs: [], overs: [], lenses: [], drops: [], bursts: [], labels: [],
+    shapes: [], blobs: [], overs: [], lenses: [], insets: [], flights: [], drops: [], free: [], grab: null, bursts: [], labels: [], lk: 0,
     marks: [], path: [], hover: -1, gk: 0, okk: 0, touch: null, flowId: 0, scroller: null,
     hoverEl: null, hoverOpt: null,
     focus: { x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, init: false },
@@ -87,6 +88,7 @@ const Glass = (() => {
       sat: [{ x: -1e4, y: -1e4, vx: 0, vy: 0 }, { x: -1e4, y: -1e4, vx: 0, vy: 0 }],
     },
     scroll: { y: 0, py: 0, top: 0, bottom: 0, fade: 26 },
+    ring: { wob: 0, vwob: 0, a: 0, ptr: 0, vptr: 0, pulseT: -99, ripA: 0, ripT: -99, ripS: 0 },
     light: 0, stats: { frames: 0, ms: 0 }, slowFrames: 0,
     meteors: [{ t0: -99, dur: 1, a: [0, 0], b: [0, 0] }, { t0: -99, dur: 1, a: [0, 0], b: [0, 0] }], nextMeteor: 4,
     sat: { t0: -999, dur: 60, a: [0, 0], b: [0, 0], flare: 0.5 }, nextSat: 18,
@@ -185,13 +187,29 @@ void main() {
     float fl = 1. + 22. * exp(-pow((sT - uSatT.z) * uSatT.y * 1.6, 2.));
     c += vec3(1., .97, .92) * exp(-sr * sr / .5) * .09 * fl * smoothstep(0., .03, sT) * smoothstep(1., .97, sT);
   }
-  // births (white) and strikes (coral)
+  // A star is born (white) or a strike lands (coral): an intake of light, a flare in the shape of the mark it
+  // leaves, a shock that races out and slows (its outer edge cyan, its inner edge amber: the two witnesses
+  // that agreed), and a slower shell of dust that breaks up as it goes.
   for (int i = 0; i < 6; i++) {
-    float dt = uTime - uBurst[i].z; if (dt < 0. || dt > 3.) continue;
-    float r = length(p - uBurst[i].xy) / uPx;
-    float ring = exp(-pow(r - dt * 46., 2.) / 5.) * exp(-dt * 1.5) * .6;
-    float flash = exp(-r * r / (8. + dt * 60.)) * exp(-dt * 2.4) * 2.4;
-    c += (uBurst[i].w > .5 ? vec3(1., .42, .42) : vec3(1.)) * (ring + flash);
+    float dt = uTime - uBurst[i].z; if (dt < 0. || dt > 3.2) continue;
+    vec2 bq = (p - uBurst[i].xy) / uPx; float r = length(bq);
+    if (uBurst[i].w > 1.5) { // a drop pops or splits: a small ring of light, gone in a second
+      float R0 = 46. * (1. - exp(-dt * 4.)), sh = exp(-pow(r - R0, 2.) / (1.4 + dt * 6.)) * exp(-dt * 3.2) * .5;
+      c += vec3(.85, .93, 1.) * (sh + exp(-r * r / 10.) * exp(-dt * 7.) * .6);
+      continue;
+    }
+    bool cor = uBurst[i].w > .5;
+    float R1 = 150. * (1. - exp(-dt * 2.6)), th = 1.3 + dt * 3.2;
+    float shell = exp(-pow(r - R1, 2.) / (th * th)) * exp(-dt * 1.3);
+    vec3 shellC = cor ? vec3(1., .42, .42) : mix(vec3(1., .72, .36), vec3(.42, .84, 1.), smoothstep(R1 - th, R1 + th, r));
+    float R2 = 88. * (1. - exp(-dt * 1.4)), ang = atan(bq.y, bq.x);
+    float brk = .5 + .5 * gnoise(vec2(ang * 3.2, dt * .8) + uBurst[i].xy * .013);
+    float dust = exp(-pow(r - R2, 2.) / (36. + dt * 70.)) * exp(-dt * 1.05) * brk * .32;
+    float fl = exp(-dt * 3.), Ls = 7. + 72. * fl;
+    float spikes = (exp(-bq.y * bq.y / .45) * exp(-abs(bq.x) / Ls) + exp(-bq.x * bq.x / .45) * exp(-abs(bq.y) / Ls)) * fl * 1.25;
+    float core = exp(-r * r / (6. + dt * 44.)) * exp(-dt * 2.1) * 2.5;
+    float intake = dt < .22 ? exp(-pow(r - 46. * (1. - dt / .22), 2.) / 26.) * (dt / .22) * .45 : 0.;
+    c += shellC * shell * .95 + (cor ? vec3(1., .5, .5) : vec3(1., .95, .88)) * (dust + spikes + core + intake);
   }
   float mt = (uTime - uMeet.x) / 1.3;
   if (mt > 0. && mt < 1.) {
@@ -314,14 +332,16 @@ uniform sampler2D uSky;
 uniform vec2 uRes; uniform float uPx, uTime, uSolid;
 uniform int uN; uniform vec4 uA[${MAXB}]; uniform vec4 uB[${MAXB}]; uniform vec4 uC[${MAXB}];
 uniform float uGK;
-uniform int uNL; uniform vec4 uLA[${MAXL}]; uniform vec4 uLB[${MAXL}]; uniform float uLL[${MAXL}];
+uniform int uNL; uniform vec4 uLA[${MAXL}]; uniform vec4 uLB[${MAXL}]; uniform float uLL[${MAXL}]; uniform vec4 uLC[${MAXL}]; uniform float uLK;
 uniform int uNO; uniform vec4 uOA[${MAXO}]; uniform vec4 uOB[${MAXO}]; uniform float uOK;
 uniform int uND; uniform vec4 uD[${MAXD}]; uniform vec4 uDE[${MAXD}];
 uniform vec4 uCur;
 uniform vec4 uTouch;
 uniform vec2 uLight;
 uniform vec4 uEdge;
+uniform vec4 uRing; uniform vec4 uRing2;
 out vec4 o;
+${NOISE}
 
 vec3 sdRR(vec2 p, vec4 a, float r) {
   vec2 q = p - a.xy; vec2 s = vec2(q.x < 0. ? -1. : 1., q.y < 0. ? -1. : 1.); q = abs(q) - a.zw + r;
@@ -358,6 +378,7 @@ vec3 sceneBase(vec2 p, out int idx, out float dm) {
   int gi = -1; float gd = 1e5;
   for (int i = 0; i < ${MAXB}; i++) {
     if (i >= uN) break;
+    if (uB[i].y > 5.5) continue; // glass drawn by the browser above the page (lg.js): only its shadow is ours
     vec3 d = shapeD(i, p);
     if (grouped(i)) { if (d.x < gd) { gd = d.x; gi = i; } grp = grp.x > 9e4 ? d : smin3(grp, d, uGK); }
     else if (d.x < best.x) { best = d; idx = i; }
@@ -366,6 +387,8 @@ vec3 sceneBase(vec2 p, out int idx, out float dm) {
   for (int j = 0; j < ${MAXD}; j++) {
     if (j >= uND) break;
     if (uD[j].z < .5) continue;
+    vec2 dq = p - uD[j].xy; float reach = uD[j].z * max(uDE[j].x, uDE[j].y) + 26. * uPx;
+    if (dot(dq, dq) > reach * reach) continue; // too far to touch this pixel, even through a neck
     vec3 dd = sdDrop(p, uD[j], uDE[j]);
     float k = (idx >= 0 ? 16. : 24.) * uPx;
     float h = clamp(.5 + .5 * (dd.x - best.x) / k, 0., 1.);
@@ -382,7 +405,12 @@ float shadowBase(vec2 p) {
     if (l < .003) continue;
     best = min(best, shapeD(i, p).x + (1. - l) * 40. * uPx);
   }
-  for (int j = 0; j < ${MAXD}; j++) { if (j >= uND) break; best = min(best, sdDrop(p, uD[j], uDE[j]).x); }
+  for (int j = 0; j < ${MAXD}; j++) {
+    if (j >= uND) break;
+    vec2 dq = p - uD[j].xy; float reach = uD[j].z * max(uDE[j].x, uDE[j].y) + 44. * uPx;
+    if (dot(dq, dq) > reach * reach) continue;
+    best = min(best, sdDrop(p, uD[j], uDE[j]).x);
+  }
   return best;
 }
 // the overlay: its shapes blend only with each other (a sheet and the drop it was pulled from)
@@ -390,6 +418,7 @@ vec3 sceneOver(vec2 p, out int idx) {
   vec3 best = vec3(1e5, 0., 1.); idx = -1; float bd = 1e5;
   for (int i = 0; i < ${MAXO}; i++) {
     if (i >= uNO) break;
+    if (uOB[i].y > 5.5) continue; // a menu or a toast in the browser's glass: only its shadow is ours
     vec3 d = sdRR(p, uOA[i], uOB[i].x);
     if (d.x < bd) { bd = d.x; idx = i; }
     best = best.x > 9e4 ? d : smin3(best, d, uOK);
@@ -424,17 +453,41 @@ vec3 glassAt(vec2 p, vec2 uv, vec3 s, float kind, float hh, float tube, float le
   vec2 grad = normalize(s.yz + 1e-6);
   vec2 gh = dh * grad * step(d, 0.);
   // lenses inside the glass: a selection, and the highlight the pointer's drop turns into
-  float fillL = 0.;
+  // lenses inside the glass: a selection, the pointer's highlight, and the controls raised out of a pane
+  // (0059): each clipped by the list it scrolls in; those of one liquid group (a message flying out of the
+  // composer) blend with each other, so they part through a neck
+  float fillL = 0., lrim = 0.;
+  vec3 gd = vec3(1e5, 0., 1.); int gi = -1; float gbest = 1e5, gcm = 0.;
   for (int i = 0; i < ${MAXL}; i++) {
     if (i >= uNL) break;
-    if (abs(uLL[i] - layer) > .5) continue;
+    bool grp = uLL[i] > 5.;
+    if (abs((grp ? uLL[i] - 10. : uLL[i]) - layer) > .5) continue;
+    vec4 cr = uLC[i]; float fe = 10. * uPx;
+    float cm = smoothstep(cr.x, cr.x + fe, p.x) * (1. - smoothstep(cr.z - fe, cr.z, p.x)) * smoothstep(cr.y, cr.y + fe, p.y) * (1. - smoothstep(cr.w - fe, cr.w, p.y));
+    if (cm < .002) continue;
+    vec2 bq = abs(p - uLA[i].xy) - uLA[i].zw;
+    if (!grp && max(bq.x, bq.y) > 2. * uPx) continue;
     vec3 di = sdRR(p, uLA[i], uLB[i].x);
-    fillL = max(fillL, (1. - smoothstep(-1.5 * uPx, .5 * uPx, di.x)) * uLB[i].y * uLB[i].w);
+    if (grp) { gd = gd.x > 9e4 ? di : smin3(gd, di, uLK); if (di.x < gbest) { gbest = di.x; gi = i; gcm = cm; } continue; }
+    float str = uLB[i].y * cm, mh = min(uLA[i].z, uLA[i].w);
+    fillL = max(fillL, (1. - smoothstep(-1.5 * uPx, .5 * uPx, di.x)) * str * uLB[i].w);
+    lrim = max(lrim, exp(-di.x * di.x / (.55 * uPx * uPx)) * str * step(.02, uLB[i].z));
     if (di.x < 0.) {
-      float Bi = min(uLA[i].w * .9, 14. * uPx), xi = clamp(-di.x / Bi, 0., 1.), omi = 1. - max(xi, .0015), bi = max(1. - omi * omi * omi * omi, 1e-5);
-      float Hi = uLA[i].w * uLB[i].z * uLB[i].y;
+      float Bi = min(mh * .9, 14. * uPx), xi = clamp(-di.x / Bi, 0., 1.), omi = 1. - max(xi, .0015), bi = max(1. - omi * omi * omi * omi, 1e-5);
+      float Hi = mh * uLB[i].z * str;
       h += Hi * pow(bi, .25);
       gh += -(Hi / Bi) * omi * omi * omi * pow(bi, -.75) * normalize(di.yz + 1e-6);
+    }
+  }
+  if (gi >= 0) {
+    float str = uLB[gi].y * gcm, mh = min(uLA[gi].z, uLA[gi].w);
+    fillL = max(fillL, (1. - smoothstep(-1.5 * uPx, .5 * uPx, gd.x)) * str * uLB[gi].w);
+    lrim = max(lrim, exp(-gd.x * gd.x / (.55 * uPx * uPx)) * str);
+    if (gd.x < 0.) {
+      float Bi = min(mh * .9, 14. * uPx), xi = clamp(-gd.x / Bi, 0., 1.), omi = 1. - max(xi, .0015), bi = max(1. - omi * omi * omi * omi, 1e-5);
+      float Hi = mh * uLB[gi].z * str;
+      h += Hi * pow(bi, .25);
+      gh += -(Hi / Bi) * omi * omi * omi * pow(bi, -.75) * normalize(gd.yz + 1e-6);
     }
   }
   // the pointer presses a shallow dome into the glass beneath it
@@ -488,6 +541,8 @@ vec3 glassAt(vec2 p, vec2 uv, vec3 s, float kind, float hh, float tube, float le
     col += pow(max(dot(n, Hc), 0.), 60.) * .9 * fall * uCur.w * lens * (1. - smoothstep(.25, .6, x));
     col += exp(-cd * cd / (2. * pow(130. * uPx, 2.))) * .04 * uCur.z * lens * smoothstep(0., .5, x);
   }
+  // the raised controls' own hairline, brighter on the side that faces the key light
+  col += lrim * (.16 + .34 * max(dot(normalize(gh + 1e-6), -uLight), 0.)) * lens;
   // the light a finger lets into the glass
   col += glow * vec3(.86, .94, 1.) * .1 * smoothstep(0., .35, x) * lens;
   col = mix(col, min(col * 1.06 + vec3(.05), vec3(.32)), fillL * ((kind > .5 && kind < 1.5) || kind > 4.5 ? 1. : .55));
@@ -507,44 +562,85 @@ vec3 shadeBase(vec2 p, vec2 uv, vec3 sky) {
   float shadow = .3 * (1. - smoothstep(-14. * uPx, 42. * uPx, sh)) * lens + .08 * (1. - smoothstep(0., 5. * uPx, d)) * step(0., d) * lens;
   vec3 plane = sky * (1. - shadow);
   // the pointer's drop focuses a little of the key light onto the sky beneath it: a caustic
-  if (uND > 0 && uD[0].w > 1.5) {
+  if (uND > 0 && uD[0].w > 1.5 && uD[0].w < 2.5) {
     vec2 cq = p - uD[0].xy - vec2(4., 11.) * uPx; float cr = max(uD[0].z * .42, uPx);
     plane += vec3(1., .97, .9) * exp(-dot(cq, cq) / (2. * cr * cr)) * .13 * smoothstep(3. * uPx, 10. * uPx, uD[0].z);
+  }
+  // the free drops focus the key light too: a small bright caustic below each, toward the light's far side
+  for (int j = 0; j < ${MAXD}; j++) {
+    if (j >= uND) break;
+    if (uD[j].w < 2.5) continue;
+    vec2 cq = p - uD[j].xy - uD[j].z * vec2(.3, .78); float cr = max(uD[j].z * .38, uPx);
+    if (dot(cq, cq) > 36. * cr * cr) continue;
+    plane += vec3(1., .96, .88) * exp(-dot(cq, cq) / (2. * cr * cr)) * .12;
   }
   if (d > 1.5 * uPx || lens < .003) return plane + exp(-d * d / (.5 * uPx * uPx)) * .25 * lens;
   float x;
   vec3 col = glassAt(p, uv, s, kind, idx >= 0 ? uA[idx].w : 12. * uPx, idx >= 0 ? uC[idx].y : 0., lens, idx >= 0 ? uB[idx].w : 0., dm, 0., x);
-  // the budget ring: amber light fills the spent part of the tube, and bubbles drift through it
+  // The budget ring: a tube of clear glass that the day's spending fills with liquid light. The liquid has a
+  // front (a convex meniscus that wobbles when the fill moves, the pointer tugs at it or the ring is
+  // touched), a slow current of luminous streaks carried along it, gold dust drifting in it, and a pulse
+  // that runs from its tail to its front when a decision is born. Through it, the sky is seen amber.
   if (kind > 1.5 && kind < 2.5) {
     vec2 rq = p - uA[idx].xy; float a = fract(atan(rq.x, -rq.y) / 6.2831853 + 1.);
-    float Rr = uA[idx].z, wt = uC[idx].y * .78, fr = uC[idx].x, across = length(rq) - Rr;
-    float sEnd = (a - fr) * 6.2831853 * Rr, sBeg = a * 6.2831853 * Rr;
-    float body = step(0., sBeg) * step(sEnd, 0.) * smoothstep(wt + uPx, wt - uPx, abs(across));
-    vec2 endP = uA[idx].xy + Rr * vec2(sin(fr * 6.2831853), -cos(fr * 6.2831853)), begP = uA[idx].xy + vec2(0., -Rr);
-    float caps = max(smoothstep(wt + uPx, wt - uPx, length(p - endP)), smoothstep(wt + uPx, wt - uPx, length(p - begP)));
-    float fill = max(body * smoothstep(-.5 * uPx, .5 * uPx, -sEnd), caps) * step(.0005, fr);
-    float core = 1. - abs(across) / max(wt, 1.);
+    float Rr = uA[idx].z, wt = uC[idx].y * .8, fr = clamp(uC[idx].x, 0., 1.), across = length(rq) - Rr;
     bool coral = uC[idx].z < -.5;
-    vec3 amber = coral ? vec3(1., .42, .42) * (.8 + .2 * sin(uTime * 1.8)) : vec3(1., .68, .27);
-    float shimmer = .92 + .08 * sin(a * 110. - uTime * 1.4) * sin(a * 37. + uTime * .6);
-    col = mix(col, col * .35 + amber * (.28 + .62 * core * core) * shimmer, fill * .86 * lens);
-    col += vec3(1., .9, .72) * fill * pow(max(core, 0.), 6.) * .22 * lens;
-    // bubbles (a CAEmitterLayer in a tube): rise along the liquid toward its end and vanish there
-    if (fr > .02 && !coral) {
-      float bub = 0.;
-      for (int k = 0; k < 7; k++) {
-        float fk = float(k);
-        float ph = fract(fk * .371 + uTime * (.035 + .02 * fract(fk * .618)) / max(fr, .2));
-        float ang = ph * fr * 6.2831853;
-        float acr = sin(uTime * (.9 + fk * .23) + fk * 2.1) * wt * .42;
-        vec2 bp = uA[idx].xy + (Rr + acr) * vec2(sin(ang), -cos(ang));
-        float br = (1.1 + 1.4 * fract(fk * .73)) * uPx, dd = length(p - bp);
-        float life = smoothstep(0., .12, ph) * smoothstep(1., .8, ph);
-        bub += (smoothstep(br + uPx, br, dd) - .65 * smoothstep(br - .3 * uPx, br - 1.3 * uPx, dd)) * life;
-        bub += smoothstep(.9 * uPx, 0., length(p - bp + vec2(.35, .35) * br)) * .8 * life;
+    float C = 6.2831853 * Rr, fa = a * C, u = clamp(across / wt, -1., 1.), core = 1. - u * u;
+    // the pointer tugs the front toward itself when it is just ahead of it (surface tension)
+    float ahead = fract(uRing.y - fr + 1.);
+    float frE = min(1., fr + uRing.z * .014 * (1. - smoothstep(0., .09, ahead)) * step(ahead, .09));
+    float fEnd = frE * C;
+    float capF = wt * (.5 + .5 * sqrt(core)) * (1. + .35 * uRing.x * sin(u * 3.1 + uTime * 6.3));
+    float capB = wt * .7 * sqrt(core);
+    float acrossM = smoothstep(wt + uPx, wt - uPx, abs(across));
+    float bodyM = fr >= .999 ? 1. : max(smoothstep(-uPx, uPx, fEnd + capF - fa) * step(fa, fEnd + capF + 2. * uPx), smoothstep(-uPx, uPx, capB - (1. - a) * C) * step(.5, a));
+    float L = acrossM * bodyM * step(.0015, fr);
+    if (L > .001) {
+      float t = uTime * (coral ? 2.2 : 1.);
+      // the current: domain-warped streaks, carried forward slowly, sheared across the tube
+      vec2 q = vec2(fa / (wt * 3.4) - t * .24, u * 1.25);
+      float w1 = fbm(q * .7 + vec2(0., t * .05));
+      float flow = fbm(q + vec2(w1 * 1.6, -w1 * .6));
+      float streak = smoothstep(-.18, .55, flow);
+      float swell = .8 + .2 * sin(6.2831853 * (a * 2.5 - uTime * .05));
+      vec3 deep = coral ? vec3(.85, .16, .18) : vec3(.95, .42, .08);
+      vec3 mid = coral ? vec3(1., .42, .42) : vec3(1., .66, .25);
+      vec3 hot = coral ? vec3(1., .74, .7) : vec3(1., .9, .62);
+      vec3 liq = mix(deep * .5, mid, core) * (.7 + .38 * streak) * swell;
+      liq += hot * pow(core, 5.) * (.28 + .5 * streak);
+      // the sky through the liquid, tinted and a little brighter (it lenses too)
+      liq += col * mid * .55;
+      // the front catches the light, and the tail too, faintly
+      float front = exp(-max(fEnd + capF - fa, 0.) / (wt * .55)) * step(fEnd - wt * 4., fa) * step(fa, fEnd + capF + uPx);
+      liq += hot * front * (.42 + .25 * uRing.x);
+      // where the pointer is, the liquid glows a little brighter
+      liq += hot * exp(-pow(fract(a - uRing.y + .5) - .5, 2.) * 900.) * uRing.z * .22;
+      // gold dust: motes drifting forward with the current, twinkling
+      float dust = 0.;
+      for (int k = 0; k < 8; k++) {
+        float fk = float(k), ph = fract(fk * .618 + uTime * (.012 + .01 * fract(fk * .37)) / max(fr, .25));
+        float ma = ph * frE * C, mu = sin(uTime * (.6 + .2 * fk) + fk * 2.3) * .55;
+        vec2 dd = vec2((fa - ma) / (wt * .9), (u - mu) * 1.6);
+        float tw = .6 + .4 * sin(uTime * (3. + fk) + fk * 5.1);
+        dust += exp(-dot(dd, dd) * 60.) * tw * smoothstep(0., .08, ph) * smoothstep(1., .9, ph);
       }
-      col += vec3(1., .94, .82) * bub * .3 * fill * lens;
+      liq += hot * dust * .8;
+      // a pulse runs from the tail to the front when a decision is born; then the front flares
+      float pt = (uTime - uRing.w) / 1.15;
+      if (pt > 0. && pt < 1.35) {
+        float pos = min(pt, 1.) * fEnd, g = exp(-pow((fa - pos) / (wt * 2.6), 2.)) * (1. - smoothstep(1., 1.35, pt));
+        liq += hot * g * .9 + hot * front * smoothstep(.85, 1., pt) * (1. - smoothstep(1.05, 1.35, pt)) * 1.2;
+      }
+      // a touch sends a ripple both ways along the liquid
+      float rt = uTime - uRing2.y;
+      if (rt > 0. && rt < 2.4) {
+        float da = abs(fract(a - uRing2.x + .5) - .5) * C, rr = rt * 260. * uPx;
+        liq += hot * exp(-pow((da - rr) / (wt * 1.1), 2.)) * exp(-rt * 1.6) * .6 * uRing2.z;
+      }
+      col = mix(col, liq, L * .92 * lens);
     }
+    // the empty part of the tube carries a faint line of light along its inner wall
+    col += vec3(.9, .95, 1.) * exp(-pow((abs(across) - wt * .72) / (.9 * uPx), 2.)) * .035 * lens * (1. - L);
   }
   // a sweep of light across a bar when it has news
   if (idx >= 0 && uC[idx].z > 0.) {
@@ -712,7 +808,7 @@ void main() {
   }
 
   // ─── Shapes from the page ─────────────────────────────────────────────────
-  const KIND = { pane: 0, bar: 1, ring: 2, sheet: 4, chip: 5 };
+  const KIND = { pane: 0, bar: 1, ring: 2, sheet: 4, chip: 5, shade: 6 };
   const find = (el) => S.shapes.find((s) => s.el === el);
   function add(el, opts = {}) {
     if (!el) return null;
@@ -733,7 +829,22 @@ void main() {
     s.held = false; s.target = on ? 1 : 0; s.delay = delay; s.since = S.now; s.fast = !!o.fast;
     if (o.instant || S.reduced) { s.lens = s.target; s.v = 0; if (!on) s.last = null; }
   }
-  function setFill(el, f) { const s = find(el); if (s) { if (Math.abs(s.fillT - f) > 0.001) S.lastInput = S.now; s.fillT = clamp(f, 0, 1); } }
+  function setFill(el, f) {
+    const s = find(el); if (!s) return;
+    const d = clamp(f, 0, 1) - s.fillT;
+    if (Math.abs(d) > 0.001) { S.lastInput = S.now; if (s.kind === 2 && s.lens > 0.5) S.ring.vwob += clamp(Math.abs(d) * 60, 2, 9); }
+    s.fillT = clamp(f, 0, 1);
+  }
+  /** Where on the ring's tube (0..1 clockwise from the top) the point is, or null when it is not on it. */
+  function ringAt(x, y, margin = 0) {
+    const s = S.shapes.find((q) => q.kind === 2 && q.rect && q.lens > 0.3); if (!s) return null;
+    const r = s.rect, cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = Math.min(r.width, r.height) / 2 - s.tube;
+    const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy);
+    if (Math.abs(d - R) > s.tube + margin) return null;
+    return { a: ((Math.atan2(dx, -dy) / (2 * Math.PI)) + 1) % 1, d: Math.abs(d - R), s };
+  }
+  /** A decision is born: a pulse runs along the liquid, from its tail to its front, arriving with the star. */
+  function ringPulse(delay = 0) { if (!S.reduced) S.ring.pulseT = S.now + delay; }
   function press(el, on) { const s = find(el); if (s) s.pressT = on ? 1 : 0; }
 
   // The glass follows the page each frame. Panes that scroll glide to a new layout (a pane that grows, a
@@ -937,6 +1048,247 @@ void main() {
     }
   }
 
+  // ─── Free drops of glass in the sky (0059) ────────────────────────────────
+  // They drift on a slow current and keep off the panes; when two touch they merge (a big one bounces
+  // instead); a meteor that crosses one splits it in two; a star's birth blows them outward; the pointer
+  // pushes them aside, can pick one up and throw it, and a tap pops it into droplets that evaporate. A new
+  // one buds off the pointer's own drop (or the white star) and flies off.
+  const MAXFREE = () => (innerWidth <= 760 ? 6 : 11);
+  let freeId = 0;
+  function spawnDrop(x, y, o = {}) {
+    if (S.free.length >= MAXFREE()) { const old = S.free.find((d) => !d.pop && d !== S.grab?.d); if (old) popDrop(old.id, true); }
+    const d = { id: ++freeId, x, y, vx: o.vx ?? 0, vy: o.vy ?? 0, r: o.r0 ?? 0, tr: o.r ?? 9 + Math.random() * 8, st: 0, vst: 0, ax: 1, ay: 0, born: S.now, calm: S.now + (o.calm ?? 0.8), pop: 0, phase: Math.random() * 6.28, ...o.extra };
+    S.free.push(d); S.lastInput = S.now;
+    return d;
+  }
+  /** A drop buds off the pointer's drop (or the white star), swells, and flies off in some direction. */
+  function dropSpawn(x, y) {
+    const c = S.cursor, fromCursor = c.fine && c.on > 0.3 && Math.hypot((x ?? c.px) - c.px, (y ?? c.py) - c.py) < 60;
+    const sx = fromCursor ? c.px : S.focus.x, sy = fromCursor ? c.py : S.focus.y;
+    const a = Math.random() * Math.PI * 2, sp = 380 + Math.random() * 220;
+    const d = spawnDrop(sx, sy, { r0: 1, r: 11 + Math.random() * 6, calm: 1.2, extra: { bud: S.now, kick: [Math.cos(a) * sp, Math.sin(a) * sp] } });
+    if (!fromCursor) burst(sx, sy, 2);
+    return d.id;
+  }
+  function dropAt(x, y) { for (let i = S.free.length - 1; i >= 0; i--) { const d = S.free[i]; if (!d.pop && Math.hypot(d.x - x, d.y - y) < d.r + 6) return d.id; } return null; }
+  const freeById = (id) => S.free.find((d) => d.id === id);
+  /** A pop: the drop is gone at once, into droplets that fly out and evaporate, with a small ring of light. */
+  function popDrop(id, quiet) {
+    const d = freeById(id); if (!d || d.pop) return;
+    d.pop = S.now; d.tr = 0;
+    if (!quiet) burst(d.x, d.y, 2);
+    const n = quiet ? 0 : 5 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n && S.free.length < MAXFREE() + 8; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5, sp = 160 + Math.random() * 180;
+      spawnDrop(d.x, d.y, { r0: d.r * 0.3, r: 0, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, calm: 9, extra: { spray: true, life: S.now + 0.6 + Math.random() * 0.4, r1: d.r * (0.22 + Math.random() * 0.14) } });
+    }
+  }
+  /** A split: two drops of half its volume each, pushed apart across the cut. */
+  function splitDrop(id, nx, ny) {
+    const d = freeById(id); if (!d || d.pop || d.r < 6) return;
+    const a = nx == null ? Math.random() * Math.PI * 2 : Math.atan2(ny, nx) + Math.PI / 2, ux = Math.cos(a), uy = Math.sin(a), r = d.r / Math.SQRT2, sp = 150 + d.r * 6;
+    burst(d.x, d.y, 2);
+    d.pop = S.now; d.tr = 0; d.r = 0;
+    for (const s of [1, -1]) spawnDrop(d.x + ux * s * r * 0.6, d.y + uy * s * r * 0.6, { r0: r, r, vx: d.vx + ux * s * sp, vy: d.vy + uy * s * sp, calm: 1.1 });
+  }
+  function popAll() { for (const d of [...S.free]) if (!d.spray) popDrop(d.id); }
+  /** The panes and bars the drops keep off: rects on screen. */
+  function obstacles() {
+    const out = [];
+    for (const s of S.shapes) { const r = s.rect; if (r && s.lens > 0.3 && r.bottom > -40 && r.top < innerHeight + 40) out.push(r); }
+    return out;
+  }
+  function updateFree(dt) {
+    if (S.reduced) { S.free.length = 0; return; }
+    if (!S.freeInit && S.fade > 0.4 && innerWidth > 0) {
+      S.freeInit = true;
+      const obs = obstacles(), n = innerWidth <= 760 ? 2 : 7;
+      for (let i = 0; i < n; i++) {
+        let x = 0, y = 0;
+        for (let k = 0; k < 20; k++) { x = 30 + Math.random() * (innerWidth - 60); y = 90 + Math.random() * (innerHeight - 160); if (!obs.some((r) => x > r.left - 24 && x < r.right + 24 && y > r.top - 24 && y < r.bottom + 24)) break; }
+        spawnDrop(x, y, { r0: 0, r: 7 + Math.random() * 9, calm: 0, extra: { phase: i * 1.7 } });
+      }
+    }
+    const t = S.now, obs = obstacles(), c = S.cursor;
+    const cursorR = 12.5 * Math.max(0, c.on) * (1 - c.glass);
+    // a drop that evaporated is replaced, now and then, by one that condenses where there is room
+    const want = innerWidth <= 760 ? 2 : 7, live = S.free.filter((d) => !d.pop && !d.spray).length;
+    if (S.freeInit && live < want && t > (S.nextDrop ?? 0)) {
+      S.nextDrop = t + 3 + Math.random() * 4;
+      for (let k = 0; k < 24; k++) {
+        const x = 30 + Math.random() * (innerWidth - 60), y = 90 + Math.random() * (innerHeight - 160);
+        if (!obs.some((r) => x > r.left - 40 && x < r.right + 40 && y > r.top - 40 && y < r.bottom + 40)) { spawnDrop(x, y, { r0: 0, r: 7 + Math.random() * 9, calm: 0.5 }); break; }
+      }
+    }
+    for (const d of S.free) {
+      if (d.spray) { d.r = d.r1 * Math.max(0, (d.life - t) / 0.8); d.vx *= 1 - dt * 2.4; d.vy *= 1 - dt * 2.4; d.x += d.vx * dt; d.y += d.vy * dt; continue; }
+      if (d.pop) { d.r += (0 - d.r) * Math.min(1, dt * 16); continue; }
+      // growing into itself (a bud swells for a quarter of a second, then it is thrown)
+      d.r += (d.tr - d.r) * Math.min(1, dt * (d.bud ? 7 : 3));
+      if (d.bud) {
+        const k = (t - d.bud) / 0.28;
+        if (k < 1) { d.vx = d.kick[0] * 0.08; d.vy = d.kick[1] * 0.08; } else { d.vx = d.kick[0]; d.vy = d.kick[1]; d.bud = 0; d.vst += 3; }
+      }
+      if (S.grab?.d === d) continue;
+      // a slow current (two swirls that drift), and drag
+      const fx = Math.sin(d.y * 0.004 + t * 0.07 + d.phase) * 7 + Math.cos(t * 0.05 + d.phase * 2) * 4;
+      const fy = Math.cos(d.x * 0.0035 - t * 0.06 + d.phase) * 6 + Math.sin(t * 0.045 + d.phase) * 3;
+      d.vx += fx * dt; d.vy += fy * dt;
+      const drag = t < d.calm ? 1.1 : 0.55;
+      d.vx *= Math.max(0, 1 - drag * dt); d.vy *= Math.max(0, 1 - drag * dt);
+      // keep off the panes: pushed out along the nearest edge. One caught between two panes (a gap too narrow
+      // for it) would bridge them: it evaporates, and another drop condenses somewhere open
+      let touching = 0;
+      for (const r of obs) {
+        const m = d.r + 16, ix = Math.min(d.x - (r.left - m), r.right + m - d.x), iy = Math.min(d.y - (r.top - m), r.bottom + m - d.y);
+        if (ix > 0 && iy > 0) {
+          touching++;
+          if (ix < iy) d.vx += (d.x < (r.left + r.right) / 2 ? -1 : 1) * Math.min(ix, 60) * 16 * dt;
+          else d.vy += (d.y < (r.top + r.bottom) / 2 ? -1 : 1) * Math.min(iy, 60) * 16 * dt;
+        }
+      }
+      d.squeeze = touching >= 2 ? (d.squeeze ?? 0) + dt : 0;
+      if (d.squeeze > 1.2) { popDrop(d.id); continue; }
+      // the pointer's drop nudges them aside
+      if (cursorR > 1) { const dx = d.x - c.px, dy = d.y - c.py, dd = Math.hypot(dx, dy), m = d.r + cursorR + 30; if (dd < m && dd > 0.1) { const f = (1 - dd / m) * 520 * dt; d.vx += (dx / dd) * f; d.vy += (dy / dd) * f; } }
+      // walls: a soft bounce
+      if (d.x < d.r + 4) { d.x = d.r + 4; d.vx = Math.abs(d.vx) * 0.6; d.vst += 1.2; }
+      if (d.x > innerWidth - d.r - 4) { d.x = innerWidth - d.r - 4; d.vx = -Math.abs(d.vx) * 0.6; d.vst += 1.2; }
+      if (d.y < d.r + 4) { d.y = d.r + 4; d.vy = Math.abs(d.vy) * 0.6; d.vst += 1.2; }
+      if (d.y > innerHeight - d.r - 4) { d.y = innerHeight - d.r - 4; d.vy = -Math.abs(d.vy) * 0.6; d.vst += 1.2; }
+      const v = Math.hypot(d.vx, d.vy), vmax = 900;
+      if (v > vmax) { d.vx *= vmax / v; d.vy *= vmax / v; }
+      d.x += d.vx * dt; d.y += d.vy * dt;
+    }
+    // stretch along the motion, a jelly wobble after a knock
+    for (const d of S.free) {
+      if (d.spray || d.pop) continue;
+      const v = Math.hypot(d.vx, d.vy);
+      if (v > 30) { const k = Math.min(1, dt * 10); d.ax += (d.vx / v - d.ax) * k; d.ay += (d.vy / v - d.ay) * k; const l = Math.hypot(d.ax, d.ay) || 1; d.ax /= l; d.ay /= l; }
+      spring(d, "st", "vst", Math.min(0.32, v / 2600), SP.jelly, dt);
+      d.st = clamp(d.st, -0.25, 0.45);
+    }
+    // two that touch become one (not past a size: then they bounce off each other)
+    for (let i = 0; i < S.free.length; i++) for (let j = i + 1; j < S.free.length; j++) {
+      const a = S.free[i], b = S.free[j];
+      if (a.pop || b.pop || a.spray || b.spray || t < a.calm || t < b.calm || S.grab?.d === a || S.grab?.d === b) continue;
+      const dx = b.x - a.x, dy = b.y - a.y, dd = Math.hypot(dx, dy) || 0.01, R = a.r + b.r;
+      if (dd > R + 10) continue;
+      const big = Math.sqrt(a.r * a.r + b.r * b.r);
+      if (dd < R * 0.62 && big <= 24) {
+        const w = a.r * a.r / (a.r * a.r + b.r * b.r);
+        a.x = a.x * w + b.x * (1 - w); a.y = a.y * w + b.y * (1 - w); a.vx = a.vx * w + b.vx * (1 - w); a.vy = a.vy * w + b.vy * (1 - w);
+        a.tr = big; a.r = Math.max(a.r, big * 0.92); a.vst += 3.5; b.pop = t; b.r = 0; b.tr = 0;
+      } else if (big > 24 && dd < R) {
+        const f = (R - dd) * 12 * dt, nx = dx / dd, ny = dy / dd;
+        a.vx -= nx * f * 30; a.vy -= ny * f * 30; b.vx += nx * f * 30; b.vy += ny * f * 30;
+      } else { const f = 60 * dt; a.vx += (dx / dd) * f; a.vy += (dy / dd) * f; b.vx -= (dx / dd) * f; b.vy -= (dy / dd) * f; } // surface tension draws them in
+    }
+    // a meteor that crosses a drop splits it
+    for (const m of S.meteors) {
+      const k = (t - m.t0) / m.dur; if (k < 0 || k > 1) continue;
+      const e = 1 - (1 - k) * (1 - k), hx = m.a[0] + (m.b[0] - m.a[0]) * e, hy = m.a[1] + (m.b[1] - m.a[1]) * e;
+      for (const d of [...S.free]) if (!d.pop && !d.spray && d.r > 6 && t > d.calm && Math.hypot(d.x - hx, d.y - hy) < d.r + 3) splitDrop(d.id, m.b[0] - m.a[0], m.b[1] - m.a[1]);
+    }
+    S.free = S.free.filter((d) => !(d.pop && d.r < 0.3) && !(d.spray && t > d.life));
+  }
+  /** A star's birth (or a strike) is a shock: the drops near it are blown outward. */
+  function shock(x, y, power = 1) {
+    for (const d of S.free) {
+      if (d.pop || d.spray) continue;
+      const dx = d.x - x, dy = d.y - y, dd = Math.hypot(dx, dy) || 1, R = 260;
+      if (dd < R) { const f = (1 - dd / R) * 520 * power; d.vx += (dx / dd) * f; d.vy += (dy / dd) * f; d.vst += 2 * (1 - dd / R); }
+    }
+  }
+
+  // ─── Insets: controls raised out of a pane's glass (0059) ─────────────────
+  // What lives on a pane (the conversation's composer, its send drop, the suggestions, a visitor's words)
+  // is not glass on glass: it is the pane's own glass, raised. Each inset is a lens that follows its element
+  // on springs (a reflow glides, a scrolling list carries it frame for frame), materializes and dissolves,
+  // swells when it has focus, bobs when it is typed into, and can be clipped by the list it scrolls in.
+  // A flight is an inset pulled out of another (a message out of the composer, a suggestion out of its row):
+  // it flies to where its element will be, stretching as it goes, with a liquid neck to what it left until
+  // the neck snaps; it lands as that element's inset.
+  const scrollerOf = (el) => { for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) { const st = getComputedStyle(e); if (/(auto|scroll)/.test(st.overflowY + st.overflowX) && e !== S.scroller) return e; } return null; };
+  function docOffset(I) { const a = S.scroller, b = I.sc; return [(b ? b.scrollLeft : 0) + (a ? a.scrollLeft : 0), (b ? b.scrollTop : 0) + (a ? a.scrollTop : 0)]; }
+  /** Raise `el` out of the pane under it. o: height (0..1 of its half-height), tint, radius ("capsule" or px),
+   *  pad (px around it), clip (() => a rect to fade it out of, or null), lift (0..1, focus). */
+  function inset(el, o = {}) {
+    if (!el) return null;
+    let I = S.insets.find((x) => x.el === el);
+    if (!I) { I = { el, lr: null, str: 0, vs: 0, lift: 0, vlift: 0, bob: 0, vbob: 0, sc: undefined, group: false }; S.insets.push(I); }
+    Object.assign(I, { height: o.height ?? 0.4, tint: o.tint ?? 0.5, radius: o.radius ?? "capsule", pad: o.pad ?? 0, clip: o.clip ?? null, target: 1, liftT: o.lift ?? I.liftT ?? 0 });
+    return I;
+  }
+  function insetOff(el, instant) { const I = S.insets.find((x) => x.el === el); if (!I) return; I.target = 0; if (instant || S.reduced) { I.str = 0; S.insets = S.insets.filter((x) => x !== I); } }
+  function insetSet(el, o) { const I = S.insets.find((x) => x.el === el); if (I) { if (o.lift != null) I.liftT = o.lift; if (o.bob) I.vbob += o.bob; if (o.height != null) I.height = o.height; if (o.tint != null) I.tint = o.tint; S.lastInput = S.now; } }
+  function insetGoal(I) {
+    const r = I.el.isConnected ? I.el.getBoundingClientRect() : null;
+    if (!r || r.width < 1 || r.height < 1) return null;
+    const p = I.pad, g = box(r.left - p, r.top - p, r.right + p, r.bottom + p);
+    const rad = I.radius === "capsule" ? Math.min(g.width, g.height) / 2 : Math.min(I.radius, g.width / 2, g.height / 2);
+    return { g, rad };
+  }
+  function updateInsets(dt) {
+    for (const I of [...S.insets]) {
+      if (!I.el.isConnected) I.target = 0;
+      if (I.sc === undefined) I.sc = scrollerOf(I.el);
+      const goal = I.target ? insetGoal(I) : null;
+      if (goal) {
+        // the spring runs in the page's coordinates (both scrollers added back), so scrolling never lags it
+        const [ox, oy] = docOffset(I), gd = box(goal.g.left + ox, goal.g.top + oy, goal.g.right + ox, goal.g.bottom + oy);
+        if (!I.lr || S.reduced || rdist(I.lr, gd) > 420) I.lr = new Liquid(gd, goal.rad);
+        else I.lr.step(gd, goal.rad, dt, SP.lensLead, SP.lensTrail);
+        I.docSpace = true;
+        spring(I, "str", "vs", 1, SP.lens, dt);
+      } else {
+        spring(I, "str", "vs", 0, SP.fast, dt);
+        if (I.str < 0.005 && !I.target) { S.insets = S.insets.filter((x) => x !== I); continue; }
+      }
+      spring(I, "lift", "vlift", I.liftT ?? 0, SP.lift, dt);
+      spring(I, "bob", "vbob", 0, SP.jelly, dt);
+    }
+  }
+  function fly(from, toEl, o = {}) {
+    if (!toEl) return;
+    let lr;
+    const src = from?.nodeType ? S.insets.find((x) => x.el === from) : null;
+    if (src?.lr && src.docSpace) {
+      const [ox, oy] = docOffset(src);
+      lr = new Liquid(box(src.lr.l - ox, src.lr.t - oy, src.lr.r - ox, src.lr.b - oy), src.lr.q);
+      if (o.take) S.insets = S.insets.filter((x) => x !== src);
+    } else { const r = plain(from?.nodeType ? from.getBoundingClientRect() : from); lr = new Liquid(r, o.fromRadius ?? Math.min(r.width, r.height) / 2); }
+    const F = { lr, to: toEl, anchor: o.anchor ?? null, t0: S.now, delay: o.delay ?? 0, onFrame: o.onFrame, onLand: o.onLand, height: o.height ?? 0.45, tint: o.tint ?? 0.6, pad: o.pad ?? 0, clip: o.clip ?? null, liq: 0, d0: 1 };
+    const g = F.to.getBoundingClientRect(); F.d0 = Math.max(1, rdist(lr, g));
+    S.flights.push(F); S.lastInput = S.now;
+    if (S.reduced || !S.ok) { land(F); }
+    return F;
+  }
+  function land(F) {
+    S.flights = S.flights.filter((x) => x !== F);
+    const I = inset(F.to, { height: F.height, tint: F.tint, pad: F.pad, clip: F.clip });
+    const [ox, oy] = docOffset(I.sc === undefined ? Object.assign(I, { sc: scrollerOf(I.el) }) : I);
+    I.lr = new Liquid(box(F.lr.l + ox, F.lr.t + oy, F.lr.r + ox, F.lr.b + oy), F.lr.q); I.docSpace = true; I.str = 1; I.vs = 0;
+    F.onLand?.();
+  }
+  function updateFlights(dt) {
+    let want = 0;
+    for (const F of [...S.flights]) {
+      if (!F.to.isConnected) { S.flights = S.flights.filter((x) => x !== F); F.onLand?.(); continue; } // (its words are cleaned up all the same)
+      if (S.now - F.t0 < F.delay) { F.onFrame?.(F.lr.rect, 0); continue; }
+      const r = F.to.getBoundingClientRect(), p = F.pad, g = box(r.left - p, r.top - p, r.right + p, r.bottom + p);
+      F.lr.step(g, Math.min(g.width, g.height) / 2, dt, SP.flyLead, SP.flyTrail);
+      const sp = F.lr.speed();
+      F.liq += (smooth(60, 1100, sp) - F.liq) * Math.min(1, dt * 12);
+      const d = rdist(F.lr, g), prog = 1 - Math.min(1, d / F.d0);
+      F.onFrame?.(F.lr.rect, prog);
+      // the neck to what it left: thick while they touch, gone once they are apart
+      if (F.anchor) { const a = F.anchor.getBoundingClientRect(), gap = Math.max(a.top - F.lr.b, F.lr.t - a.bottom, a.left - F.lr.r, F.lr.l - a.right, 0); want = Math.max(want, 30 * (1 - smooth(4, 64, gap))); }
+      if ((d < 0.75 && sp < 16) || S.now - F.t0 - F.delay > 3) land(F);
+    }
+    S.lk += (want - S.lk) * Math.min(1, dt * (want > S.lk ? 30 : 9));
+  }
+
   // ─── Pointer and touch ────────────────────────────────────────────────────
   function listen() {
     addEventListener("pointermove", (e) => {
@@ -949,11 +1301,34 @@ void main() {
     for (const ev of ["scroll", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => { S.lastInput = S.now; }, { passive: true, capture: true });
     // Apple's interactive glass: under a finger the glass swells a little, lights up from where it is
     // touched, and springs back with a bounce when let go. A tap on the sky squashes the pointer's drop.
+    // a drop can be picked up and thrown; a tap pops it
+    addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || S.reduced || e.target.closest?.("a, button, input, textarea, select, label, .decision, [data-sheet], .glass, .lg, .menu, .sheet")) return;
+      const id = dropAt(e.clientX, e.clientY); if (id == null) return;
+      const d = freeById(id);
+      S.grab = { d, x0: e.clientX, y0: e.clientY, t0: S.now, moved: false, px: e.clientX, py: e.clientY, pt: S.now, vx: 0, vy: 0, id: e.pointerId };
+      e.preventDefault();
+    }, { passive: false, capture: true });
+    addEventListener("pointermove", (e) => {
+      const g = S.grab; if (!g) return;
+      const dt = Math.max(0.008, S.now - g.pt);
+      g.vx = g.vx * 0.5 + ((e.clientX - g.px) / dt) * 0.5; g.vy = g.vy * 0.5 + ((e.clientY - g.py) / dt) * 0.5;
+      g.px = e.clientX; g.py = e.clientY; g.pt = S.now;
+      if (Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 5) g.moved = true;
+      g.d.x += (e.clientX - g.d.x) * 0.6; g.d.y += (e.clientY - g.d.y) * 0.6; g.d.vx = g.vx; g.d.vy = g.vy;
+    }, { passive: true });
+    const release = () => {
+      const g = S.grab; if (!g) return; S.grab = null;
+      if (!g.moved && S.now - g.t0 < 0.4) popDrop(g.d.id);
+      else { g.d.vx = clamp(g.vx, -1400, 1400); g.d.vy = clamp(g.vy, -1400, 1400); g.d.calm = S.now + 0.5; g.d.vst += 2; }
+    };
+    addEventListener("pointerup", release, { passive: true }); addEventListener("pointercancel", release, { passive: true });
     addEventListener("pointerdown", (e) => {
       const c = S.cursor; c.down = 1; S.lastInput = S.now;
       if (e.pointerType !== "mouse") { c.fine = false; c.onT = 0; }
-      const hit = hitTest(e.clientX, e.clientY);
-      if (hit && hit.rec.kind !== 2) { hit.rec.pressT = 1; S.touch = { x: e.clientX, y: e.clientY, rec: hit.rec, layer: hit.layer }; }
+      const hit = hitTest(e.clientX, e.clientY), onRing = ringAt(e.clientX, e.clientY, 6);
+      if (onRing && !S.reduced) { const R = S.ring; R.ripA = onRing.a; R.ripT = S.now; R.ripS = 1; R.vwob += 7; S.lastInput = S.now; }
+      else if (hit && hit.rec.kind !== 2) { hit.rec.pressT = 1; S.touch = { x: e.clientX, y: e.clientY, rec: hit.rec, layer: hit.layer }; }
       else if (c.fine && !S.reduced) c.vst -= 4.5;
     }, { passive: true });
     const up = () => { for (const s of S.shapes) s.pressT = 0; for (const o of S.overs) o.pressT = 0; S.cursor.down = 0; };
@@ -966,7 +1341,11 @@ void main() {
     for (let i = S.shapes.length - 1; i >= 0; i--) { const s = S.shapes[i]; if (!s.held && s.lens > 0.2 && inside(s.rect)) return { rec: s, layer: 0 }; }
     return null;
   }
-  function burst(x, y, coral) { S.bursts.push({ x, y, t0: S.now, coral }); if (S.bursts.length > 6) S.bursts.shift(); }
+  /** A flash in the sky: coral false, a star born; true, a strike; 2, a drop popping (small, quiet). */
+  function burst(x, y, coral) {
+    S.bursts.push({ x, y, t0: S.now, coral: coral === 2 ? 2 : coral ? 1 : 0 }); if (S.bursts.length > 6) S.bursts.shift();
+    if (coral !== 2) shock(x, y, coral ? 0.8 : 1);
+  }
 
   // ─── Decisions in the sky ─────────────────────────────────────────────────
   // An Archimedean spiral around the white star: the oldest decision closest, the newest outermost.
@@ -982,7 +1361,7 @@ void main() {
     const known = new Set(was.keys());
     if (animateNew && !soft) {
       const fresh = decisions.filter((d) => !known.has(d.key));
-      if (fresh.some((d) => d.kind === 0) && !S.reduced) S.meetT = S.now + 0.2;
+      if (fresh.some((d) => d.kind === 0) && !S.reduced) { S.meetT = S.now + 0.2; ringPulse(0.3); }
       fresh.forEach((d) => { d.born = S.now + (d.kind === 0 ? 1.45 : 0.3); setTimeout(() => { const m = S.marks.find((x) => x.key === d.key); if (m) burst(m.x, m.y, d.kind > 0); }, d.kind === 0 ? 1450 : 300); });
     }
   }
@@ -995,7 +1374,14 @@ void main() {
     });
     S.marks = out;
   }
-  function focus(x, y, r, marks = true, instant) { S.focus.tx = x; S.focus.ty = y; S.focus.r = r; S.focus.marksT = marks ? 1 : 0; if (instant || !S.focus.init) { S.focus.x = x; S.focus.y = y; S.focus.init = true; } }
+  /** Where the white star (and its spiral) goes. instant: at once; "stick": once it has arrived, it follows
+   *  its target frame for frame (the ring scrolling), with no spring to lag behind. */
+  function focus(x, y, r, marks = true, instant) {
+    const f = S.focus;
+    if (instant === "stick" && f.init && Math.abs(f.x - f.tx) < 2.5 && Math.abs(f.y - f.ty) < 2.5 && Math.hypot(f.vx, f.vy) < 40) { f.x += x - f.tx; f.y += y - f.ty; }
+    f.tx = x; f.ty = y; f.r = r; f.marksT = marks ? 1 : 0;
+    if (instant === true || !f.init) { f.x = x; f.y = y; f.init = true; }
+  }
   function markAt(x, y) {
     let best = -1, bd = 14 * 14;
     S.marks.forEach((m, i) => { const dx = m.x - x, dy = m.y - y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } });
@@ -1011,6 +1397,17 @@ void main() {
   // when it stops, sheds two small droplets when flung (they catch up and merge again), pops back when the
   // pointer wakes, evaporates when it rests, focuses a caustic on the sky, and sinks into any glass it
   // meets, where it turns into the highlight of the control beneath.
+  /** A shooting star; through a point when one is given (it splits a drop there). */
+  function meteor(at) {
+    const now = S.now, m = S.meteors.find((x) => now - x.t0 > x.dur) ?? S.meteors[0];
+    const w = innerWidth, h = innerHeight, left = at ? at[0] > w / 2 : Math.random() < 0.5;
+    const ang = (left ? Math.PI - 0.5 : 0.5) + (Math.random() - 0.5) * 0.35, len = 220 + Math.random() * 260;
+    let ax, ay;
+    if (at) { const back = len * (0.4 + Math.random() * 0.25); ax = at[0] - Math.cos(ang) * back; ay = at[1] - Math.sin(ang) * back; }
+    else { ax = w * (0.15 + Math.random() * 0.7); ay = h * (0.05 + Math.random() * 0.4); }
+    m.a = [ax, ay]; m.b = [ax + Math.cos(ang) * len, ay + Math.sin(ang) * len]; m.t0 = now; m.dur = 0.65 + Math.random() * 0.55;
+    S.lastInput = now;
+  }
   function updateCursor(dt) {
     const c = S.cursor, now = S.now;
     const idle = now - c.moved > 2.6;
@@ -1050,7 +1447,14 @@ void main() {
     }
     for (const o of S.overs) spring(o, "press", "pv", o.pressT, o.pressT ? SP.press : SP.release, dt);
     if (S.touch && !S.touch.rec.pressT && Math.abs(S.touch.rec.press) < 0.004 && Math.abs(S.touch.rec.pv) < 0.05) S.touch = null;
-    updateFlow(dt); updateOverlays(dt); updateLenses(dt); updateCursor(dt);
+    updateFlow(dt); updateOverlays(dt); updateLenses(dt); updateInsets(dt); updateFlights(dt); updateCursor(dt);
+    // the ring's liquid: the pointer tugs at it, and its front wobbles when anything moves it
+    const R = S.ring, near = c.fine && c.onT && !S.reduced ? ringAt(c.x, c.y, 70) : null;
+    if (near) { let da = near.a - R.a; da -= Math.round(da); R.a = (R.a + da * Math.min(1, dt * 14) + 1) % 1; if (R.ptr < 0.05) R.a = near.a; }
+    spring(R, "ptr", "vptr", near ? 1 - near.d / 110 : 0, SP.hoverIn, dt);
+    if (near && Math.hypot(c.vx, c.vy) > 500) R.vwob += Math.min(3, Math.hypot(c.vx, c.vy) / 2500) * dt * 20;
+    spring(R, "wob", "vwob", 0, SP.jelly, dt);
+    R.wob = clamp(R.wob, -1.2, 1.2);
     // focus (the white star and its spiral) glides to where the page puts it
     if (S.reduced) { S.focus.x = S.focus.tx; S.focus.y = S.focus.ty; } else { spring(S.focus, "x", "vx", S.focus.tx, SP.focus, dt); spring(S.focus, "y", "vy", S.focus.ty, SP.focus, dt); }
     S.focus.marks = (S.focus.marks ?? 1) + ((S.focus.marksT ?? 1) - (S.focus.marks ?? 1)) * Math.min(1, (S.realDt ?? dt) * (S.reduced ? 60 : 5));
@@ -1060,11 +1464,10 @@ void main() {
     // events
     if (!S.reduced) {
       if (now > S.nextMeteor) {
-        const m = S.meteors.find((x) => now - x.t0 > x.dur) ?? S.meteors[0];
-        const w = innerWidth, h = innerHeight, left = Math.random() < 0.5;
-        const ax = w * (0.15 + Math.random() * 0.7), ay = h * (0.05 + Math.random() * 0.4);
-        const ang = (left ? Math.PI - 0.5 : 0.5) + (Math.random() - 0.5) * 0.35, len = 200 + Math.random() * 260;
-        m.a = [ax, ay]; m.b = [ax + Math.cos(ang) * len, ay + Math.sin(ang) * len]; m.t0 = now; m.dur = 0.65 + Math.random() * 0.55;
+        // now and then a meteor is aimed through a drop (it splits it)
+        const target = S.aim ?? (Math.random() < 0.35 ? S.free.filter((d) => !d.pop && !d.spray && d.r > 7)[Math.floor(Math.random() * 6)] : null);
+        meteor(target ? [target.x, target.y] : null);
+        S.aim = null;
         S.nextMeteor = now + 7 + Math.random() * 13;
       }
       if (now > S.nextSat) {
@@ -1092,18 +1495,12 @@ void main() {
       const q = L.lr, hw = (q.r - q.l) / 2, hh = (q.b - q.t) / 2, r = (hh + 7) * L.lift;
       if (r > 0.6) S.drops.push({ x: (q.l + q.r) / 2, y: (q.t + q.b) / 2, r, sx: Math.max(1, (hw + 7) / (hh + 7)), sy: 1, ax: 1, ay: 0 });
     }
-    // decorative drops in the margins (wide screens only); they meet, merge and part
-    const content = Math.min(1200, innerWidth - 64), margin = (innerWidth - content) / 2;
-    if (!S.reduced && margin > 70 && S.fade > 0.6) {
-      const t = now * 0.16;
-      const mk = (side, ph, r, yb) => {
-        const cx = side < 0 ? margin * 0.5 : innerWidth - margin * 0.5;
-        const reach = Math.max(0, Math.sin(t * 0.7 + ph)) ** 6;
-        const x = cx + Math.sin(t + ph) * margin * 0.18 + side * -1 * reach * (margin * 0.42);
-        const y = innerHeight * yb + Math.sin(t * 0.61 + ph * 2) * innerHeight * 0.12;
-        S.drops.push({ x, y, r: r * Math.min(1, (S.fade - 0.6) * 3) });
-      };
-      mk(-1, 0.3, 12, 0.46); mk(-1, 2.6, 7, 0.52); mk(1, 1.4, 10, 0.62);
+    // the free drops (0059): they drift, avoid the panes, meet and merge, and are thrown, popped and split
+    updateFree(dt);
+    const fin = Math.min(1, Math.max(0, (S.fade - 0.5) * 3));
+    for (const d of S.free) {
+      const r = d.r * fin;
+      if (r > 0.6) S.drops.push({ x: d.x, y: d.y, r, sx: 1 + d.st, sy: 1 / (1 + d.st * 0.8), ax: d.ax, ay: d.ay, free: true });
     }
     const sv = (S.scroll.y - (S.scroll.py ?? S.scroll.y)) / Math.max(dt, 0.001); S.scroll.py = S.scroll.y;
     S.sloshV = (S.sloshV ?? 0); S.slosh = (S.slosh ?? 0);
@@ -1116,7 +1513,7 @@ void main() {
     if (!S.ok || document.hidden || window.__lanceaFreeze) return;
     const now = (ms - S.t0) / 1000, real = Math.max(0.001, now - S.now), dt = Math.min(0.12, real);
     // when nobody has touched the page for a while, 30 frames a second is plenty for a sky
-    const busy = S.blobs.length || S.overs.length || S.touch || S.cursor.down;
+    const busy = S.blobs.length || S.overs.length || S.touch || S.cursor.down || S.grab || S.flights.length || S.free.some((d) => d.bud || Math.hypot(d.vx, d.vy) > 120);
     const idle = now - Math.max(S.cursor.moved, S.lastInput ?? 0) > 8 && !busy;
     if (idle && !S.reduced && real < 1 / 45 && (S.skip = !S.skip)) return;
     S.now = now; S.dt = dt; S.frame++; S.realDt = Math.min(0.5, real);
@@ -1134,7 +1531,9 @@ void main() {
   window.__lanceaDump = () => ({
     drops: S.drops.map((d) => [Math.round(d.x), Math.round(d.y), +d.r.toFixed(1)]),
     lenses: S.lenses.filter((L) => L.lr && L.str > 0.004).map((L) => [L.key, Math.round(L.lr.l), Math.round(L.lr.t), Math.round(L.lr.r), Math.round(L.lr.b), +L.str.toFixed(2)]),
-    blobs: S.blobs.length, overs: S.overs.length, touch: !!S.touch,
+    blobs: S.blobs.length, overs: S.overs.length, touch: !!S.touch, lk: +S.lk.toFixed(1),
+    flights: S.flights.map((F) => [Math.round(F.lr.l), Math.round(F.lr.t), Math.round(F.lr.r), Math.round(F.lr.b), +F.lr.q.toFixed(1), +F.liq.toFixed(2)]),
+    insets: S.insets.map((I) => [I.el.id || I.el.className.split(" ").slice(0, 2).join("."), +I.str.toFixed(2), I.lr ? Math.round(I.lr.r - I.lr.l) : 0]),
     shapes: S.shapes.filter((x) => x.rect && x.lens > 0.01).map((x) => [x.el.id || x.el.className.split(" ")[0], Math.round(x.rect.left), Math.round(x.rect.top), Math.round(x.rect.width), +x.lens.toFixed(2)]),
   });
   // for tests: advance the clock by hand while the page is frozen (window.__lanceaFreeze)
@@ -1185,7 +1584,7 @@ void main() {
     gl.uniform4fv(u.uMet, met); gl.uniform2fv(u.uMetT, metT);
     gl.uniform4f(u.uSat, S.sat.a[0] * PX, S.sat.a[1] * PX, S.sat.b[0] * PX, S.sat.b[1] * PX); gl.uniform3f(u.uSatT, S.sat.t0, S.sat.dur, S.sat.flare);
     const bu = new Float32Array(24).fill(-99);
-    S.bursts.forEach((b, i) => { bu.set([b.x * PX, b.y * PX, b.t0, b.coral ? 1 : 0], i * 4); });
+    S.bursts.forEach((b, i) => { bu.set([b.x * PX, b.y * PX, b.t0, b.coral], i * 4); });
     gl.uniform4fv(u.uBurst, bu);
     const lpx = (q) => [q[0] * H + W / 2, q[1] * H + H / 2];
     const ma = lpx(lobeA), mb = lpx(lobeB);
@@ -1196,8 +1595,7 @@ void main() {
     const labR = [], labC = [], labRow = [];
     const place = (row, x, y, align, rgb, a0) => {
       const L = S.labels[row]; if (!L) return;
-      const ey = y / PX, ev = Math.min(1, Math.max(0, (ey - S.scroll.top) / 30)) * Math.min(1, Math.max(0, (S.scroll.bottom - 24 - ey) / 30));
-      const a = a0 * S.focus.marks * ev; if (a < 0.01) return;
+      const a = a0 * S.focus.marks; if (a < 0.01) return;
       const w = L.w * PX, m = 16 * PX; let lx = align === "right" ? x - w : align === "center" ? x - w / 2 : x;
       lx = Math.min(Math.max(lx, m), W - m - w);
       labR.push(lx, y, w, L.h * PX); labC.push(rgb[0] * a, rgb[1] * a, rgb[2] * a, L.frac); labRow.push(row);
@@ -1208,7 +1606,13 @@ void main() {
       place(0, fx - rr - gap, fy - lh, "right", cyanL, 0.62); place(1, fx - rr - gap, fy, "right", cyanL, 0.38);
       place(2, fx + rr + gap, fy + lh * 2, "left", amberL, 0.6); place(3, fx + rr + gap, fy + lh * 3, "left", amberL, 0.36);
     }
-    if (S.focus.init) place(4, fx, fy + spiralR() * PX + 30 * PX, "center", [1, 1, 1], 0.34);
+    // "agreement is evidence" under the spiral, inside the ring while there is room there (never on its glass)
+    if (S.focus.init) {
+      const ring = S.focus.r ? S.shapes.find((q) => q.kind === 2 && q.rect && q.lens > 0.3) : null;
+      const inner = ring ? Math.min(ring.rect.width, ring.rect.height) / 2 - ring.tube * 2 - 16 : Infinity;
+      const ly = spiralR() + 30;
+      if (ly + 24 < inner) place(4, fx, fy + ly * PX, "center", [1, 1, 1], 0.34);
+    }
     gl.uniform4fv(u.uLabR, labR.length ? labR : [0, 0, 0, 0]); gl.uniform4fv(u.uLabC, labC.length ? labC : [0, 0, 0, 0]);
     gl.uniform1fv(u.uLabR2, labRow.length ? labRow : [0]); gl.uniform1i(u.uNL, labR.length / 4);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -1273,17 +1677,37 @@ void main() {
       n++;
     }
     gl.uniform1i(g.uN, n); gl.uniform4fv(g.uA, A); gl.uniform4fv(g.uB, Bv); gl.uniform4fv(g.uC, C); gl.uniform1f(g.uGK, S.gk * PX);
-    // lenses inside the glass
-    const LA = new Float32Array(MAXL * 4), LB = new Float32Array(MAXL * 4), LL = new Float32Array(MAXL);
+    // lenses inside the glass: selections and the pointer's highlight, then the raised controls and flights
+    const LA = new Float32Array(MAXL * 4), LB = new Float32Array(MAXL * 4), LL = new Float32Array(MAXL), LC = new Float32Array(MAXL * 4);
     let nl = 0;
+    const NOCLIP = [-1e5, -1e5, 1e5, 1e5];
+    const putL = (l, t, r, b, q, str, height, tint, layer, group, clip) => {
+      if (nl >= MAXL || str < 0.004 || b < -60 || t > innerHeight + 60) return;
+      if (clip && (r < clip.left || l > clip.right || b < clip.top || t > clip.bottom)) return; // scrolled out of its list
+      const hw = Math.max(0.5, ((r - l) / 2) * PX), hh = Math.max(0.5, ((b - t) / 2) * PX);
+      LA.set([((l + r) / 2) * PX, ((t + b) / 2) * PX, hw, hh], nl * 4);
+      LB.set([clamp(q * PX, 0, Math.min(hw, hh)), str, height, Math.min(1, tint)], nl * 4);
+      LL[nl] = layer + (group ? 10 : 0);
+      LC.set(clip ? [clip.left * PX, clip.top * PX, clip.right * PX, clip.bottom * PX] : NOCLIP, nl * 4);
+      nl++;
+    };
     for (const L of S.lenses) {
-      if (nl >= MAXL || !L.lr || L.str < 0.004) continue;
-      const q = L.lr, inf = 3 * L.lift, hw = Math.max(0.5, ((q.r - q.l) / 2 + inf) * PX), hh = Math.max(0.5, ((q.b - q.t) / 2 + inf) * PX);
-      LA.set([((q.l + q.r) / 2) * PX, ((q.t + q.b) / 2) * PX, hw, hh], nl * 4);
-      LB.set([clamp((q.q + inf) * PX, 0, Math.min(hw, hh)), L.str, L.height * (1 + 0.8 * L.lift), Math.min(1, L.tint * (1 + 0.3 * L.lift))], nl * 4);
-      LL[nl] = L.layer; nl++;
+      if (!L.lr || L.str < 0.004) continue;
+      const q = L.lr, inf = 3 * L.lift;
+      putL(q.l - inf, q.t - inf, q.r + inf, q.b + inf, q.q + inf, L.str, L.height * (1 + 0.8 * L.lift), L.tint * (1 + 0.3 * L.lift), L.layer, false, null);
     }
-    gl.uniform1i(g.uNL, nl); gl.uniform4fv(g.uLA, LA); gl.uniform4fv(g.uLB, LB); gl.uniform1fv(g.uLL, LL);
+    const anchors = new Set(S.flights.map((F) => F.anchor).filter(Boolean));
+    for (const I of S.insets) {
+      if (!I.lr || I.str < 0.004) continue;
+      const [ox, oy] = I.docSpace ? docOffset(I) : [0, 0], q = I.lr, inf = 1.5 * I.bob + 1.2 * I.lift;
+      const clip = I.clip ? I.clip() : null;
+      putL(q.l - ox - inf, q.t - oy - inf, q.r - ox + inf, q.b - oy + inf, q.q + inf, I.str, I.height * (1 + 0.7 * I.lift + 0.5 * I.bob), I.tint * (1 + 0.25 * I.lift), 0, anchors.has(I.el), clip);
+    }
+    for (const F of S.flights) {
+      const q = F.lr, hw = (q.r - q.l) / 2, hh = (q.b - q.t) / 2, round = q.q + (Math.min(hw, hh, 60) - q.q) * 0.8 * F.liq;
+      putL(q.l, q.t, q.r, q.b, Math.max(q.q, round), 1, F.height * (1 + 0.5 * F.liq), F.tint, 0, !!F.anchor, null); // (in flight nothing clips it; it lands clipped)
+    }
+    gl.uniform1i(g.uNL, nl); gl.uniform4fv(g.uLA, LA); gl.uniform4fv(g.uLB, LB); gl.uniform1fv(g.uLL, LL); gl.uniform4fv(g.uLC, LC); gl.uniform1f(g.uLK, S.lk * PX);
     // the overlay: each shape, and the drop it is being pulled from (or is sinking into)
     const OA = new Float32Array(MAXO * 4), OB = new Float32Array(MAXO * 4);
     let no = 0;
@@ -1301,14 +1725,18 @@ void main() {
     let nd = 0;
     for (const d of S.drops) {
       if (nd >= MAXD) break;
-      D.set([d.x * PX, d.y * PX, Math.max(0, d.r) * PX, d.cursor ? 2 : 1], nd * 4); DE.set([d.sx ?? 1, d.sy ?? 1, d.ax ?? 1, d.ay ?? 0], nd * 4); nd++;
+      D.set([d.x * PX, d.y * PX, Math.max(0, d.r) * PX, d.cursor ? 2 : d.free ? 3 : 1], nd * 4); DE.set([d.sx ?? 1, d.sy ?? 1, d.ax ?? 1, d.ay ?? 0], nd * 4); nd++;
     }
     gl.uniform1i(g.uND, nd); gl.uniform4fv(g.uD, D); gl.uniform4fv(g.uDE, DE);
     const c = S.cursor, t = S.touch;
     gl.uniform4f(g.uCur, c.px * PX, c.py * PX, c.glass * (S.reduced ? 0 : 1), c.fine && !S.reduced ? Math.max(c.on, c.glass) : 0);
     gl.uniform4f(g.uTouch, t ? t.x * PX : -1e4, t ? t.y * PX : -1e4, t && !S.reduced ? Math.max(0, t.rec.press) : 0, t ? t.layer : 0);
     gl.uniform2f(g.uLight, Math.cos(S.light), Math.sin(S.light));
-    gl.uniform4f(g.uEdge, S.scroll.top * PX, S.scroll.bottom * PX, S.scroll.fade * PX, 1);
+    const RG = S.ring;
+    gl.uniform4f(g.uRing, S.reduced ? 0 : RG.wob, RG.a, S.reduced ? 0 : clamp(RG.ptr, 0, 1), RG.pulseT);
+    gl.uniform4f(g.uRing2, RG.ripA, RG.ripT, RG.ripS, 0);
+    // (0059: nothing fades at the edges any more: the page scrolls under the bars, whose glass bends it)
+    gl.uniform4f(g.uEdge, -1e6, 1e6, 1, 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   const easeFade = (f) => 1 - Math.pow(1 - f, 3);
@@ -1319,14 +1747,16 @@ void main() {
   function sweep(el) { const s = find(el); S.lastInput = S.now; if (s && !S.reduced) s.sweep = S.now; }
   function ringState(el, coral) { const s = find(el); if (s) s.coral = !!coral; }
   function asleep(on) { S.dimT = on ? 0.72 : 1; }
-  const debug = { meteor() { S.nextMeteor = 0; }, sat() { S.nextSat = 0; }, meet() { S.meetT = S.now; }, burst };
+  const debug = { meteor(x, y) { if (x != null) meteor([x, y]); else S.nextMeteor = 0; }, sat() { S.nextSat = 0; }, meet() { S.meetT = S.now; ringPulse(0.1); }, burst, pulse: ringPulse, drop(x, y, r = 12) { return spawnDrop(x, y, { r0: r, r, calm: 0 }).id; }, ripple(a = 0.1) { Object.assign(S.ring, { ripA: a, ripT: S.now, ripS: 1 }); S.ring.vwob += 7; } };
   function setScroll(y, top, bottom) { S.scroll.y = y; S.scroll.top = top; S.scroll.bottom = bottom; }
   function setScroller(el) { S.scroller = el; }
   function stats() { return window.__lanceaStats; }
   return {
     init, add, remove, show, setFill, press, burst, setDecisions, focus, markAt, markHover, markPos, setScroll, setScroller,
-    backdrop, sweep, ringState, asleep, snapshot, flow, overlay, overlayOut, lens, hover, debug, stats,
+    backdrop, sweep, ringState, ringPulse, ringAt, asleep, snapshot, flow, overlay, overlayOut, lens, hover, debug, stats,
+    inset, insetOff, insetSet, fly,
+    dropSpawn, dropAt, dropPop: popDrop, dropSplit: splitDrop, dropPopAll: popAll, dropCount: () => S.free.filter((d) => !d.pop && !d.spray).length, meteor,
     get ok() { return S.ok; }, get reduced() { return S.reduced; }, get solid() { return S.solid; }, get now() { return S.now; },
-    get flowing() { return S.blobs.length > 0; },
+    get flowing() { return S.blobs.length > 0; }, get flights() { return S.flights.length; },
   };
 })();

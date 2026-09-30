@@ -42,7 +42,7 @@ async function mockNode(on: (method: string, params: any[]) => Answer | undefine
 }
 
 /** The meter and registry as the mock sees them; `fill` decides whether a write can pay its gas. */
-function flare(s: { stop: boolean; usd6: bigint; tripped: boolean; spentAt: bigint; budget: bigint; fill: "out-of-gas" | "ok" }) {
+function flare(s: { stop: boolean; usd6: bigint; tripped: boolean; spentAt: bigint; budget: bigint; fill: "out-of-gas" | "ok"; gas?: bigint[] }) {
   const block = { number: "0x10", hash: `0x${"11".repeat(32)}`, parentHash: Z, timestamp: "0x68000000", baseFeePerGas: "0x746a528800",
     gasLimit: "0x1c9c380", gasUsed: "0x0", transactions: [], difficulty: "0x0", miner: `0x${"0".repeat(40)}`, extraData: "0x",
     logsBloom: `0x${"00".repeat(256)}`, nonce: "0x0000000000000000", receiptsRoot: Z, sha3Uncles: Z, size: "0x0", stateRoot: Z,
@@ -71,8 +71,10 @@ function flare(s: { stop: boolean; usd6: bigint; tripped: boolean; spentAt: bigi
       }
       case "eth_sendRawTransaction": {
         const raw = params[0] as Hex;
-        const { functionName } = decodeFunctionData({ abi, data: parseTransaction(raw).data! });
+        const ptx = parseTransaction(raw);
+        const { functionName } = decodeFunctionData({ abi, data: ptx.data! });
         if (functionName === "strike") s.tripped = true; // tripwire 1
+        (s.gas ??= []).push(ptx.gas ?? 0n);
         const hash = keccak256(raw);
         sent.set(hash, raw);
         return { result: hash };
@@ -144,14 +146,16 @@ test("a strike that does not land blocks every signature until it lands", async 
   } finally { node.close(); }
 });
 
-test("within the budget and the key can pay: reserved, then co-signed", async () => {
-  const s = { stop: false, usd6: 1_000_000n, tripped: false, spentAt: 0n, budget: 40_000_000n, fill: "ok" as const };
+test("within the budget and the key can pay: reserved, then co-signed; the reservation gets 30 % more gas than estimated", async () => {
+  const s = { stop: false, usd6: 1_000_000n, tripped: false, spentAt: 0n, budget: 40_000_000n, fill: "ok" as const, gas: [] as bigint[] };
   const node = await mockNode(flare(s));
   try {
     const { guard, xrpl, pay } = setup(node.url);
     const d = await guard.cosign(pay(1));
     assert.equal(d.signed, true);
     assert.equal(xrpl.submitted, 1);
+    // the node estimated 0x30000 (196,608): the reservation carries 196,608 × 1.3 + 25,000 (2026-09-29: a note ran out of gas at exactly its estimate)
+    assert.deepEqual(s.gas, [(0x30000n * 13n) / 10n + 25_000n]);
   } finally { node.close(); }
 });
 
